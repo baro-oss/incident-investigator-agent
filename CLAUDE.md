@@ -125,6 +125,15 @@ Chỉ synthetic data, tool **READ-ONLY**, không PII, không kết nối hệ th
 3. **Cuối session:** cập nhật `BUILD_STATE.md` (đã xong gì, cổng nào đã qua, quyết định lệch so với tài liệu).
 4. **Cái lõi không được vỡ:** engine chạy 2 kịch bản end-to-end + push Telegram. Ưu tiên nó trên mọi thứ "đẹp để có".
 5. **Lệch khung:** điều chỉnh chi tiết (schema thêm field, tách tool) thì tự làm; lệch 4 nguyên tắc hoặc stack → hỏi người dùng trước.
+6. **Git commit cuối ngày:** sau khi cổng kiểm pass và `BUILD_STATE.md` đã cập nhật, tạo 1 commit:
+   ```bash
+   git add -A
+   git commit -m "feat: Ngày N — <tóm tắt ngắn>"
+   ```
+   Quy tắc commit bắt buộc:
+   - **KHÔNG BAO GIỜ** commit `.env` hoặc bất kỳ file chứa secret/API key thật.
+   - Chỉ `.env.example` (template rỗng) mới được commit.
+   - `.gitignore` đã cover: `.env`, `.env.*` — KHÔNG override hay bypass.
 
 ---
 
