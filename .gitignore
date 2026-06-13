@@ -1,5 +1,7 @@
-# Environment
+# Environment — tất cả biến thể .env đều có thể chứa secret
 .env
+.env.*
+!.env.example
 
 # Database
 *.db
