@@ -1,0 +1,39 @@
+{
+  "services": [
+    {
+      "service": "api-gateway",
+      "description": "API Gateway — cửa vào duy nhất nhận request từ client, route tới các service nội bộ",
+      "depends_on": ["payment-gateway", "order-service"],
+      "baseline_error_rate": 0.8,
+      "baseline_latency_p99": 95
+    },
+    {
+      "service": "payment-gateway",
+      "description": "Payment Gateway — xử lý giao dịch thanh toán, gọi auth-service để xác thực và third-party-provider để thực hiện thanh toán",
+      "depends_on": ["auth-service", "third-party-provider"],
+      "baseline_error_rate": 0.3,
+      "baseline_latency_p99": 120
+    },
+    {
+      "service": "auth-service",
+      "description": "Auth Service — xác thực token và phân quyền người dùng",
+      "depends_on": [],
+      "baseline_error_rate": 0.1,
+      "baseline_latency_p99": 45
+    },
+    {
+      "service": "order-service",
+      "description": "Order Service — quản lý đơn hàng, gọi payment-gateway khi cần xử lý thanh toán",
+      "depends_on": ["payment-gateway"],
+      "baseline_error_rate": 0.2,
+      "baseline_latency_p99": 80
+    },
+    {
+      "service": "third-party-provider",
+      "description": "Third-party Payment Provider — nhà cung cấp dịch vụ thanh toán bên ngoài (ví điện tử, ngân hàng...); payment-gateway phụ thuộc trực tiếp vào service này",
+      "depends_on": [],
+      "baseline_error_rate": 0.5,
+      "baseline_latency_p99": 200
+    }
+  ]
+}

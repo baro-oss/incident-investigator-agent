@@ -1,0 +1,229 @@
+# CLAUDE.md — Chỉ thị vận hành cho dự án
+
+> File này được nạp tự động đầu mỗi session. **Đọc kỹ trước khi làm bất cứ việc gì.**
+> Tài liệu thiết kế chi tiết nằm trong `docs/`. File này là chỉ thị BẮT BUỘC, không phải gợi ý.
+
+---
+
+## Dự án là gì
+
+**Agent điều tra sự cố microservice** — nhận triệu chứng (webhook alert hoặc trigger thủ công) → engine domain-agnostic tự điều tra qua loop adaptive + tool-calling → verdict neo bằng chứng → push Telegram.
+
+Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · model), engine bất biến ở giữa. Mỗi cạnh thêm adapter mà không sửa engine.
+
+---
+
+## Giai đoạn hiện tại
+
+**Phase 2 — Observability (Ngày 11–14). Đang ở: chuẩn bị Ngày 11.**
+
+Kế hoạch chi tiết: `docs/10-roadmap-20-ngay.md`.
+
+| Ngày | Nội dung | Trạng thái |
+|------|----------|-----------|
+| 6 | FastAPI webhook, POST /trigger → 202 → Telegram | ✅ |
+| 7 | 3 adapter: Prometheus / Grafana / Sentry | ✅ |
+| 8 | MCP hot-plug (agent là consumer), MCP Registry DB, Project Isolation | ✅ |
+| 9 | Kịch bản 3 & 4 (DB pool exhaustion, Traffic surge) | ✅ |
+| 10 | Output đa kênh (Teams + Email) + per-project channels + cổng Phase 1 | ✅ |
+
+**Phase 1 ✅ HOÀN TẤT.** Đang ở: Phase 2 — Ngày 11 (Observability / Langfuse).
+
+**Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
+
+---
+
+## Quy tắc không over-engineer
+
+Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **KHÔNG.** Khi thấy mình định làm bất kỳ cái nào dưới đây mà người dùng chưa yêu cầu rõ, DỪNG và hỏi trước.
+
+### Vẫn còn trong danh sách KHÔNG (chưa làm, chưa được phép):
+- ❌ KHÔNG Postgres / MySQL / vector DB → **giữ SQLite WAL**
+- ❌ KHÔNG LangGraph → **giữ tự viết loop** (Phase 3 mới làm)
+- ❌ KHÔNG multi-agent → **single agent** (Phase 3 mới làm)
+- ❌ KHÔNG Langfuse / OpenTelemetry → **trace ghi SQLite** (Phase 2 mới làm)
+- ❌ KHÔNG Kafka / message broker → **asyncio background task**
+- ❌ KHÔNG sinh GB data thật → **vài nghìn dòng/kịch bản**; dùng `total_count` lớn để giả lập quy mô
+- ❌ KHÔNG Dashboard UI → chưa đến Phase 4
+- ❌ KHÔNG domain thứ hai (fintech tool pack) → Phase 4
+
+### Đã làm (do người dùng yêu cầu rõ — KHÔNG làm lại từ đầu, không thay thế):
+- ✅ FastAPI webhook server (POST /trigger, GET /health, v0.4.0)
+- ✅ 3 adapter intake: Prometheus, Grafana, Sentry (routing qua X-Alert-Source)
+- ✅ MCP hot-plug: agent là MCP consumer (JSON-RPC 2.0 over HTTP, không dùng mcp SDK vì Python 3.9)
+- ✅ MCP Registry lưu DB (SQLite), CRUD API, /ping test live
+- ✅ Project Isolation: multi-tenant qua projects + project_services, MCP scoped per project
+- ✅ 4 kịch bản: deploy bug · provider sập · DB pool exhaustion · traffic surge
+- ✅ Output router: `OUTPUT_CHANNELS=telegram,teams,email` fan-out; Teams + Email adapter
+- ✅ Per-project alert channels: `project_alert_channels` DB, mỗi project config kênh riêng (telegram/teams/email với config override)
+
+### Roadmap — câu chuyện pitch (chưa phải code):
+Slack output · Dashboard UI · LangGraph · Multi-agent · Long-term memory · Fintech domain.
+
+---
+
+## Stack hiện tại (không đổi nếu không có lệnh rõ)
+
+| Thành phần | Hiện thực |
+|------------|-----------|
+| Ngôn ngữ | Python 3.9 |
+| Agent loop | Tự viết (loop adaptive, hàm pure) |
+| LLM | Anthropic API (factory hỗ trợ OpenAI-compat: Groq, Mistral, ...) |
+| Storage | SQLite WAL — logs, metrics, deploys, trace_events, mcp_servers, projects, project_services |
+| HTTP server | FastAPI + uvicorn |
+| HTTP client | aiohttp (MCP client, Telegram push) |
+| MCP protocol | JSON-RPC 2.0 over HTTP (không dùng mcp SDK) |
+| Output | Telegram · Teams · Email — router fan-out, per-project channel config |
+| Multi-tenant | Projects (TEXT PK slug) + project_services (junction table) |
+| Async | asyncio background task (fire-and-forget) |
+
+---
+
+## Bốn nguyên tắc kiến trúc (mọi quyết định code phải tuân)
+
+1. **LLM không bao giờ thấy dữ liệu thô.** Tool aggregate bằng SQL, trả Observation đã chưng cất (summary + aggregates + ≤5 samples + total_count). Trả raw rows → SAI.
+
+2. **Một đường ranh (seam).** Engine chỉ thấy `list[Tool]` đồng nhất (name, description, input_schema, run→Observation). Engine KHÔNG được biết "log"/"SQLite"/"MCP"/"project" là gì.
+
+3. **Lõi deterministic, agent chỉ điều phối.** Tính toán nằm trong tool; LLM chỉ chọn tool + quyết điểm dừng.
+
+4. **Async từ biên nhận; một nguồn structured, nhiều renderer.** Observation/verdict/trace đều structured, render ra text chỉ ở biên tiêu thụ.
+
+---
+
+## Yêu cầu thiết kế code (không phải build thêm — để dễ mở rộng sau)
+
+- `InvestigationState` là **dataclass thuần dữ liệu**, tách khỏi logic.
+- Mỗi bước loop là **hàm pure**: `decide_next_action(state)`, `run_tool(action)`, `update_state(state, obs)`. Lên LangGraph sau = bọc mỗi hàm thành node.
+- Giả thuyết và bằng chứng **liên kết nhau** qua `evidence_ids` — không phải hai list rời.
+- Tool registry: `build_tool_registry(mcp_clients)` merge local + MCP, MCP override local cùng tên.
+
+---
+
+## Những điểm dễ làm sai
+
+- **Observation:** summary đặt ĐẦU, mang signal bước kế cần. Tool TỰ diễn giải ("gấp 9 lần baseline"), không trả số thô. → `docs/04`, `docs/06`.
+- **Loop:** adaptive, KHÔNG plan-ahead. Đưa state đã tổng hợp, KHÔNG lịch sử thô. → `docs/05`.
+- **Dừng:** model tầm trung hay dừng sớm → buộc kiểm "đã loại trừ giả thuyết cạnh tranh chưa". Có step budget + phát hiện lặp. → `docs/05`.
+- **Verdict:** neo bằng chứng (không claim trần), độ tin theo LOẠI bằng chứng, "chưa đủ bằng chứng" là hợp lệ, phân biệt lỗi-gốc/lỗi-lan. → `docs/05`.
+- **Trace đứt:** `trace_request` PHẢI báo cáo chỗ mất dấu; bắc cầu bằng tương quan thời gian + HẠ độ tin + gắn cờ suy đoán. Tool im lặng về chỗ đứt = agent bịa. → `docs/06`, `docs/07`.
+- **Output:** mọi nhánh kết thúc (thành công / timeout / lỗi) đều push Telegram, không chết im lặng. → `docs/08`.
+- **Project isolation:** mọi investigation mang `project_id`; `dedup_key` format: `{project_id}|{service}|{scenario}|{time_window}`. MCP tools chỉ từ server thuộc project đó.
+
+---
+
+## Ranh giới fintech (an toàn — bắt buộc)
+
+Chỉ synthetic data, tool **READ-ONLY**, không PII, không kết nối hệ thống thật. Tool không được có thao tác ghi/xóa/sửa lên bất kỳ nguồn nào ngoại trừ trace_events (ghi trace nội bộ).
+
+---
+
+## Quy trình làm việc qua nhiều session
+
+1. **Đầu session:** đọc file này + `BUILD_STATE.md` (trạng thái) + `docs/10-roadmap-20-ngay.md` (plan Phase 1–4).
+2. **Bám ngày hiện tại** trong Phase — xem bảng "Giai đoạn hiện tại" ở trên. Kết thúc bằng verify cổng kiểm của ngày đó.
+3. **Cuối session:** cập nhật `BUILD_STATE.md` (đã xong gì, cổng nào đã qua, quyết định lệch so với tài liệu).
+4. **Cái lõi không được vỡ:** engine chạy 2 kịch bản end-to-end + push Telegram. Ưu tiên nó trên mọi thứ "đẹp để có".
+5. **Lệch khung:** điều chỉnh chi tiết (schema thêm field, tách tool) thì tự làm; lệch 4 nguyên tắc hoặc stack → hỏi người dùng trước.
+
+---
+
+## Cấu trúc file (hiện tại)
+
+```
+.
+├── CLAUDE.md                   ← file này (chỉ thị, tự nạp)
+├── AGENTS.md                   ← bản sao cho Cowork
+├── BUILD_STATE.md              ← trạng thái build (cập nhật mỗi session)
+├── docs/
+│   ├── README.md               ← mục lục tổng quan
+│   ├── 01-roadmap.md
+│   ├── 02-architecture.md
+│   ├── 03-plan-5-ngay.md       ← lịch sử MVP ban đầu (không còn là plan chính)
+│   ├── 04-hop-dong-tool-va-observation.md
+│   ├── 05-engine.md
+│   ├── 06-tool-layer.md
+│   ├── 07-synthetic-data-va-kich-ban.md
+│   ├── 08-vong-tu-chu-va-output.md
+│   ├── 09-trace-va-storage.md
+│   └── 10-roadmap-20-ngay.md  ← KẾ HOẠCH ĐANG THEO (Phase 1–4)
+├── data/
+│   ├── schema.sql              ← DDL đầy đủ (có projects, project_services, mcp_servers)
+│   ├── init_db.py
+│   ├── migrate_projects.py     ← migration idempotent (chạy khi clone mới)
+│   ├── seed_scenario1.py
+│   ├── seed_scenario2.py
+│   └── investigation.db        ← gitignored
+├── mcp_server/
+│   └── server.py               ← demo MCP server (FastAPI + JSON-RPC 2.0)
+├── scripts/
+│   ├── start_server.py         ← uvicorn FastAPI server (port 8000)
+│   ├── start_mcp_server.py     ← uvicorn MCP demo server (port 9000)
+│   ├── trigger.py              ← trigger investigation thủ công
+│   ├── run_scenario.py
+│   ├── run_tool.py
+│   └── eval_agent.py
+└── src/agent/
+    ├── llm/                    ← base.py, anthropic.py, openai_compat.py, factory.py
+    ├── tools/
+    │   ├── contracts.py        ← Tool, Observation dataclass (đường ranh)
+    │   ├── registry.py         ← build_tool_registry(mcp_clients)
+    │   ├── mcp_client.py       ← MCPClient (JSON-RPC 2.0 over HTTP)
+    │   ├── get_error_breakdown.py
+    │   ├── get_metrics.py
+    │   ├── get_recent_deploys.py
+    │   ├── get_dependencies.py
+    │   └── trace_request.py
+    ├── engine/
+    │   ├── state.py            ← InvestigationState, Hypothesis, Evidence, Verdict
+    │   └── loop.py             ← InvestigationEngine, decide/run_tool/update_state (pure)
+    ├── intake/
+    │   ├── server.py           ← FastAPI v0.4.0 (22 routes, project-scoped)
+    │   ├── runner.py           ← fire-and-forget background task
+    │   ├── normalizer.py       ← InvestigationRequest (có project_id)
+    │   ├── mcp_registry.py     ← CRUD mcp_servers DB (project-scoped)
+    │   ├── project_registry.py ← CRUD projects + project_services
+    │   └── adapters/
+    │       ├── __init__.py     ← route_adapter(), list_sources()
+    │       ├── _shared.py      ← parse_alert_time()
+    │       ├── prometheus.py
+    │       ├── grafana.py
+    │       └── sentry.py
+    ├── output/
+    │   └── telegram.py         ← push_verdict_to_telegram()
+    └── storage/
+        └── db.py               ← open_db()
+```
+
+---
+
+## Khởi động nhanh (khi clone hoặc session mới)
+
+```bash
+# 1. Activate venv
+source .venv/bin/activate   # hoặc prefix mọi lệnh với .venv/bin/python3
+
+# 2. Env vars (copy .env.example → .env, điền API key)
+cp .env.example .env
+
+# 3. Init / migrate DB (idempotent — chạy khi có file mới trong data/)
+python3 data/init_db.py
+python3 data/migrate_projects.py
+
+# 4. Seed data (nếu DB trống)
+python3 data/seed_scenario1.py
+python3 data/seed_scenario2.py
+
+# 5. Chạy server
+python3 scripts/start_server.py              # port 8000
+python3 scripts/start_mcp_server.py          # port 9000 (optional — MCP demo)
+
+# 6. Trigger investigation
+curl -X POST localhost:8000/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'
+# hoặc project-scoped:
+curl -X POST localhost:8000/projects/default/trigger \
+  -H "Content-Type: application/json" \
+  -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'
+```

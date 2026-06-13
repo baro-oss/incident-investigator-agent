@@ -1,0 +1,169 @@
+"""
+MCP Client — kết nối đến bất kỳ MCP server nào (Streamable HTTP transport).
+
+Giao thức: JSON-RPC 2.0 over HTTP, endpoint duy nhất POST /mcp.
+Tương thích với MCP spec (tools/list, tools/call, initialize).
+Không cần `mcp` Python SDK — implement trực tiếp trên aiohttp.
+
+Upgrade path Python 3.10+: swap class này → mcp.ClientSession + streamablehttp_client,
+engine và registry không thay đổi.
+"""
+from __future__ import annotations
+
+import dataclasses
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+import aiohttp
+
+from agent.tools.contracts import Observation, Tool
+
+logger = logging.getLogger(__name__)
+
+_MCP_PROTOCOL_VERSION = "2024-11-05"
+
+
+class MCPClient:
+    """
+    Giữ một HTTP session đến MCP server suốt đời investigation.
+    tool.run() đóng gói session này → engine gọi tool bình thường.
+    """
+
+    def __init__(self, url: str) -> None:
+        self.url = url.rstrip("/")           # e.g. "http://localhost:9000/mcp"
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._req_id = 0
+        self._initialized = False
+
+    async def connect(self) -> None:
+        """Mở HTTP session và thực hiện MCP initialize handshake."""
+        self._session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=30),
+        )
+        result = await self._call("initialize", {
+            "protocolVersion": _MCP_PROTOCOL_VERSION,
+            "capabilities": {},
+            "clientInfo": {"name": "investigation-agent", "version": "0.1.0"},
+        })
+        self._initialized = True
+        server_info = result.get("serverInfo", {})
+        logger.info("MCP kết nối OK: %s v%s", server_info.get("name", "?"), server_info.get("version", "?"))
+
+    async def close(self) -> None:
+        if self._session and not self._session.closed:
+            await self._session.close()
+
+    async def get_tools(self) -> List[Tool]:
+        """Discover tools từ MCP server, wrap thành list[Tool] theo hợp đồng nội bộ."""
+        result = await self._call("tools/list", {})
+        mcp_tools = result.get("tools", [])
+        tools = [self._wrap_tool(t) for t in mcp_tools]
+        logger.info("MCP %s: discover %d tool(s): %s",
+                    self.url, len(tools), [t.name for t in tools])
+        return tools
+
+    # ── Private ──────────────────────────────────────────────────────────────────
+
+    async def _call(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Gửi JSON-RPC 2.0 request, trả `result`. Throw nếu lỗi giao thức."""
+        self._req_id += 1
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._req_id,
+            "method": method,
+            "params": params,
+        }
+        async with self._session.post(self.url, json=payload) as resp:
+            resp.raise_for_status()
+            body = await resp.json(content_type=None)
+
+        if "error" in body:
+            err = body["error"]
+            raise RuntimeError(f"MCP error {err.get('code')}: {err.get('message')}")
+
+        return body.get("result", {})
+
+    async def _call_tool(self, name: str, arguments: Dict[str, Any]) -> Observation:
+        """Gọi tool trên MCP server, parse kết quả → Observation."""
+        try:
+            result = await self._call("tools/call", {"name": name, "arguments": arguments})
+        except Exception as e:
+            logger.warning("MCP tool '%s' lỗi: %s", name, e)
+            return Observation(
+                summary=f"MCP tool {name} lỗi: {e}",
+                aggregates={}, samples=[], total_count=0, truncated=False,
+                metadata={"tool_name": name, "source": "mcp", "error": str(e)},
+            )
+
+        if result.get("isError"):
+            content_text = _extract_text(result.get("content", []))
+            return Observation(
+                summary=f"Tool {name} báo lỗi: {content_text[:200]}",
+                aggregates={}, samples=[], total_count=0, truncated=False,
+                metadata={"tool_name": name, "source": "mcp", "is_error": True},
+            )
+
+        text = _extract_text(result.get("content", []))
+        return _parse_observation(text, name, self.url)
+
+    def _wrap_tool(self, mcp_tool: Dict[str, Any]) -> Tool:
+        """Bọc một MCP tool thành Tool contract — engine chỉ thấy Tool."""
+        name = mcp_tool["name"]
+
+        # Closure: name được capture đúng vì hàm này chạy một lần cho mỗi tool
+        async def run(params: Dict[str, Any], _name: str = name) -> Observation:
+            return await self._call_tool(_name, params)
+
+        return Tool(
+            name=name,
+            description=mcp_tool.get("description") or f"Tool từ MCP: {name}",
+            input_schema=mcp_tool.get("inputSchema") or {},
+            run=run,
+        )
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _extract_text(content: List[Dict[str, Any]]) -> str:
+    """Lấy text từ MCP content list (TextContent items)."""
+    parts = []
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            parts.append(item.get("text", ""))
+    return "\n".join(parts)
+
+
+def _parse_observation(text: str, tool_name: str, server_url: str) -> Observation:
+    """
+    Parse text từ MCP tool response → Observation.
+
+    Nếu server trả JSON có cấu trúc Observation → reconstruct đầy đủ.
+    Nếu server trả text tự do (external server không biết Observation) → wrap generic.
+    """
+    if text:
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict) and "summary" in data and "aggregates" in data:
+                return Observation(
+                    summary=data["summary"],
+                    aggregates=data.get("aggregates", {}),
+                    samples=data.get("samples", []),
+                    total_count=data.get("total_count", 0),
+                    truncated=data.get("truncated", False),
+                    metadata=data.get("metadata", {"tool_name": tool_name}),
+                    trace_completeness=data.get("trace_completeness"),
+                )
+        except (json.JSONDecodeError, TypeError, KeyError):
+            pass
+
+    # External server — wrap toàn bộ text vào summary
+    summary = text[:500] if text else f"Tool {tool_name} hoàn tất (không có output)"
+    return Observation(
+        summary=summary,
+        aggregates={},
+        samples=[],
+        total_count=0,
+        truncated=len(text) > 500 if text else False,
+        metadata={"tool_name": tool_name, "source": "mcp_external", "server_url": server_url},
+    )
