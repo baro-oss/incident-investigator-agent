@@ -555,9 +555,12 @@ def _list_mcp_servers(project_id: str) -> Dict[str, Any]:
 
 
 def _create_mcp_server(project_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    import json as _json
     name = (body.get("name") or "").strip()
     url = (body.get("url") or "").strip()
     description = (body.get("description") or "").strip()
+    auth_type = (body.get("auth_type") or "none").strip()
+    auth_config = (body.get("auth_config") or "{}").strip()
 
     if not name:
         raise HTTPException(422, "'name' là bắt buộc")
@@ -565,9 +568,16 @@ def _create_mcp_server(project_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(422, "'url' là bắt buộc")
     if not url.startswith(("http://", "https://")):
         raise HTTPException(422, "'url' phải bắt đầu bằng http:// hoặc https://")
+    if auth_type not in ("none", "bearer", "api_key"):
+        raise HTTPException(422, "'auth_type' phải là: none | bearer | api_key")
+    try:
+        _json.loads(auth_config)
+    except Exception:
+        raise HTTPException(422, "'auth_config' phải là JSON hợp lệ")
 
     try:
-        return add_server(name, url, description, project_id=project_id)
+        return add_server(name, url, description, project_id=project_id,
+                          auth_type=auth_type, auth_config=auth_config)
     except ValueError as e:
         raise HTTPException(409, str(e))
 
@@ -593,8 +603,18 @@ async def _ping_mcp_server(project_id: str, server_id: int) -> Dict[str, Any]:
     if not server:
         raise HTTPException(404, f"MCP server id={server_id} không thuộc project '{project_id}'")
 
+    import json as _json
     from agent.tools.mcp_client import MCPClient
-    client = MCPClient(server["url"])
+    auth_config: Dict[str, Any] = {}
+    try:
+        auth_config = _json.loads(server.get("auth_config") or "{}")
+    except Exception:
+        pass
+    client = MCPClient(
+        server["url"],
+        auth_type=server.get("auth_type", "none"),
+        auth_config=auth_config,
+    )
     try:
         await client.connect()
         tools = await client.get_tools()

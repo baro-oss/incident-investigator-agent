@@ -28,18 +28,42 @@ class MCPClient:
     """
     Giữ một HTTP session đến MCP server suốt đời investigation.
     tool.run() đóng gói session này → engine gọi tool bình thường.
+
+    Auth types:
+      none     — không cần xác thực (default)
+      bearer   — Authorization: Bearer <token>
+      api_key  — <header>: <value>  (header name + value tuỳ chỉnh)
     """
 
-    def __init__(self, url: str) -> None:
-        self.url = url.rstrip("/")           # e.g. "http://localhost:9000/mcp"
+    def __init__(
+        self,
+        url: str,
+        auth_type: str = "none",
+        auth_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        self.url = url.rstrip("/")
+        self.auth_type = auth_type
+        self.auth_config = auth_config or {}
         self._session: Optional[aiohttp.ClientSession] = None
         self._req_id = 0
         self._initialized = False
 
+    def _auth_headers(self) -> Dict[str, str]:
+        """Build HTTP headers cho auth."""
+        if self.auth_type == "bearer":
+            token = self.auth_config.get("token", "")
+            return {"Authorization": f"Bearer {token}"} if token else {}
+        if self.auth_type == "api_key":
+            header = self.auth_config.get("header", "X-API-Key")
+            value = self.auth_config.get("value", "")
+            return {header: value} if value else {}
+        return {}
+
     async def connect(self) -> None:
-        """Mở HTTP session và thực hiện MCP initialize handshake."""
+        """Mở HTTP session (với auth header) và thực hiện MCP initialize handshake."""
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=30),
+            headers=self._auth_headers(),
         )
         result = await self._call("initialize", {
             "protocolVersion": _MCP_PROTOCOL_VERSION,

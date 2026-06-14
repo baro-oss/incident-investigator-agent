@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 24 ✅** (Webhook signature + Slack adapter + Real MCP pack). Tiếp theo: **Ngày 25 (UI/UX + close)**.
-**Cổng kiểm gần nhất đã qua:** Ngày 24 — webhook không chữ ký → 401 ✅ · Slack adapter gửi được ✅ · Real MCP infra server 4 tools hot-plug ✅
+**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 25 ✅ HOÀN TẤT. Phase 5 ✅ HOÀN TẤT.**
+**Cổng kiểm gần nhất đã qua:** Ngày 25 — MCP auth ✅ · tool test-run ✅ · replay diff ✅ · search ✅ · mock eval 4/4 PASS ✅
 **Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
 
 ## Cái lõi (không được vỡ) — tình trạng
@@ -63,9 +63,58 @@
 | 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ✅ |
 | 23 | Observability + Project CRUD UI | Cost dashboard + verdict feedback loop + Project CRUD UI | ✅ |
 | 24 | Integrations | Webhook signature + Slack + real MCP pack | ✅ |
-| 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
+| 25 | UI/UX + close | MCP Server Auth + Replay diff + tool test-run + search + Cổng Phase 5 | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 30 — 2026-06-14] — Ngày 25: UI/UX + Đóng Phase 5
+
+**A. MCP Server Auth:**
+- `data/migrate_day25.py` (mới) — thêm `auth_type TEXT DEFAULT 'none'` và `auth_config TEXT DEFAULT '{}'` vào `mcp_servers` (idempotent via PRAGMA table_info)
+- `src/agent/tools/mcp_client.py` — `__init__` nhận `auth_type`, `auth_config`; `_auth_headers()` build header (bearer → `Authorization: Bearer`, api_key → custom header); inject vào `aiohttp.ClientSession(headers=...)` → toàn session tự động có auth
+- `src/agent/intake/mcp_registry.py` — `add_server()` nhận `auth_type/auth_config`; `update_server()` cho phép update 2 field mới; `get_enabled_servers()` trả full dict {url, auth_type, auth_config}
+- `src/agent/intake/runner.py` — `_get_mcp_servers_for_project()` trả `List[Dict]` thay vì `List[str]`; `_connect_mcp_clients()` parse auth_config JSON + tạo MCPClient với auth
+- `src/agent/intake/server.py` — `_create_mcp_server()` validate auth_type + auth_config JSON; `_ping_mcp_server()` tạo MCPClient có auth
+- `src/agent/dashboard/queries.py` — `get_mcp_servers_for_dashboard()` + `get_project_detail()` include `auth_type` trong SELECT
+- `src/agent/dashboard/templates/mcp.html` — form Row 2: auth_type select (none/bearer/api_key) + conditional fields (JS show/hide) + hidden `auth_config` JSON field; bảng servers thêm cột Auth với `🔑 bearer` badge
+
+**B. Tool Registry test-run:**
+- `src/agent/dashboard/router.py` — `POST /dashboard/tools/{tool_name}/run`: lookup tool theo name+domain, `await tool.run(args)` (async/sync via inspect), trả JSON Observation
+- `src/agent/dashboard/templates/tools.html` — mỗi tool card có "▶ Test Run" toggle; panel với JSON textarea + Run button + inline Observation result (summary bold, aggregates màu, samples list)
+
+**C. Replay side-by-side diff:**
+- `src/agent/dashboard/router.py` — `GET /dashboard/investigations/{id}/diff?compare={id2}`: fetch cả 2 investigations, pass vào template
+- `src/agent/dashboard/templates/diff.html` (mới): dropdown selector `compare`; summary bar đếm diff count (confidence/root_cause/stop_reason); 2 cards side-by-side (A/B badge, confidence highlight nếu khác, root_cause highlight nếu khác, steps list)
+- `src/agent/dashboard/templates/detail.html` — thêm "⇄ Diff" button cạnh Replay button
+
+**D. Investigation search:**
+- `src/agent/dashboard/queries.py` — `list_investigations()` nhận `search: Optional[str]`; filter trên `(start_payload + verdict_payload).lower().contains(term)`
+- `src/agent/dashboard/router.py` — `dashboard_home()` nhận `search` query param, pass vào query + template
+- `src/agent/dashboard/templates/index.html` — thêm text input `search` + 🔍 submit button vào filter bar
+
+**Verify:**
+- Tool test-run: click "▶ Test Run" → expand panel → nhập args → Run → `✓ OK` + Observation render (summary bold + aggregates màu + samples) ✅
+- Diff: navigate `/investigations/{id}/diff?compare={id2}` → summary bar "⚠ 2 trường khác nhau: confidence root_cause" → side-by-side cards với highlight đúng ✅
+- Search `?search=scenario4` → 17 results (filter từ ~50) ✅
+- Mock eval 4/4 PASS (lõi không vỡ) ✅
+
+**Cổng Phase 5 ✅ PASS:**
+- auth bật (RBAC động, root login) ✅
+- cost thật (cost dashboard $/inv) ✅
+- real-LLM eval (6/6 smoke, smoke do người dùng chọn) ✅
+- storage seam Tier-1 ✅
+- ≥1 integration thật (Slack adapter + Real MCP infra pack + webhook signature) ✅
+- replay diff ✅
+- MCP server auth ✅ (added per user request)
+- investigation search ✅
+- tool test-run ✅
+
+**Deferred (not done, not blocking cổng):**
+- Graceful shutdown (SIGTERM → partial verdict) — đẩy xuống Future
+- Trace retention (purge cũ) — đẩy xuống Future
+- Secret management at-rest — đẩy xuống Future
+
+**25/25 NGÀY + Phase 5 HOÀN TẤT.**
 
 ### [Session 29 — 2026-06-14] — Ngày 24: Integrations (Webhook Signature + Slack + Real MCP Pack)
 

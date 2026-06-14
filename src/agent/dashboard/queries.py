@@ -155,6 +155,7 @@ def set_investigation_feedback(investigation_id: str, score: int) -> None:
 def list_investigations(
     project_id: Optional[str] = None,
     confidence: Optional[str] = None,
+    search: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
     """Danh sách investigations từ trace_events, mỗi inv_id là 1 hàng."""
@@ -189,6 +190,14 @@ def list_investigations(
             continue
         if project_id and r["project_id"] != project_id:
             continue
+        if search:
+            term = search.lower()
+            haystack = (
+                (r["start_payload"] or "").lower()
+                + " " + (r["verdict_payload"] or "").lower()
+            )
+            if term not in haystack:
+                continue
 
         # Tính elapsed giây
         elapsed = None
@@ -415,7 +424,7 @@ def get_mcp_servers_for_dashboard() -> List[Dict[str, Any]]:
     conn = open_db()
     rows = conn.execute("""
         SELECT m.id, m.name, m.url, m.description, m.enabled, m.project_id,
-               p.name AS project_name
+               m.auth_type, m.auth_config, p.name AS project_name
         FROM mcp_servers m
         LEFT JOIN projects p ON p.id = m.project_id
         ORDER BY m.project_id, m.created_at
@@ -438,7 +447,7 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
     ).fetchall()]
 
     mcp_servers = [dict(r) for r in conn.execute(
-        "SELECT id, name, url, enabled FROM mcp_servers WHERE project_id=? ORDER BY created_at",
+        "SELECT id, name, url, enabled, auth_type FROM mcp_servers WHERE project_id=? ORDER BY created_at",
         (project_id,),
     ).fetchall()]
 

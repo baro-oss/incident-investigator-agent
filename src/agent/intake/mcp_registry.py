@@ -41,19 +41,25 @@ def add_server(
     url: str,
     description: str = "",
     project_id: str = "default",
+    auth_type: str = "none",
+    auth_config: str = "{}",
 ) -> Dict[str, Any]:
     """
     Thêm MCP server vào registry của project.
     Raise ValueError nếu URL đã tồn tại (URL unique toàn cục).
+
+    auth_type: 'none' | 'bearer' | 'api_key'
+    auth_config: JSON string — {"token":"..."} hoặc {"header":"X-API-Key","value":"..."}
     """
     now = _now()
     url = url.rstrip("/")
     conn = open_db()
     try:
         cursor = conn.execute(
-            "INSERT INTO mcp_servers (name, url, description, enabled, project_id, created_at, updated_at) "
-            "VALUES (?, ?, ?, 1, ?, ?, ?)",
-            (name, url, description, project_id, now, now),
+            "INSERT INTO mcp_servers "
+            "(name, url, description, enabled, project_id, auth_type, auth_config, created_at, updated_at) "
+            "VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)",
+            (name, url, description, project_id, auth_type, auth_config, now, now),
         )
         conn.commit()
         row = conn.execute(
@@ -93,7 +99,7 @@ def update_server(
     Cập nhật fields (name, url, description, enabled).
     project_id != None → chỉ update nếu server thuộc đúng project.
     """
-    allowed = {"name", "url", "description", "enabled"}
+    allowed = {"name", "url", "description", "enabled", "auth_type", "auth_config"}
     updates = {k: v for k, v in fields.items() if k in allowed}
 
     # Build WHERE
@@ -134,14 +140,20 @@ def update_server(
 
 
 def get_enabled_urls(project_id: str = "default") -> List[str]:
-    """Trả URLs của servers enabled trong project — nguồn chính cho runner."""
+    """Trả URLs của servers enabled trong project — backward compat."""
+    return [s["url"] for s in get_enabled_servers(project_id)]
+
+
+def get_enabled_servers(project_id: str = "default") -> List[Dict[str, Any]]:
+    """Trả full record (url + auth_type + auth_config) của servers enabled trong project."""
     conn = open_db()
     rows = conn.execute(
-        "SELECT url FROM mcp_servers WHERE enabled=1 AND project_id=? ORDER BY created_at",
+        "SELECT url, auth_type, auth_config FROM mcp_servers "
+        "WHERE enabled=1 AND project_id=? ORDER BY created_at",
         (project_id,),
     ).fetchall()
     conn.close()
-    return [r["url"] for r in rows]
+    return [dict(r) for r in rows]
 
 
 def get_server_by_id(

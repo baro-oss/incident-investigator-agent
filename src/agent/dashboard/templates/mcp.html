@@ -15,36 +15,87 @@
 
 <!-- Register Form -->
 <div class="card" style="margin-bottom:20px">
-  <div class="card-header" style="margin-bottom:12px">
+  <div class="card-header" style="margin-bottom:14px">
     <h3 style="margin:0">Đăng ký MCP Server mới</h3>
   </div>
-  <form method="post" action="/dashboard/mcp/register"
-        style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:10px;align-items:end">
-    <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Name</label>
-      <input type="text" name="name" placeholder="my-mcp-server" required
-             style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
-                    border-radius:5px;color:var(--text);font-size:13px">
+  <form method="post" action="/dashboard/mcp/register" id="register-form">
+    <!-- Row 1: Name + URL + Project -->
+    <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;margin-bottom:10px">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Name *</label>
+        <input type="text" name="name" placeholder="my-mcp-server" required
+               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                      border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">URL *</label>
+        <input type="url" name="url" placeholder="http://localhost:9000/mcp" required
+               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                      border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Project</label>
+        <select name="project_id"
+                style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                       border-radius:5px;color:var(--text);font-size:13px">
+          {% for pid in projects %}
+          <option value="{{ pid }}">{{ pid }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
-    <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">URL</label>
-      <input type="url" name="url" placeholder="http://localhost:9000/mcp" required
-             style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
-                    border-radius:5px;color:var(--text);font-size:13px">
+
+    <!-- Row 2: Auth -->
+    <div style="display:grid;grid-template-columns:160px 1fr 1fr auto;gap:10px;align-items:end">
+      <div>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Auth Type</label>
+        <select name="auth_type" id="auth-type-select" onchange="onAuthTypeChange(this.value)"
+                style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                       border-radius:5px;color:var(--text);font-size:13px">
+          <option value="none">none</option>
+          <option value="bearer">bearer token</option>
+          <option value="api_key">api key header</option>
+        </select>
+      </div>
+
+      <!-- Bearer token field -->
+      <div id="auth-bearer" style="display:none">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Token</label>
+        <input type="password" id="bearer-token" placeholder="sk-..." autocomplete="off"
+               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                      border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+
+      <!-- API key: header name + value -->
+      <div id="auth-apikey-header" style="display:none">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Header Name</label>
+        <input type="text" id="apikey-header" placeholder="X-API-Key"
+               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                      border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+      <div id="auth-apikey-value" style="display:none">
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">API Key Value</label>
+        <input type="password" id="apikey-value" placeholder="key-..." autocomplete="off"
+               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                      border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
+      </div>
+
+      <!-- Placeholder khi auth=none -->
+      <div id="auth-none-placeholder" style="grid-column:span 2"></div>
+
+      <!-- Hidden field auth_config JSON được build bởi JS trước submit -->
+      <input type="hidden" name="auth_config" id="auth-config-hidden" value="{}">
+
+      <div>
+        <button type="submit" class="btn btn-primary" style="padding:7px 16px;white-space:nowrap">
+          + Register
+        </button>
+      </div>
     </div>
-    <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Project</label>
-      <select name="project_id"
-              style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
-                     border-radius:5px;color:var(--text);font-size:13px">
-        {% for pid in projects %}
-        <option value="{{ pid }}">{{ pid }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <button type="submit" class="btn btn-primary" style="padding:7px 16px">+ Register</button>
-    </div>
+
+    <p style="font-size:11px;color:var(--muted);margin:8px 0 0">
+      ⚠ Credentials lưu dạng plaintext trong SQLite — chỉ dùng cho môi trường local/dev.
+    </p>
   </form>
 </div>
 
@@ -58,6 +109,7 @@
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Name</th>
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">URL</th>
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Project</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500">Auth</th>
         <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500">Status</th>
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Ping Result</th>
         <th style="padding:6px 8px"></th>
@@ -72,6 +124,13 @@
         <a href="/dashboard/projects/{{ s.project_id }}" style="color:var(--accent);text-decoration:none">
           {{ s.project_id }}
         </a>
+      </td>
+      <td style="text-align:center;padding:9px 8px">
+        {% if s.auth_type and s.auth_type != 'none' %}
+          <span class="badge badge-info" title="{{ s.auth_type }}">🔑 {{ s.auth_type }}</span>
+        {% else %}
+          <span style="color:var(--muted);font-size:11px">—</span>
+        {% endif %}
       </td>
       <td style="text-align:center;padding:9px 8px">
         {% if s.enabled %}
@@ -108,6 +167,28 @@
 {% endif %}
 
 <script>
+function onAuthTypeChange(val) {
+  document.getElementById('auth-bearer').style.display       = val === 'bearer'  ? '' : 'none';
+  document.getElementById('auth-apikey-header').style.display = val === 'api_key' ? '' : 'none';
+  document.getElementById('auth-apikey-value').style.display  = val === 'api_key' ? '' : 'none';
+  document.getElementById('auth-none-placeholder').style.display = val === 'none' ? '' : 'none';
+}
+
+// Build auth_config JSON trước khi submit
+document.getElementById('register-form').addEventListener('submit', function() {
+  const authType = document.getElementById('auth-type-select').value;
+  let cfg = {};
+  if (authType === 'bearer') {
+    cfg = { token: document.getElementById('bearer-token').value };
+  } else if (authType === 'api_key') {
+    cfg = {
+      header: document.getElementById('apikey-header').value || 'X-API-Key',
+      value:  document.getElementById('apikey-value').value,
+    };
+  }
+  document.getElementById('auth-config-hidden').value = JSON.stringify(cfg);
+});
+
 async function pingServer(id) {
   const el = document.getElementById('ping-result-' + id);
   el.style.color = 'var(--muted)';
@@ -116,10 +197,10 @@ async function pingServer(id) {
     const resp = await fetch('/dashboard/mcp/' + id + '/ping', {method: 'POST'});
     const data = await resp.json();
     if (data.status === 'ok') {
-      const toolList = (data.tools || []).slice(0, 5).join(', ');
-      const more = data.tools_count > 5 ? ` +${data.tools_count - 5}` : '';
+      const toolList = (data.tools || []).slice(0, 5).map(t => t.name).join(', ');
+      const more = data.tool_count > 5 ? ` +${data.tool_count - 5}` : '';
       el.style.color = 'var(--high)';
-      el.innerHTML = `✓ ${data.latency_ms}ms · ${data.tools_count} tools`
+      el.innerHTML = `✓ ${data.latency_ms}ms · ${data.tool_count} tools`
         + (toolList ? `<br><span style="color:var(--muted);font-size:11px">${toolList}${more}</span>` : '');
     } else {
       el.style.color = 'var(--low)';

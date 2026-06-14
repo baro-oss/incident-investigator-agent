@@ -15,19 +15,19 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày).** Đang ở: **Phase 5 — Hardening & Trust (Ngày 21–25). Chuẩn bị Ngày 21.**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày).**
 
 Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. **Plan Phase 5: `docs/11-roadmap-phase-5.md`.**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
-| 21 | Engine & Quality + Storage seam | Real-LLM eval N=10 + calibration · Tier-1 storage seam (DB-swappable) | ☐ |
-| 22 | Auth & RBAC | RBAC động (root · role động · project groups · scoped assignment) — ngày nặng | ☐ |
-| 23 | Observability | Cost dashboard + verdict feedback loop + trace retention | ☐ |
-| 24 | Integrations | Webhook signature + Slack adapter + real MCP pack | ☐ |
-| 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
+| 21 | Engine & Quality + Storage seam | Real-LLM eval smoke 6/6 · Tier-1 storage seam · recursion bugfix | ✅ |
+| 22 | Auth & RBAC | RBAC động (root · role động · project groups · scoped assignment) | ✅ |
+| 23 | Observability | Cost dashboard + verdict feedback loop + Project CRUD UI | ✅ |
+| 24 | Integrations | Webhook signature (HMAC-SHA256) + Slack adapter + real MCP pack | ✅ |
+| 25 | UI/UX + close | MCP server auth + Replay diff + tool test-run + search + Cổng Phase 5 | ✅ |
 
-**3 ưu tiên P0:** real-LLM eval (D21) · auth/RBAC (D22) · cost dashboard (D23).
+**Cổng Phase 5 PASS:** auth · cost · real-LLM eval · storage seam · Slack/MCP integration · replay diff · MCP auth · search · tool test-run.
 
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 

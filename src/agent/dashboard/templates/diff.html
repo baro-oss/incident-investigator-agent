@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}Replay Diff{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+    <a href="/dashboard/investigations/{{ inv_a.investigation_id }}"
+       style="color:var(--muted);text-decoration:none;font-size:13px">← {{ inv_a.investigation_id[:20] }}…</a>
+    <span style="color:var(--border)">·</span>
+    <span style="font-size:14px;font-weight:500">Replay Diff</span>
+  </div>
+  <div class="meta">So sánh hai lần chạy — chênh lệch verdict được đánh dấu</div>
+</div>
+
+<!-- Compare selector -->
+<div class="card" style="margin-bottom:16px;padding:12px 16px">
+  <form method="get" style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:13px;color:var(--muted);white-space:nowrap">So sánh với:</span>
+    <select name="compare"
+            style="flex:1;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
+                   border-radius:5px;color:var(--text);font-size:13px">
+      <option value="">— chọn investigation —</option>
+      {% for inv in all_invs %}
+      {% if inv.investigation_id != inv_a.investigation_id %}
+      <option value="{{ inv.investigation_id }}"
+              {% if inv.investigation_id == compare_id %}selected{% endif %}>
+        {{ inv.investigation_id[:32] }}
+        {% if inv.symptom %} · {{ inv.symptom[:40] }}{% endif %}
+        {% if inv.confidence %} [{{ inv.confidence }}]{% endif %}
+      </option>
+      {% endif %}
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-primary" style="padding:6px 16px;white-space:nowrap">
+      Compare →
+    </button>
+  </form>
+</div>
+
+{% if not inv_b %}
+<div class="card" style="text-align:center;padding:48px;color:var(--muted)">
+  Chọn investigation để so sánh ở trên.
+</div>
+{% else %}
+
+{% macro conf_badge(conf) %}
+  {% if conf == 'high' %}<span class="badge badge-high">high</span>
+  {% elif conf == 'medium' %}<span class="badge badge-medium">medium</span>
+  {% elif conf == 'low' %}<span class="badge badge-low">low</span>
+  {% elif conf == 'insufficient' %}<span class="badge badge-default">insufficient</span>
+  {% else %}<span class="badge badge-default">{{ conf or '—' }}</span>{% endif %}
+{% endmacro %}
+
+{% set diff_confidence = inv_a.get('confidence','') != inv_b.get('confidence','') %}
+{% set diff_root_cause  = inv_a.get('root_cause','') != inv_b.get('root_cause','') %}
+{% set diff_stop_reason = inv_a.get('stop_reason','') != inv_b.get('stop_reason','') %}
+
+<!-- Summary diff bar -->
+{% set diff_count = (1 if diff_confidence else 0) + (1 if diff_root_cause else 0) + (1 if diff_stop_reason else 0) %}
+<div class="card" style="margin-bottom:16px;padding:10px 16px;
+     {% if diff_count == 0 %}border-color:#2d6a4f;background:#0d2018{% else %}border-color:#7c4a00;background:#1a0e00{% endif %}">
+  <div style="font-size:12px;color:var(--muted)">
+    {% if diff_count == 0 %}
+      ✓ Hai investigation có kết quả giống nhau
+    {% else %}
+      ⚠ {{ diff_count }} trường khác nhau:
+      {% if diff_confidence %}<span style="color:#fbbf24;margin-left:8px">confidence</span>{% endif %}
+      {% if diff_root_cause %}<span style="color:#fbbf24;margin-left:8px">root_cause</span>{% endif %}
+      {% if diff_stop_reason %}<span style="color:#fbbf24;margin-left:8px">stop_reason</span>{% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<!-- Side-by-side cards -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+  {% for inv in [inv_a, inv_b] %}
+  {% set is_a = loop.index == 1 %}
+  {% set other = inv_b if is_a else inv_a %}
+  <div>
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:3px;
+                   background:{% if is_a %}var(--accent){% else %}#7c3aed{% endif %};color:#fff">
+        {{ 'A' if is_a else 'B' }}
+      </span>
+      <a href="/dashboard/investigations/{{ inv.investigation_id }}"
+         style="font-size:12px;color:var(--accent);text-decoration:none;font-family:monospace">
+        {{ inv.investigation_id[:36] }}
+      </a>
+    </div>
+
+    <!-- Verdict card -->
+    <div class="card" style="padding:14px 16px;
+         {% if diff_confidence or diff_root_cause %}border-color:{% if is_a %}#3b5bdb{% else %}#7c3aed{% endif %}{% endif %}">
+
+      <!-- Confidence -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:11px;color:var(--muted);font-weight:500">CONFIDENCE</span>
+        <span {% if diff_confidence %}style="background:#2a1800;padding:2px 6px;border-radius:4px;border:1px solid #7c4a00"{% endif %}>
+          {{ conf_badge(inv.get('confidence','')) }}
+        </span>
+      </div>
+
+      <!-- Root cause -->
+      <div style="margin-bottom:10px">
+        <div style="font-size:11px;color:var(--muted);font-weight:500;margin-bottom:4px">ROOT CAUSE</div>
+        <div style="font-size:13px;line-height:1.6;
+             {% if diff_root_cause %}background:#2a1800;padding:6px 8px;border-radius:4px;border-left:3px solid #7c4a00{% endif %}">
+          {{ inv.get('root_cause','—') }}
+        </div>
+      </div>
+
+      <!-- Meta row -->
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:6px">
+        <div>
+          <span style="color:var(--text)">Scenario:</span>
+          {{ inv.get('scenario','—') }}
+        </div>
+        <div>
+          <span style="color:var(--text)">Stop:</span>
+          <span {% if diff_stop_reason %}style="color:#fbbf24"{% endif %}>
+            {{ inv.get('stop_reason','—') }}
+          </span>
+        </div>
+        <div>
+          <span style="color:var(--text)">Steps:</span>
+          {{ inv.steps | length if inv.steps else '—' }}
+        </div>
+      </div>
+
+      <!-- Symptom -->
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);
+                  font-size:12px;color:var(--muted)">
+        {{ inv.get('symptom','')[:120] }}
+      </div>
+    </div>
+
+    <!-- Steps summary -->
+    {% if inv.steps %}
+    <div class="card" style="margin-top:10px;padding:12px 16px">
+      <div style="font-size:11px;color:var(--muted);font-weight:500;margin-bottom:8px">
+        STEPS ({{ inv.steps|length }})
+      </div>
+      {% for step in inv.steps %}
+      <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:4px;font-size:11px">
+        <span style="color:var(--muted);min-width:18px;text-align:right">{{ step.step }}</span>
+        {% if step.tool_call %}
+        <code style="color:var(--accent)">{{ step.tool_call.get('tool','?') }}</code>
+        {% if step.tool_call.get('arguments') %}
+        <span style="color:var(--muted)">
+          {{ step.tool_call.arguments.items() | list | map(attribute=0) | join(', ') if step.tool_call.arguments else '' }}
+        </span>
+        {% endif %}
+        {% elif step.decision %}
+        <span style="color:var(--muted);font-style:italic">{{ step.decision.get('action','decision')[:40] }}</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+</div>
+{% endif %}
+
+{% endblock %}

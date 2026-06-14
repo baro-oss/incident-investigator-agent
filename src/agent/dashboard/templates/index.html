@@ -21,6 +21,11 @@
       <option value="low"          {{ 'selected' if filter_confidence == 'low' }}>LOW</option>
       <option value="insufficient" {{ 'selected' if filter_confidence == 'insufficient' }}>INSUFFICIENT</option>
     </select>
+    <input type="text" name="search" value="{{ filter_search }}"
+           placeholder="Tìm kiếm symptom / verdict…"
+           style="flex:1;min-width:160px;padding:6px 10px;background:var(--surface2);
+                  border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px">
+    <button type="submit" class="btn btn-ghost" style="padding:6px 12px">🔍</button>
     <a href="/dashboard" class="btn btn-ghost">Xóa filter</a>
     <a href="/dashboard/trigger" class="btn btn-primary" style="margin-left:auto">▶ Trigger mới</a>
   </form>

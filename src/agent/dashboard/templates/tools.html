@@ -29,10 +29,16 @@
 {% set tools = all_tools[selected_domain] %}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
   {% for t in tools %}
-  <div class="card" style="padding:16px">
+  <div class="card" style="padding:16px" id="card-{{ t.name }}">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
       <code style="color:var(--accent);font-size:13px;font-weight:600">{{ t.name }}</code>
       <span class="tag" style="font-size:10px">{{ selected_domain }}</span>
+      <button onclick="toggleTestRun('{{ t.name }}')"
+              style="margin-left:auto;font-size:11px;padding:3px 10px;cursor:pointer;
+                     background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+                     color:var(--muted)">
+        ▶ Test Run
+      </button>
     </div>
     <p style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px">
       {{ t.description[:250] }}{% if t.description|length > 250 %}…{% endif %}
@@ -45,6 +51,27 @@
       {% endfor %}
     </div>
     {% endif %}
+
+    <!-- Inline test-run panel (hidden by default) -->
+    <div id="run-panel-{{ t.name }}" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Args (JSON):</div>
+      <textarea id="args-{{ t.name }}"
+                rows="3"
+                style="width:100%;background:var(--surface2);border:1px solid var(--border);
+                       border-radius:5px;color:var(--text);font-size:11px;font-family:monospace;
+                       padding:6px 8px;box-sizing:border-box;resize:vertical"
+      >{{ t.default_args | default('{}') }}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button onclick="runTool('{{ t.name }}', '{{ selected_domain }}')"
+                style="font-size:11px;padding:5px 14px;cursor:pointer;
+                       background:var(--accent);border:none;border-radius:4px;
+                       color:#fff;font-weight:500">
+          ▶ Run
+        </button>
+        <span id="run-status-{{ t.name }}" style="font-size:11px;color:var(--muted)"></span>
+      </div>
+      <div id="run-result-{{ t.name }}" style="display:none;margin-top:10px"></div>
+    </div>
   </div>
   {% endfor %}
 </div>
@@ -58,5 +85,108 @@
     </span>
   </div>
 </div>
+
+<script>
+function toggleTestRun(name) {
+  const panel = document.getElementById('run-panel-' + name);
+  const btn = document.querySelector('#card-' + name + ' button');
+  if (panel.style.display === 'none') {
+    panel.style.display = '';
+    btn.textContent = '▼ Test Run';
+  } else {
+    panel.style.display = 'none';
+    btn.textContent = '▶ Test Run';
+  }
+}
+
+async function runTool(toolName, domain) {
+  const textarea = document.getElementById('args-' + toolName);
+  const statusEl = document.getElementById('run-status-' + toolName);
+  const resultEl = document.getElementById('run-result-' + toolName);
+
+  let args;
+  try {
+    args = JSON.parse(textarea.value || '{}');
+  } catch(e) {
+    statusEl.style.color = 'var(--low)';
+    statusEl.textContent = '✗ JSON không hợp lệ: ' + e.message;
+    return;
+  }
+
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = '⟳ đang chạy...';
+  resultEl.style.display = 'none';
+
+  try {
+    const resp = await fetch('/dashboard/tools/' + toolName + '/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({args, domain}),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      statusEl.style.color = 'var(--low)';
+      statusEl.textContent = '✗ ' + data.error;
+      resultEl.style.display = 'none';
+      return;
+    }
+
+    statusEl.style.color = '#4ade80';
+    statusEl.textContent = '✓ OK';
+    resultEl.style.display = '';
+    resultEl.innerHTML = renderObservation(data);
+  } catch(e) {
+    statusEl.style.color = 'var(--low)';
+    statusEl.textContent = '✗ network error';
+  }
+}
+
+function renderObservation(obs) {
+  let html = `<div style="background:var(--surface2);border:1px solid var(--border);
+                           border-radius:5px;padding:10px;font-size:12px;line-height:1.7">`;
+
+  // Summary
+  html += `<div style="font-weight:600;color:var(--text);margin-bottom:6px">${escHtml(obs.summary)}</div>`;
+
+  // Aggregates
+  if (obs.aggregates && Object.keys(obs.aggregates).length) {
+    html += `<div style="color:var(--muted);font-size:11px;margin-bottom:4px">Aggregates:</div>`;
+    html += `<div style="font-family:monospace;font-size:11px;color:var(--text)">`;
+    for (const [k, v] of Object.entries(obs.aggregates)) {
+      html += `<div style="margin-left:8px">${escHtml(k)}: <span style="color:var(--accent)">${escHtml(String(v))}</span></div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Samples
+  if (obs.samples && obs.samples.length) {
+    const totalNote = `${obs.samples.length} shown, total=${obs.total_count}${obs.truncated ? ' (truncated)' : ''}`;
+    html += `<div style="color:var(--muted);font-size:11px;margin-top:6px;margin-bottom:4px">Samples (${totalNote}):</div>`;
+    html += `<div style="font-family:monospace;font-size:10px;color:var(--text)">`;
+    for (const s of obs.samples) {
+      html += `<div style="margin-left:8px;margin-bottom:2px">• ${escHtml(JSON.stringify(s))}</div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Metadata
+  if (obs.metadata && Object.keys(obs.metadata).length) {
+    const parts = [];
+    if (obs.metadata.service) parts.push('service=' + obs.metadata.service);
+    if (obs.metadata.time_window) parts.push('window=' + obs.metadata.time_window);
+    if (parts.length) {
+      html += `<div style="color:var(--muted);font-size:10px;margin-top:6px">(${parts.join(', ')})</div>`;
+    }
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 
 {% endblock %}

@@ -26,26 +26,31 @@ from agent.tools.registry import build_tool_registry, get_mcp_urls_from_env
 logger = logging.getLogger(__name__)
 
 
-def _get_mcp_urls_for_project(project_id: str) -> List[str]:
+def _get_mcp_servers_for_project(project_id: str) -> List[Dict[str, str]]:
     """
-    Nguồn chính: DB mcp_servers WHERE project_id=? AND enabled=1.
-    Nguồn bổ sung: env var MCP_SERVER_URLS (thêm nếu chưa có).
+    Nguồn chính: DB mcp_servers WHERE project_id=? AND enabled=1
+                 → trả list dict {url, auth_type, auth_config}.
+    Nguồn bổ sung: env var MCP_SERVER_URLS (thêm nếu chưa có, auth=none).
     """
     try:
-        from agent.intake.mcp_registry import get_enabled_urls
-        db_urls = get_enabled_urls(project_id=project_id)
+        from agent.intake.mcp_registry import get_enabled_servers
+        db_servers = get_enabled_servers(project_id=project_id)
     except Exception as e:
         logger.warning("Không đọc được mcp_servers từ DB: %s", e)
-        db_urls = []
+        db_servers = []
 
-    env_urls = get_mcp_urls_from_env()
-    seen = set(db_urls)
-    for url in env_urls:
-        if url not in seen:
-            db_urls.append(url)
-            seen.add(url)
+    seen_urls = {s["url"] for s in db_servers}
+    for url in get_mcp_urls_from_env():
+        if url not in seen_urls:
+            db_servers.append({"url": url, "auth_type": "none", "auth_config": "{}"})
+            seen_urls.add(url)
 
-    return db_urls
+    return db_servers
+
+
+# backward compat alias (dùng trong các nơi chỉ cần URL)
+def _get_mcp_urls_for_project(project_id: str) -> List[str]:
+    return [s["url"] for s in _get_mcp_servers_for_project(project_id)]
 
 
 def _get_project_services(project_id: str) -> List[str]:
@@ -61,11 +66,19 @@ def _get_project_services(project_id: str) -> List[str]:
 _active_investigations: Set[str] = set()
 
 
-async def _connect_mcp_clients(urls: List[str]) -> List[MCPClient]:
-    """Connect đến tất cả MCP server. Bỏ qua server không phản hồi (log warning)."""
+async def _connect_mcp_clients(servers: List[Dict[str, str]]) -> List[MCPClient]:
+    """Connect đến tất cả MCP server với auth. Bỏ qua server không phản hồi (log warning)."""
+    import json as _json
     clients: List[MCPClient] = []
-    for url in urls:
-        client = MCPClient(url)
+    for s in servers:
+        url = s["url"]
+        auth_type = s.get("auth_type", "none")
+        auth_config: Dict = {}
+        try:
+            auth_config = _json.loads(s.get("auth_config") or "{}")
+        except Exception:
+            pass
+        client = MCPClient(url, auth_type=auth_type, auth_config=auth_config)
         try:
             await client.connect()
             clients.append(client)
@@ -126,10 +139,11 @@ async def run_investigation_background(
                 logger.info("[%s] Project services: %s", project_id, available_services)
 
             # Connect MCP servers của project (+ env var fallback)
-            mcp_urls = _get_mcp_urls_for_project(project_id)
-            if mcp_urls:
-                logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_urls), mcp_urls)
-                mcp_clients = await _connect_mcp_clients(mcp_urls)
+            mcp_servers = _get_mcp_servers_for_project(project_id)
+            if mcp_servers:
+                mcp_urls = [s["url"] for s in mcp_servers]
+                logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_servers), mcp_urls)
+                mcp_clients = await _connect_mcp_clients(mcp_servers)
 
             # Xây tool registry: fintech hoặc local + MCP
             if getattr(req, "domain", "microservice") == "fintech":

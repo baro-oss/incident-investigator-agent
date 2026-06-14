@@ -12,10 +12,14 @@
       <span class="tag">{{ inv.project_id }}</span>
       {% endif %}
     </div>
-    <form method="post" action="/dashboard/investigations/{{ inv.investigation_id }}/replay"
-          onsubmit="return confirm('Chạy lại investigation này?')">
-      <button type="submit" class="btn btn-ghost" style="font-size:12px">⟳ Replay</button>
-    </form>
+    <div style="display:flex;gap:8px">
+      <a href="/dashboard/investigations/{{ inv.investigation_id }}/diff"
+         class="btn btn-ghost" style="font-size:12px;text-decoration:none">⇄ Diff</a>
+      <form method="post" action="/dashboard/investigations/{{ inv.investigation_id }}/replay"
+            onsubmit="return confirm('Chạy lại investigation này?')">
+        <button type="submit" class="btn btn-ghost" style="font-size:12px">⟳ Replay</button>
+      </form>
+    </div>
   </div>
   <h1 style="font-size:15px;font-weight:400;color:var(--muted)">{{ inv.get('symptom','') }}</h1>
   <div class="meta">

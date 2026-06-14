@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -66,11 +66,13 @@ async def dashboard_home(
     request: Request,
     project_id: Optional[str] = None,
     confidence: Optional[str] = None,
+    search: Optional[str] = None,
     user: dict = Depends(require_login),
 ):
     invs = list_investigations(
         project_id=project_id or None,
         confidence=confidence or None,
+        search=search or None,
         limit=100,
     )
     return templates.TemplateResponse("index.html", _ctx(request, user,
@@ -80,6 +82,7 @@ async def dashboard_home(
         projects=_get_all_project_ids(),
         filter_project=project_id or "",
         filter_confidence=confidence or "",
+        filter_search=search or "",
     ))
 
 
@@ -103,6 +106,29 @@ async def dashboard_detail(
         inv=inv,
         langfuse_url=langfuse_url,
         feedback=feedback,
+    ))
+
+
+@router.get("/investigations/{investigation_id}/diff", response_class=HTMLResponse)
+async def dashboard_diff(
+    request: Request,
+    investigation_id: str,
+    compare: Optional[str] = None,
+    user: dict = Depends(require_login),
+):
+    inv_a = get_investigation_detail(investigation_id)
+    if not inv_a:
+        return HTMLResponse("<h3>Investigation not found</h3>", status_code=404)
+
+    inv_b = get_investigation_detail(compare) if compare else None
+    all_invs = list_investigations(limit=50)
+
+    return templates.TemplateResponse("diff.html", _ctx(request, user,
+        active="home",
+        inv_a=inv_a,
+        inv_b=inv_b,
+        compare_id=compare or "",
+        all_invs=all_invs,
     ))
 
 
@@ -667,6 +693,48 @@ async def dashboard_tools(
         all_tools=all_tools,
         selected_domain=selected,
     ))
+
+
+@router.post("/tools/{tool_name}/run")
+async def run_tool_testrun(
+    tool_name: str,
+    request: Request,
+    user: dict = Depends(require_login),
+):
+    """Gọi thẳng tool.run(args) — không cần agent, không cần LLM."""
+    import asyncio
+    import inspect
+    from dataclasses import asdict
+
+    body = await request.json()
+    args: Dict[str, Any] = body.get("args", {})
+    domain: str = body.get("domain", "microservice")
+
+    from agent.tools.registry import ALL_LOCAL_TOOLS
+    from agent.tools.registry_fintech import ALL_FINTECH_TOOLS
+    pool = ALL_LOCAL_TOOLS if domain != "fintech" else ALL_FINTECH_TOOLS
+
+    tool = next((t for t in pool if t.name == tool_name), None)
+    if not tool:
+        return JSONResponse({"error": f"Tool '{tool_name}' không tìm thấy"}, status_code=404)
+
+    try:
+        if inspect.iscoroutinefunction(tool.run):
+            obs = await tool.run(args)
+        else:
+            obs = await asyncio.get_event_loop().run_in_executor(None, tool.run, args)
+
+        return JSONResponse({
+            "summary": obs.summary,
+            "aggregates": obs.aggregates,
+            "samples": obs.samples,
+            "total_count": obs.total_count,
+            "truncated": obs.truncated,
+            "metadata": obs.metadata,
+            "trace_completeness": obs.trace_completeness,
+        })
+    except Exception as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
 
 
 @router.get("/eval", response_class=HTMLResponse)
