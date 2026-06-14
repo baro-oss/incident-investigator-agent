@@ -4,8 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 4 — Ngày 20 ✅ HOÀN THÀNH. **20/20 NGÀY HOÀN TẤT.**
+**Giai đoạn:** Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Đang lên kế hoạch **Phase 5 — Hardening & Trust (Ngày 21–25)**. Tiếp theo: **Ngày 21**.
 **Cổng kiểm gần nhất đã qua:** Phase 4 Gate — 2 domain live + 6/6 eval PASS + full dashboard ✅
+**Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -54,7 +55,34 @@
 | 19 | Eval N=10 + Dashboard Polish (theme/toast/shortcuts) | ✅ |
 | 20 | Platform Demo Full + Cổng Phase 4 | ✅ |
 
+## Tiến độ Phase 5 (docs/11-roadmap-phase-5.md) — KẾ HOẠCH
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 21 | Engine & Quality + Storage seam | Real-LLM eval N=10 + calibration · Tier-1 storage seam | ☐ |
+| 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ☐ |
+| 23 | Observability | Cost dashboard + verdict feedback loop + trace retention | ☐ |
+| 24 | Integrations | Webhook signature + Slack + real MCP pack | ☐ |
+| 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
+
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 25 — 2026-06-14] — Lập kế hoạch Phase 5 (Ngày 21–25)
+
+**Bối cảnh:** 20/20 ngày xong. Session này KHÔNG code — tổng hợp 20 ngày + lập backlog 5 theme → chốt thành Phase 5.
+
+**Đã làm (3 file):**
+- `docs/11-roadmap-phase-5.md` (mới) — kế hoạch Ngày 21–25, format Làm/Cổng như docs/10
+- `CLAUDE.md` — "Giai đoạn hiện tại" → Phase 5; dọn danh sách "KHÔNG" (bỏ item đã graduated: LangGraph/multi-agent/Langfuse/Dashboard/Fintech); thêm chú thích storage seam vào ràng buộc SQLite
+- `BUILD_STATE.md` — trạng thái hiện tại + bảng Tiến độ Phase 5 + entry này
+
+**Quyết định chốt (qua trao đổi với người dùng):**
+- Phase 5 = 5 theme × 5 ngày: Engine&Quality(+storage seam) · Auth&RBAC · Observability · Integrations · UI/UX.
+- **Auth = RBAC động đầy đủ** (root user · role động · permission catalog 12 quyền · project groups · scoped assignment global/group/project). Người dùng chọn **giữ 5 ngày, Day 22 nặng** (RBAC ép trọn Day 22, chấp nhận spill sang Day 23 sáng; secret-mgmt + graceful-shutdown đẩy xuống cut-list).
+- **Storage seam (Day 21, paired với eval):** Tier-1 = `Database` Protocol + `SQLiteBackend`, gom PRAGMA/placeholder/UPSERT/IntegrityError, `DB_BACKEND` env. Quét code: `open_db()` đã là chokepoint (17 file), chỉ 3 file runtime còn `import sqlite3` trực tiếp → seam khả thi & rẻ. **Tier-2 (migration Postgres/MySQL thật: port 12×datetime + 8×UPSERT + DDL + backend chạy) → future, KHÔNG nằm Day 21.** Runtime vẫn SQLite → không vi phạm "no Postgres".
+- 3 P0: real-LLM eval (D21) · auth/RBAC (D22) · cost dashboard (D23).
+
+**Chưa làm:** chưa bắt đầu code Day 21 (chờ session sau).
 
 ### [Session 24 — 2026-06-14] — Ngày 20: Platform Demo Full + Cổng Phase 4
 

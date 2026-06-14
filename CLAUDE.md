@@ -15,19 +15,19 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 2 — Observability (Ngày 11–14). Đang ở: chuẩn bị Ngày 11.**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày).** Đang ở: **Phase 5 — Hardening & Trust (Ngày 21–25). Chuẩn bị Ngày 21.**
 
-Kế hoạch chi tiết: `docs/10-roadmap-20-ngay.md`.
+Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. **Plan Phase 5: `docs/11-roadmap-phase-5.md`.**
 
-| Ngày | Nội dung | Trạng thái |
-|------|----------|-----------|
-| 6 | FastAPI webhook, POST /trigger → 202 → Telegram | ✅ |
-| 7 | 3 adapter: Prometheus / Grafana / Sentry | ✅ |
-| 8 | MCP hot-plug (agent là consumer), MCP Registry DB, Project Isolation | ✅ |
-| 9 | Kịch bản 3 & 4 (DB pool exhaustion, Traffic surge) | ✅ |
-| 10 | Output đa kênh (Teams + Email) + per-project channels + cổng Phase 1 | ✅ |
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|-----------|
+| 21 | Engine & Quality + Storage seam | Real-LLM eval N=10 + calibration · Tier-1 storage seam (DB-swappable) | ☐ |
+| 22 | Auth & RBAC | RBAC động (root · role động · project groups · scoped assignment) — ngày nặng | ☐ |
+| 23 | Observability | Cost dashboard + verdict feedback loop + trace retention | ☐ |
+| 24 | Integrations | Webhook signature + Slack adapter + real MCP pack | ☐ |
+| 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
 
-**Phase 1 ✅ HOÀN TẤT.** Đang ở: Phase 2 — Ngày 11 (Observability / Langfuse).
+**3 ưu tiên P0:** real-LLM eval (D21) · auth/RBAC (D22) · cost dashboard (D23).
 
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 
@@ -37,15 +37,13 @@ Kế hoạch chi tiết: `docs/10-roadmap-20-ngay.md`.
 
 Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **KHÔNG.** Khi thấy mình định làm bất kỳ cái nào dưới đây mà người dùng chưa yêu cầu rõ, DỪNG và hỏi trước.
 
-### Vẫn còn trong danh sách KHÔNG (chưa làm, chưa được phép):
-- ❌ KHÔNG Postgres / MySQL / vector DB → **giữ SQLite WAL**
-- ❌ KHÔNG LangGraph → **giữ tự viết loop** (Phase 3 mới làm)
-- ❌ KHÔNG multi-agent → **single agent** (Phase 3 mới làm)
-- ❌ KHÔNG Langfuse / OpenTelemetry → **trace ghi SQLite** (Phase 2 mới làm)
+### Vẫn còn trong danh sách KHÔNG (chưa làm / chưa được phép):
+- ❌ KHÔNG chạy Postgres / MySQL / vector DB **ở runtime** → **giữ SQLite WAL**. *(Phase 5 Ngày 21 thêm storage **seam** abstraction để đổi backend rẻ về sau — runtime VẪN SQLite; migration thật = Tier-2, cần lệnh rõ.)*
 - ❌ KHÔNG Kafka / message broker → **asyncio background task**
 - ❌ KHÔNG sinh GB data thật → **vài nghìn dòng/kịch bản**; dùng `total_count` lớn để giả lập quy mô
-- ❌ KHÔNG Dashboard UI → chưa đến Phase 4
-- ❌ KHÔNG domain thứ hai (fintech tool pack) → Phase 4
+- ❌ KHÔNG OpenTelemetry → **trace ghi SQLite + Langfuse opt-in** là đủ
+
+> **Đã graduated (trước đây cấm, nay đã build Phase 2–4 — KHÔNG làm lại):** LangGraph (D15) · multi-agent (D15) · Langfuse (D11) · Dashboard UI (D13–17) · Fintech domain (D18). Chi tiết: `BUILD_STATE.md`.
 
 ### Đã làm (do người dùng yêu cầu rõ — KHÔNG làm lại từ đầu, không thay thế):
 - ✅ FastAPI webhook server (POST /trigger, GET /health, v0.4.0)
@@ -58,7 +56,8 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 - ✅ Per-project alert channels: `project_alert_channels` DB, mỗi project config kênh riêng (telegram/teams/email với config override)
 
 ### Roadmap — câu chuyện pitch (chưa phải code):
-Slack output · Dashboard UI · LangGraph · Multi-agent · Long-term memory · Fintech domain.
+**Phase 5** (xem `docs/11-roadmap-phase-5.md`): RBAC/auth · cost dashboard · Slack output · webhook signature · real MCP pack · storage seam.
+**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật) · secret-mgmt at-rest · bidirectional integration · horizontal scale.
 
 ---
 
