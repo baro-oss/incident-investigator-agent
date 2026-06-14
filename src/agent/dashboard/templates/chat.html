@@ -64,6 +64,13 @@
             <label>Symptom (tùy chọn)</label>
             <textarea id="chat-symptom" name="symptom" rows="2" placeholder="Để trống = dùng mô tả mặc định"></textarea>
           </div>
+          <div class="form-group" style="display:flex;align-items:center;gap:10px;padding:8px 0">
+            <input type="checkbox" id="chat-multi-agent" name="multi_agent" style="width:16px;height:16px;accent-color:var(--accent)">
+            <label for="chat-multi-agent" style="margin:0;font-size:12px;cursor:pointer">
+              <span style="color:var(--accent)">⚡ Multi-agent</span>
+              <span style="color:var(--muted);margin-left:4px">(Log + Metric parallel)</span>
+            </label>
+          </div>
           <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center" id="submit-btn">
             ▶ Điều tra
           </button>
@@ -130,11 +137,12 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
   // Đóng SSE cũ
   if (currentES) { currentES.close(); currentES = null; }
 
-  const pid      = document.getElementById('chat-project').value;
-  const service  = document.getElementById('chat-service').value.trim() || 'payment-gateway';
-  const scenario = document.getElementById('chat-scenario').value;
-  const window_  = document.getElementById('chat-window').value;
-  const symptom  = document.getElementById('chat-symptom').value.trim();
+  const pid        = document.getElementById('chat-project').value;
+  const service    = document.getElementById('chat-service').value.trim() || 'payment-gateway';
+  const scenario   = document.getElementById('chat-scenario').value;
+  const window_    = document.getElementById('chat-window').value;
+  const symptom    = document.getElementById('chat-symptom').value.trim();
+  const multiAgent = document.getElementById('chat-multi-agent').checked;
 
   // Reset UI
   document.getElementById('empty-panel').style.display = 'none';
@@ -149,7 +157,7 @@ document.getElementById('chat-form').addEventListener('submit', async (e) => {
   document.getElementById('submit-btn').textContent = '⏳ Đang điều tra...';
 
   // Trigger investigation
-  const body = { service, scenario, time_window: window_ };
+  const body = { service, scenario, time_window: window_, multi_agent: multiAgent };
   if (symptom) body.symptom = symptom;
 
   let invId;

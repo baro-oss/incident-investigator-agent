@@ -20,6 +20,7 @@ class InvestigationRequest:
     raw_payload: Dict[str, Any]  # payload gốc — giữ để trace/debug
     dedup_key: str         # project + service + scenario + time_window → dedup
     project_id: str = "default"
+    multi_agent: bool = False  # True → dùng MultiAgentEngine (parallel specialists)
 
     @classmethod
     def from_raw(
@@ -98,8 +99,9 @@ def map_simple_payload(payload: Dict[str, Any]) -> Optional[InvestigationRequest
     time_window = payload.get("time_window", "14:00-15:00")
     symptom = payload.get("symptom")
     date = payload.get("date", "2024-01-15")
+    multi_agent = bool(payload.get("multi_agent", False))
 
-    return InvestigationRequest.from_raw(
+    req = InvestigationRequest.from_raw(
         service=service,
         scenario=scenario,
         time_window=time_window,
@@ -107,3 +109,5 @@ def map_simple_payload(payload: Dict[str, Any]) -> Optional[InvestigationRequest
         date=date,
         raw_payload=payload,
     )
+    req.multi_agent = multi_agent
+    return req

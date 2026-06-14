@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 2 — Ngày 14 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 2 hoàn tất — sẵn sàng Phase 3
-**Cổng kiểm gần nhất đã qua:** SSE real-time streaming + Chat UI + Eval Chart.js ✅
+**Giai đoạn:** Phase 3 — Ngày 15 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 3 — Ngày 16 (Resilience + CLI + Health Dashboard)
+**Cổng kiểm gần nhất đã qua:** KB1+KB2 pass qua LangGraph + Multi-agent đúng + nhanh hơn ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -44,7 +44,66 @@
 | 13 | Dashboard v1 + Alert Trigger Builder | ✅ |
 | 14 | Dashboard v2 SSE + Chat UI + Cổng Phase 2 | ✅ |
 
+## Tiến độ Phase 3 (docs/10-roadmap-20-ngay.md)
+
+| Ngày | Nội dung | Trạng thái |
+|------|----------|------------|
+| 15 | LangGraph Migration + Multi-agent | ✅ |
+| 16 | Resilience + CLI + Health Dashboard | ☐ |
+| 17 | Dashboard v3 Full Platform UI | ☐ |
+
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 19 — 2026-06-14] — Ngày 15: LangGraph Migration + Multi-agent
+
+**Đã làm:**
+- `src/agent/engine/graph.py` (mới) — LangGraph StateGraph:
+  - `LoopState` TypedDict: inv, last_obs, tool_call, verdict_text, llm, tools, tracer
+  - `decide_node` — wrap `decide_next_action()` pure fn, handle stop conditions (budget/loop)
+  - `run_tool_node` — wrap `run_tool()` pure fn, emit SSE + Langfuse
+  - `update_node` — wrap `update_state()` pure fn
+  - `_route_after_decide` → "run_tool" | END; `_route_after_update` → "decide" | END
+  - `get_compiled_graph()` — lazy singleton (compile 1 lần per process)
+  - Graph: START → decide → run_tool → update → (loop) → decide → ... → END
+- `src/agent/engine/loop.py` — `InvestigationEngine` refactor:
+  - `__init__` — try build LangGraph, fallback về while loop nếu ImportError
+  - `run()` — route sang `_run_with_graph()` hoặc `_run_loop()` tùy `self._graph`
+  - `_run_with_graph()` — invoke graph với LoopState, extract kết quả
+  - `_run_loop()` — original while loop code (unchanged, dùng làm fallback)
+  - `run()` finalize: parse verdict + emit trace + tracer flush (chung cho cả 2 path)
+- `src/agent/engine/multi_agent.py` (mới) — `MultiAgentEngine`:
+  - Tool split: `LogAnalystAgent` (get_error_breakdown, trace_request) + `MetricAnalystAgent` (get_metrics, get_recent_deploys, get_dependencies)
+  - `run()`: parallel `asyncio.gather(log, metric)` → `_merge_states()` → `_synthesize_verdict()`
+  - `_merge_states()`: gộp evidence, dedup by id, hợp hypotheses + tool history + tokens
+  - `_synthesize_verdict()`: 1 LLM call với `VERDICT_SYSTEM_PROMPT`, tools=[] (verdict only)
+  - Emit trace events: investigation_start, multi_agent_start, multi_agent_merge, verdict
+- `src/agent/intake/normalizer.py` — thêm `multi_agent: bool = False` field + `map_simple_payload` pass qua
+- `src/agent/intake/runner.py` — route `MultiAgentEngine` khi `req.multi_agent == True`
+- `src/agent/intake/server.py` — response trigger thêm `"engine": "langgraph"|"multi_agent"`
+- `src/agent/dashboard/queries.py` — `get_investigation_detail` extract `engine` từ start payload
+- `src/agent/dashboard/templates/detail.html` — Engine card trong sidebar:
+  - Badge: LANGGRAPH / multi_agent / loop
+  - SVG LangGraph: START→decide→run_tool→update→END + loop-back arrow
+  - SVG Multi-agent: Orchestrator→(Log+Metric parallel)→VerdictAgent
+- `src/agent/dashboard/templates/chat.html` — multi-agent checkbox (⚡ Multi-agent)
+- `src/agent/dashboard/templates/base.html` — version "v0.6 · Phase 3"
+- `pyproject.toml` — thêm `langgraph>=0.2.0`
+
+**Verify:**
+- LangGraph graph compile OK: 4 nodes (`__start__`, decide, run_tool, update) ✅
+- `InvestigationEngine` dùng LangGraph (log: "Bắt đầu điều tra (via LangGraph)") ✅
+- KB1 mock eval: 3 bước, verdict HIGH, root_cause đúng ✅ (via LangGraph)
+- KB2 mock eval: 5 bước, verdict MEDIUM, root_cause đúng ✅ (via LangGraph)
+- KB3, KB4 mock eval: PASS ✅
+- Full mock eval 4/4 PASS (100%) qua LangGraph ✅
+- MultiAgentEngine: log_tools=[get_error_breakdown, trace_request], metric_tools=[get_metrics, get_recent_deploys, get_dependencies] ✅
+- MultiAgentEngine mock test: parallel run → merge → verdict HIGH ✅
+- `multi_agent: True` trong payload → runner dùng MultiAgentEngine ✅
+- Dashboard detail page: ENGINE LANGGRAPH badge + SVG graph hiển thị ✅
+- Chat UI: multi-agent checkbox hiện đúng ✅
+- Version sidebar: v0.6 · Phase 3 ✅
+
+**Cổng Ngày 15 ✅ PASS:** KB1+KB2 pass qua LangGraph, multi-agent đúng (parallel specialists), graph hiển thị trên dashboard.
 
 ### [Session 18 — 2026-06-14] — Ngày 14: Dashboard SSE + Chat UI + Eval Charts
 

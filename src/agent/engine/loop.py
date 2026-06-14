@@ -284,12 +284,23 @@ def _emit_trace(
 
 
 class InvestigationEngine:
-    """Orchestrator — chạy vòng lặp adaptive đến khi dừng."""
+    """Orchestrator — chạy vòng lặp adaptive đến khi dừng.
+
+    Bên trong dùng LangGraph StateGraph (nếu available), fallback về while loop.
+    Public interface không đổi: run() → InvestigationState.
+    """
 
     def __init__(self, llm: LLMClient, tools: List[Tool], step_budget: int = 10) -> None:
         self.llm = llm
         self.tools = tools
         self.step_budget = step_budget
+        # Try compile LangGraph (lazy — lỗi import thì fallback)
+        self._graph = None
+        try:
+            from agent.engine.graph import get_compiled_graph
+            self._graph = get_compiled_graph()
+        except Exception as e:
+            logger.info("LangGraph không khả dụng, dùng while loop: %s", e)
 
     async def run(
         self,
@@ -315,10 +326,13 @@ class InvestigationEngine:
             warm_start_hint=warm_start_hint,
         )
 
-        logger.info("[%s] [%s] Bắt đầu điều tra: %s", investigation_id, project_id, symptom)
+        logger.info("[%s] [%s] Bắt đầu điều tra (via %s): %s",
+                    investigation_id, project_id,
+                    "LangGraph" if self._graph else "loop", symptom)
         _emit_trace(investigation_id, 0, "investigation_start", {
             "symptom": symptom, "time_window": time_window, "scenario": scenario,
             "project_id": project_id, "available_services": available_services or [],
+            "engine": "langgraph" if self._graph else "loop",
         }, project_id=project_id)
 
         tracer = LangfuseTracer(
@@ -328,11 +342,65 @@ class InvestigationEngine:
             project_id=project_id,
         )
 
+        if self._graph is not None:
+            state, verdict_text = await self._run_with_graph(state, tracer)
+        else:
+            state, verdict_text = await self._run_loop(state, tracer, investigation_id)
+
+        # --- Finalize ---
+        if verdict_text:
+            state.verdict = _parse_verdict(verdict_text, state)
+
+        _emit_trace(investigation_id, state.steps_taken, "verdict", {
+            "stop_reason": state.stop_reason,
+            "root_cause": state.verdict.root_cause if state.verdict else "N/A",
+            "confidence": state.verdict.confidence if state.verdict else "N/A",
+        }, project_id=project_id)
+        tracer.record_verdict(state.stop_reason, state.verdict)
+        tracer.flush()
+
+        logger.info("[%s] Kết thúc. Stop: %s | Root cause: %s",
+                    investigation_id, state.stop_reason,
+                    state.verdict.root_cause if state.verdict else "N/A")
+        return state
+
+    # -----------------------------------------------------------------------
+    # Private: LangGraph path
+    # -----------------------------------------------------------------------
+
+    async def _run_with_graph(
+        self,
+        state: InvestigationState,
+        tracer: Any,
+    ) -> Tuple[InvestigationState, Optional[str]]:
+        """Chạy investigation loop qua LangGraph StateGraph."""
+        initial: Dict[str, Any] = {
+            "inv": state,
+            "last_obs": None,
+            "tool_call": None,
+            "verdict_text": None,
+            "llm": self.llm,
+            "tools": self.tools,
+            "tracer": tracer,
+        }
+        result = await self._graph.ainvoke(initial)
+        return result["inv"], result.get("verdict_text")
+
+    # -----------------------------------------------------------------------
+    # Private: fallback while-loop path (original logic)
+    # -----------------------------------------------------------------------
+
+    async def _run_loop(
+        self,
+        state: InvestigationState,
+        tracer: Any,
+        investigation_id: str,
+    ) -> Tuple[InvestigationState, Optional[str]]:
+        """Fallback: original adaptive while loop."""
         last_obs: Optional[Observation] = None
         verdict_text: Optional[str] = None
 
         while not state.finished:
-            # --- Điều kiện dừng ---
             if state.steps_taken >= state.step_budget:
                 state.stop_reason = "budget"
                 state.finished = True
@@ -358,7 +426,6 @@ class InvestigationEngine:
             current_step = state.steps_taken
             tracer.start_step(current_step)
 
-            # --- Quyết định hành động ---
             try:
                 t_llm = time.monotonic()
                 tool_call, vtext, llm_resp = await decide_next_action(
@@ -377,14 +444,12 @@ class InvestigationEngine:
                 )
                 break
 
-            # Accumulate tokens
             if llm_resp and llm_resp.usage:
                 state.total_tokens += (
                     llm_resp.usage.get("input_tokens", 0)
                     + llm_resp.usage.get("output_tokens", 0)
                 )
 
-            # Ghi LLM call lên Langfuse
             output_desc = (f"tool:{tool_call.name}" if tool_call
                            else ("verdict" if vtext else "no_action"))
             tracer.record_llm_call(
@@ -406,7 +471,6 @@ class InvestigationEngine:
                 tracer.end_step()
                 break
 
-            # --- Ghi trace: chọn tool ---
             _emit_trace(investigation_id, current_step, "tool_call", {
                 "tool": tool_call.name, "args": tool_call.arguments,
             })
@@ -414,7 +478,6 @@ class InvestigationEngine:
                         investigation_id, current_step + 1,
                         tool_call.name, tool_call.arguments)
 
-            # --- Chạy tool ---
             try:
                 t_tool = time.monotonic()
                 obs = await run_tool(tool_call, self.tools)
@@ -439,24 +502,8 @@ class InvestigationEngine:
                 latency_ms=tool_ms,
             )
 
-            # --- Cập nhật state ---
             state = update_state(state, tool_call, obs)
             tracer.end_step()
             last_obs = obs
 
-        # --- Xây verdict ---
-        if verdict_text:
-            state.verdict = _parse_verdict(verdict_text, state)
-
-        _emit_trace(investigation_id, state.steps_taken, "verdict", {
-            "stop_reason": state.stop_reason,
-            "root_cause": state.verdict.root_cause if state.verdict else "N/A",
-            "confidence": state.verdict.confidence if state.verdict else "N/A",
-        })
-        tracer.record_verdict(state.stop_reason, state.verdict)
-        tracer.flush()
-
-        logger.info("[%s] Kết thúc. Stop: %s | Root cause: %s",
-                    investigation_id, state.stop_reason,
-                    state.verdict.root_cause if state.verdict else "N/A")
-        return state
+        return state, verdict_text

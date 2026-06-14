@@ -432,6 +432,7 @@ async def _do_trigger(
         "scenario": req.scenario,
         "time_window": req.time_window,
         "adapter": source or "simple",
+        "engine": "multi_agent" if req.multi_agent else "langgraph",
         "message": "Điều tra đã bắt đầu nền. Kết quả sẽ gửi qua Telegram.",
     })
 

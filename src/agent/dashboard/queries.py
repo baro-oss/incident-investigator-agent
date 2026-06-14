@@ -111,6 +111,7 @@ def get_investigation_detail(investigation_id: str) -> Optional[Dict[str, Any]]:
             summary["scenario"] = payload.get("scenario", "")
             summary["project_id"] = payload.get("project_id", "default")
             summary["started_at"] = ts
+            summary["engine"] = payload.get("engine", "loop")
 
         elif r["event_type"] == "verdict":
             summary["root_cause"] = payload.get("root_cause", "")

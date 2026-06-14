@@ -13,6 +13,7 @@ import os
 from typing import Dict, List, Optional, Set
 
 from agent.engine.loop import InvestigationEngine
+from agent.engine.multi_agent import MultiAgentEngine
 from agent.engine.state import InvestigationState
 from agent.intake.normalizer import InvestigationRequest
 from agent.llm.factory import create_llm_client
@@ -157,10 +158,15 @@ async def run_investigation_background(
         if warm_hint:
             logger.info("[%s] Warm-start hint: %s", project_id, warm_hint[:80])
 
-        engine = InvestigationEngine(llm=llm, tools=tools, step_budget=step_budget)
+        # Chọn engine: MultiAgent (parallel) hoặc single-agent (LangGraph)
+        if req.multi_agent:
+            engine_obj = MultiAgentEngine(llm=llm, all_tools=tools, step_budget=step_budget)
+            logger.info("[%s] Dùng MultiAgentEngine (parallel specialists)", key)
+        else:
+            engine_obj = InvestigationEngine(llm=llm, tools=tools, step_budget=step_budget)
 
         state = await asyncio.wait_for(
-            engine.run(
+            engine_obj.run(
                 symptom=req.symptom,
                 time_window=req.time_window,
                 scenario=req.scenario,
