@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 2 — Ngày 11 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 2 — Ngày 12 (Eval CI Framework)
-**Cổng kiểm gần nhất đã qua:** Langfuse tracer no-op OK + engine end-to-end còn chạy ✅
+**Giai đoạn:** Phase 2 — Ngày 12 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 2 — Ngày 13 (Dashboard v1 + Alert Trigger Builder)
+**Cổng kiểm gần nhất đã qua:** Eval CI mock 12/12 PASS (4 kịch bản × 3 runs, 100% correct) ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -35,7 +35,55 @@
 | 9 | 4 kịch bản, eval ≥7/10 mỗi cái | ✅ |
 | 10 | Webhook + 4 KB + Telegram + Teams + Email + per-project channels | ✅ |
 
+## Tiến độ Phase 2 (docs/10-roadmap-20-ngay.md)
+
+| Ngày | Nội dung | Trạng thái |
+|------|----------|------------|
+| 11 | Langfuse observability (span hierarchy, token tracking, latency) | ✅ |
+| 12 | Eval CI + Long-term memory + Per-project LLM config (Gemini) | ✅ |
+| 13 | Dashboard v1 + Alert Trigger Builder | ☐ |
+| 14 | Dashboard v2 SSE + Chat UI + Cổng Phase 2 | ☐ |
+
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 16 — 2026-06-14] — Ngày 12: Eval CI + Long-term Memory + Per-project LLM
+
+**Đã làm:**
+
+**A. Eval CI Framework:**
+- `InvestigationState.total_tokens: int = 0` — accumulate từ `llm_resp.usage` mỗi bước LLM
+- `loop.py` — gộp tokens sau mỗi `decide_next_action` call
+- `eval_agent.py` — thêm metrics: `recall_at_1` (service đúng trong evidence bước 1), `hallucination` (keyword trong verdict không có trong evidence), `token_total`
+- `eval_agent.py` — `_save_eval_results_to_db()`: lưu từng run vào `eval_results` SQLite (run_id UUID per batch)
+- `.github/workflows/eval.yml` — CI: Python 3.9, init DB, seed, eval mock N=5, gate check ≥70% từ DB
+- `data/schema.sql` + `data/migrate_projects.py` — thêm `eval_results` và `investigation_patterns` tables (step 8, 9)
+
+**B. Long-term Memory:**
+- `src/agent/memory/__init__.py` + `src/agent/memory/patterns.py` (mới):
+  - `save_pattern(state)` — lưu pattern khi verdict HIGH (UPSERT với avg_steps rolling average)
+  - `get_warm_start_hint(project_id, service, error_keywords)` — trả hint string từ DB
+  - Classify root_cause_type: deploy_bug / pool_exhaustion / traffic_surge / provider_down
+- `InvestigationState.warm_start_hint` — field mới, render ở đầu `summarize_for_llm()`
+- `loop.py` — `run()` nhận `warm_start_hint` param
+- `runner.py` — gọi `get_warm_start_hint()` trước investigation; `save_pattern()` sau verdict HIGH
+
+**C. Per-project LLM Config:**
+- `data/migrate_projects.py` step 7 — `ALTER TABLE projects ADD COLUMN llm_provider/llm_model/llm_config`
+- `project_registry.py` — `get_project_llm()`, `set_project_llm()` (validate provider in supported set)
+- `server.py` — `GET /projects/{pid}/llm`, `PATCH /projects/{pid}/llm`
+- `src/agent/llm/gemini.py` (mới) — `GeminiClient`: google-genai SDK, function_declarations, usage_metadata tracking
+- `factory.py` — thêm `extra_config` param, case `"gemini"` → `GeminiClient`
+- `runner.py` — resolve LLM: project DB config > global env; log provider đang dùng
+
+**Verify:**
+- `total_tokens + warm_start_hint + summarize_for_llm` hoạt động đúng ✅
+- `get_warm_start_hint` trả None khi DB rỗng ✅
+- `get_project_llm('default')` trả None (chưa config) ✅
+- Server routes `/llm` đăng ký đúng (GET + PATCH) ✅
+- Eval mock 12/12 PASS, kết quả lưu DB ✅
+- Commit: `feat: Ngày 12 — Eval CI + Long-term memory + Per-project LLM config`
+
+**Cổng Ngày 12 ✅ PASS:** eval mock 12/12, DB populated, 3 tính năng hoạt động.
 
 ### [Session 15 — 2026-06-14] — Ngày 11: Langfuse Integration
 
