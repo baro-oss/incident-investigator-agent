@@ -59,13 +59,20 @@
 - `pyproject.toml` — thêm `langfuse>=2.0.0`
 - `.env.example` — thêm `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
 
+**Lưu ý kỹ thuật:** Langfuse SDK cài ra là v3.7.0 (khác v2 trong plan). API đổi:
+- `lf.trace()` → `lf.start_span()` (root span = trace)
+- `usage=` → `usage_details=`
+- output truyền vào `start_generation/start_span` thay vì `.end()`
+- Nested: `root_span.start_span()` / `root_span.start_generation()` thay vì method trên trace
+
 **Verify:**
 - `LLMResponse.usage` OK ✅
 - `LangfuseTracer` no-op khi không có `LANGFUSE_PUBLIC_KEY` ✅
 - Engine end-to-end còn chạy (mock LLM, 1 bước, verdict HIGH) ✅
 - SQLite trace không vỡ ✅
+- Kết nối key thật → trace test gửi lên cloud.langfuse.com thành công ✅
 
-**Cổng Ngày 11:** Langfuse tracer sẵn sàng — connect dashboard bằng cách set `LANGFUSE_PUBLIC_KEY` trong `.env`.
+**Cổng Ngày 11 ✅ PASS:** Key đã điền vào `.env`, trace live trên Langfuse dashboard.
 
 ### [Session 14 — 2026-06-13] — Email channel + per-project channel config
 
