@@ -322,6 +322,9 @@ class MultiAgentEngine:
         tracer.end_step()
 
         merged.verdict = _parse_verdict(verdict_text, merged)
+        # E2: kiểm evidence grounding cho multi-agent verdict
+        from agent.engine.loop import _check_evidence_grounding
+        merged.verdict = _check_evidence_grounding(merged.verdict, merged.evidence)
         merged.stop_reason = "verdict"
         merged.finished = True
 

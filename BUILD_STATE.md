@@ -4,9 +4,11 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 25 ✅ HOÀN TẤT. Phase 5 ✅ HOÀN TẤT.**
+**Giai đoạn:** Phase 5 ✅ HOÀN TẤT (25/25 ngày). **Phase 6 📋 ĐÃ LÊN KẾ HOẠCH (Ngày 26–30) — chưa bắt đầu code.**
 **Cổng kiểm gần nhất đã qua:** Ngày 25 — MCP auth ✅ · tool test-run ✅ · replay diff ✅ · search ✅ · mock eval 4/4 PASS ✅
-**Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
+**Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`. **Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
+**Cổng kiểm gần nhất:** Ngày 26 — E1 hypothesis lifecycle ✅ · E5 structured verdict tool ✅ · E2 grounding guard ✅ · eval 4/4 PASS ✅
+**Việc kế tiếp:** Ngày 27 (Engine intelligence — E4 stop/loop thông minh + cổng giả thuyết cạnh tranh + E3/D1 calibration).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -65,7 +67,71 @@
 | 24 | Integrations | Webhook signature + Slack + real MCP pack | ✅ |
 | 25 | UI/UX + close | MCP Server Auth + Replay diff + tool test-run + search + Cổng Phase 5 | ✅ |
 
+## Tiến độ Phase 6 (docs/12-roadmap-phase-6.md) — ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 26 | Engine core | E1 vòng đời giả thuyết thật · E5 structured verdict · E2 evidence-grounding guard | ✅ |
+| 27 | Engine intelligence | E4 stop/loop thông minh + cổng giả thuyết cạnh tranh · E3/D1 calibration · D2 baseline auto-update | 📋 |
+| 28 | Security + custom LLM | A4 API token webhook · A2 secret at-rest · A3 trace retention · per-project LLM endpoint riêng (model/url/header, fallback default) | 📋 |
+| 29 | Reliability infra | A1 graceful shutdown · B3 investigation queue (in-process) · B4 rate limiting | 📋 |
+| 30 | Ecosystem + close | C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 clustering · Cổng Phase 6 | 📋 |
+
+**Defer → Future:** B1 Tier-2 Postgres (cần lệnh rõ + env) · C2 bidirectional (phá READ-ONLY, cần duyệt) · B2 horizontal scale seam · D4 real MCP pack mở rộng.
+
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 31 — 2026-06-14] — Lập kế hoạch Phase 6 (Ngày 26–30)
+
+**Bối cảnh:** 25/25 ngày + Phase 5 xong. Session này KHÔNG code — đọc toàn bộ trạng thái + **đọc kỹ code engine** (`loop.py`, `graph.py`, `state.py`, `multi_agent.py`, `contracts.py`) theo yêu cầu "cải thiện engine" → đánh giá đề xuất A/B/C/D + chốt Phase 6.
+
+**Phát hiện chính (cơ sở Nhóm E — engine quality):** danh sách đề xuất A–D của người dùng gần như KHÔNG chạm engine core (chỉ D1/D2 engine-adjacent). Đọc code xác nhận 5 điểm yếu engine có thật:
+- **E1:** `Hypothesis` luôn `open`, `confidence` không bao giờ set, mọi evidence append vào mọi hypothesis → "loại trừ giả thuyết cạnh tranh" chỉ là decorative (`loop.py:_update_hypotheses`, `state.py:add_hypothesis`).
+- **E2:** verdict nhận ngay khi thấy chữ "VERDICT", không kiểm neo bằng chứng (`loop.py` decide / `graph.py:decide_node`).
+- **E3:** confidence LLM tự khai, parse text, default `medium` âm thầm (`loop.py:_parse_verdict`).
+- **E4:** `is_looping()` chỉ bắt 2 call liên tiếp giống hệt; step budget cứng = 10; không cổng dừng (`state.py:is_looping`).
+- **E5:** parse verdict mong manh (prefix tiếng Việt từng dòng).
+
+**Đã làm (3 file):**
+- `docs/12-roadmap-phase-6.md` (mới) — kế hoạch Ngày 26–30, format Làm/Cổng như docs/11. Engine-first 2+2+1.
+- `CLAUDE.md` — "Giai đoạn hiện tại" thêm Phase 6 (bảng + Cổng + tham chiếu doc); cập nhật roadmap pitch + Future; thêm docs/11+12 vào cấu trúc file.
+- `BUILD_STATE.md` — header trạng thái + bảng Tiến độ Phase 6 + entry này.
+
+**Quyết định chốt (qua AskUserQuestion với người dùng):**
+- **Cấu trúc engine-first 2+2+1:** D26–27 engine (Nhóm E + calibration + baseline) · D28–29 production hardening (auth/secret/queue/shutdown) · D30 ecosystem + Cổng.
+- **Tier-2 Postgres (B1) → Future** (runtime vẫn SQLite; seam Tier-1 đã đủ; migration thật cần env + lệnh rõ).
+- **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
+- **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
+- **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 32 — 2026-06-15] — Ngày 26: Engine Core (E1 + E5 + E2)
+
+**A. E1 — Vòng đời giả thuyết thật:**
+- `state.py` — `Hypothesis` thêm `keywords: List[str]` (để match evidence có liên quan); `Verdict` thêm `speculative: bool = False`; `InvestigationState` thêm `competing_open()` method.
+- `loop.py` — thêm `_HYPOTHESIS_RELEVANCE` dict (per tag: tools, confirm_kws, rule_out_kws, confirm_conf); rewrite `_update_hypotheses()`: bỏ "append mù vào mọi hypothesis open", thay bằng matching có liên quan + chuyển trạng thái `open→confirmed/ruled_out` thật; update `_upsert_hypothesis()` nhận `keywords` + `initial_status`.
+
+**B. E5 — Structured verdict via tool call:**
+- Thêm `VERDICT_TOOL_NAME = "submit_verdict"` + `_build_verdict_tool_spec()`.
+- `_structured_args_to_verdict_text(args)` — chuyển args structured → text format reliable cho `_parse_verdict`.
+- `decide_next_action()` — thêm `submit_verdict` vào tool_specs; detect `tc.name == VERDICT_TOOL_NAME` → return verdict text, không dispatch sang `run_tool`. Backward compat: text VERDICT vẫn hoạt động (MockLLM).
+- `_parse_verdict()` — fix default `"medium"` → `"insufficient"` khi parse fail.
+- Cập nhật SYSTEM_PROMPT: đề xuất dùng `submit_verdict` tool, giữ text format làm fallback.
+
+**C. E2 — Evidence-grounding guard:**
+- `_check_evidence_grounding(verdict, evidence)` — overlap từ khóa root_cause vs evidence summaries; nếu < 25% → hạ confidence 1 bậc + `speculative=True`. Chạy sau `_parse_verdict` trong cả `run()` và `multi_agent._synthesize_verdict()`.
+- Verdict trace event thêm `speculative` field.
+
+**Verify:**
+- E1: deploy found → `status=confirmed`; no deploy → `status=ruled_out` ✅
+- E2: good verdict → `speculative=False`; made-up verdict → `conf` hạ + `speculative=True` ✅
+- `competing_open()` trả đúng (empty khi tất cả confirmed, có list khi còn open) ✅
+- Regression eval 4/4 mock PASS (backward compat text verdict hoạt động) ✅
+
+**Cổng Ngày 26 ✅ PASS:** hypothesis lifecycle thật · structured verdict tool · evidence grounding guard · regression không vỡ.
+
+**Bổ sung (session 31, theo yêu cầu người dùng):** thêm **per-project custom LLM endpoint** vào **Ngày 28** (mục D). Đọc code xác nhận per-project LLM đã có khung từ D12 (`get/set_project_llm`, cột `llm_config`, fallback default ở `runner.py`) nhưng "last mile" còn thiếu: (1) `create_llm_client` bỏ rơi `extra_config` cho anthropic+openai-compat (chỉ gemini nhận) → base_url/api_key/headers bị bỏ qua âm thầm; (2) `AnthropicClient` không hỗ trợ `base_url`; (3) `OpenAICompatibleClient` thiếu `default_headers`; (4) UI chưa expose url/header key. Fit Day 28 vì pair với A2 (mã hóa `llm_config` chứa credential) + dùng quyền `llm.manage`. Đã cập nhật docs/12 (Day 28 mục D + Cổng + bảng M→M+), CLAUDE.md, BUILD_STATE.md.
+
+**Chưa làm:** chưa bắt đầu code Ngày 26 (chờ session sau xác nhận khởi động).
 
 ### [Session 30 — 2026-06-14] — Ngày 25: UI/UX + Đóng Phase 5
 

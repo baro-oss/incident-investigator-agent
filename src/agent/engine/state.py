@@ -35,6 +35,7 @@ class Hypothesis:
     # high = tương quan thời gian + cơ chế nhân quả rõ
     # medium = chỉ tương quan thời gian
     # low = suy đoán
+    keywords: List[str] = field(default_factory=list)  # E1: từ khóa để match evidence có liên quan
 
 
 @dataclass
@@ -46,6 +47,7 @@ class Verdict:
     propagation_note: str      # lỗi-gốc vs lỗi-lan
     competing_hypotheses: str  # có loại trừ giả thuyết cạnh tranh chưa
     raw_text: str              # toàn văn LLM trả về
+    speculative: bool = False  # E2: True khi root cause không neo được vào bằng chứng thu thập
 
 
 @dataclass
@@ -100,6 +102,16 @@ class InvestigationState:
         )
         self.hypotheses.append(hyp)
         return hyp
+
+    def competing_open(self) -> List["Hypothesis"]:
+        """E1: Giả thuyết cạnh tranh còn open khi đã có ít nhất 1 hypothesis được confirmed.
+
+        Dùng cho cổng dừng Day 27: trước khi nhận verdict high/medium, kiểm còn hypothesis
+        cạnh tranh mạnh chưa loại trừ không.
+        """
+        if not any(h.status == "confirmed" for h in self.hypotheses):
+            return []
+        return [h for h in self.hypotheses if h.status == "open"]
 
     def link_evidence_to_hypothesis(self, hyp_id: str, ev_id: str) -> None:
         for h in self.hypotheses:

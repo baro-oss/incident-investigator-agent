@@ -15,9 +15,9 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày).**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 📋 ĐÃ LÊN KẾ HOẠCH (Ngày 26–30 — chưa bắt đầu code).**
 
-Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. **Plan Phase 5: `docs/11-roadmap-phase-5.md`.**
+Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. **Plan Phase 6: `docs/12-roadmap-phase-6.md`.**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
@@ -28,6 +28,18 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. **Plan Phase 5: `docs/11-road
 | 25 | UI/UX + close | MCP server auth + Replay diff + tool test-run + search + Cổng Phase 5 | ✅ |
 
 **Cổng Phase 5 PASS:** auth · cost · real-LLM eval · storage seam · Slack/MCP integration · replay diff · MCP auth · search · tool test-run.
+
+**Phase 6 — Engine Quality + Production-readiness (engine-first 2+2+1, chưa code):**
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|-----------|
+| 26 | Engine core | Vòng đời giả thuyết thật (E1) · structured verdict (E5) · evidence-grounding guard (E2) | 📋 |
+| 27 | Engine intelligence | Stop/loop thông minh + cổng giả thuyết cạnh tranh (E4) · confidence calibration (E3/D1) · baseline auto-update (D2) | 📋 |
+| 28 | Security + custom LLM | API token webhook (A4) · secret at-rest (A2) · trace retention (A3) · per-project LLM endpoint riêng (model/url/header key, fallback default) | 📋 |
+| 29 | Reliability infra | Graceful shutdown (A1) · investigation queue in-process (B3) · rate limiting (B4) | 📋 |
+| 30 | Ecosystem + close | PagerDuty/OpsGenie + deploy hook + callback + clustering · Cổng Phase 6 | 📋 |
+
+**Defer → Future:** Tier-2 Postgres (B1, cần lệnh rõ) · bidirectional output (C2, phá READ-ONLY) · horizontal scale seam (B2). Chi tiết: `docs/12-roadmap-phase-6.md`.
 
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 
@@ -56,8 +68,9 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 - ✅ Per-project alert channels: `project_alert_channels` DB, mỗi project config kênh riêng (telegram/teams/email với config override)
 
 ### Roadmap — câu chuyện pitch (chưa phải code):
-**Phase 5** (xem `docs/11-roadmap-phase-5.md`): RBAC/auth · cost dashboard · Slack output · webhook signature · real MCP pack · storage seam.
-**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật) · secret-mgmt at-rest · bidirectional integration · horizontal scale.
+**Phase 5** ✅ (xem `docs/11-roadmap-phase-5.md`): RBAC/auth · cost dashboard · Slack output · webhook signature · real MCP pack · storage seam.
+**Phase 6** 📋 (xem `docs/12-roadmap-phase-6.md`): engine quality (hypothesis lifecycle · evidence-grounding verdict · calibration) · webhook auth + secret at-rest · graceful shutdown + in-process queue · PagerDuty/deploy-hook intake.
+**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration (phá READ-ONLY, cần duyệt) · horizontal scale seam.
 
 ---
 
@@ -154,7 +167,9 @@ Chỉ synthetic data, tool **READ-ONLY**, không PII, không kết nối hệ th
 │   ├── 07-synthetic-data-va-kich-ban.md
 │   ├── 08-vong-tu-chu-va-output.md
 │   ├── 09-trace-va-storage.md
-│   └── 10-roadmap-20-ngay.md  ← KẾ HOẠCH ĐANG THEO (Phase 1–4)
+│   ├── 10-roadmap-20-ngay.md  ← Phase 1–4 (đã xong)
+│   ├── 11-roadmap-phase-5.md  ← Phase 5 (đã xong)
+│   └── 12-roadmap-phase-6.md  ← KẾ HOẠCH TIẾP THEO (Phase 6, chưa code)
 ├── data/
 │   ├── schema.sql              ← DDL đầy đủ (có projects, project_services, mcp_servers)
 │   ├── init_db.py

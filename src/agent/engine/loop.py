@@ -23,6 +23,52 @@ from agent.tools.contracts import Observation, Tool, render_for_llm
 
 logger = logging.getLogger(__name__)
 
+# ── E5: Structured verdict tool ──────────────────────────────────────────────
+
+VERDICT_TOOL_NAME = "submit_verdict"
+
+# ── E1: Hypothesis lifecycle — relevance config per tag ──────────────────────
+
+_HYPOTHESIS_RELEVANCE: Dict[str, Dict] = {
+    "deploy": {
+        "tools": {"get_recent_deploys"},
+        "confirm_kws": {"deployment", "deploy", "version", "release", "tìm thấy"},
+        "rule_out_kws": {"không tìm thấy", "0 deployment", "no deployment"},
+        "confirm_conf": "medium",
+    },
+    "timeout": {
+        "tools": {"get_error_breakdown", "trace_request"},
+        "confirm_kws": {"timeoutexception", "timeout", "latency", "deadline", "chậm"},
+        "rule_out_kws": {"không có timeout", "latency bình thường"},
+        "confirm_conf": "medium",
+    },
+    "latency_spike": {
+        "tools": {"get_metrics"},
+        "confirm_kws": {"lệch", "x baseline", "spike", "tăng", "cao hơn"},
+        "rule_out_kws": {"bình thường", "không lệch", "normal"},
+        "confirm_conf": "medium",
+    },
+    "pool_exhaustion": {
+        "tools": {"get_metrics", "get_error_breakdown"},
+        "confirm_kws": {"pool", "exhaustion", "connection", "wait_time", "queue"},
+        "rule_out_kws": {"pool bình thường"},
+        "confirm_conf": "high",
+    },
+    "provider_down": {
+        "tools": {"get_dependencies", "get_error_breakdown"},
+        "confirm_kws": {"provider", "unavailable", "serviceunavailable", "503", "sập"},
+        "rule_out_kws": {"provider ok", "bình thường"},
+        "confirm_conf": "high",
+    },
+}
+
+# E2: Từ ngữ chức năng loại khỏi kiểm tra overlap bằng chứng
+_STOP_WORDS = {
+    "là", "và", "có", "của", "trong", "cho", "với", "từ", "đến",
+    "tại", "gây", "bởi", "do", "qua", "theo", "vì", "khi", "sau",
+    "a", "an", "the", "of", "in", "at", "from",
+}
+
 SYSTEM_PROMPT = """Bạn là agent điều tra sự cố microservice. Nhiệm vụ: tìm root cause bằng cách gọi tool thu thập bằng chứng, rồi đưa ra verdict NGAY KHI đủ bằng chứng.
 
 Quy tắc bắt buộc:
@@ -36,7 +82,8 @@ Quy tắc bắt buộc:
 5. Phân biệt service lỗi PHÁT SINH (root) vs. lỗi LAN ĐẾN (propagation).
 6. HIỆU QUẢ: Nếu đã thấy deploy ngay trước spike VÀ đã kiểm ít nhất 1 giả thuyết cạnh tranh → ĐỦ để kết luận. Không cần kiểm tất cả service.
 
-Trả verdict bằng định dạng PLAIN TEXT (không dùng Markdown):
+Khi đã đủ bằng chứng: ưu tiên gọi tool `submit_verdict` với đầy đủ thông tin có cấu trúc.
+Fallback (nếu không dùng được tool): trả text theo format PLAIN TEXT:
 VERDICT:
 Root cause: <mô tả ngắn gọn>
 Độ tin: <CAO/TRUNG BÌNH/THẤP/CHƯA ĐỦ BẰNG CHỨNG>
@@ -80,6 +127,122 @@ def _tools_to_specs(tools: List[Tool]) -> List[ToolSpec]:
             for t in tools]
 
 
+def _build_verdict_tool_spec() -> ToolSpec:
+    """E5: Tool spec cho submit_verdict — LLM gọi để kết luận có cấu trúc."""
+    return ToolSpec(
+        name=VERDICT_TOOL_NAME,
+        description=(
+            "Đưa ra verdict cuối cùng của cuộc điều tra. "
+            "Gọi tool này khi đã đủ bằng chứng để kết luận. "
+            "Tất cả field phải neo vào bằng chứng thực tế đã thu thập."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "root_cause": {
+                    "type": "string",
+                    "description": "Nguyên nhân gốc rễ — mô tả cụ thể, trỏ vào bằng chứng thực tế",
+                },
+                "confidence": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low", "insufficient"],
+                    "description": (
+                        "high: tương quan thời gian rõ + cơ chế nhân quả; "
+                        "medium: chỉ tương quan thời gian; "
+                        "low: suy đoán; insufficient: chưa đủ bằng chứng"
+                    ),
+                },
+                "evidence_summary": {
+                    "type": "string",
+                    "description": "Tóm tắt bằng chứng chính đã thu thập",
+                },
+                "propagation": {
+                    "type": "string",
+                    "description": "Lỗi gốc ở đâu, lan đến dịch vụ nào",
+                },
+                "competing_hypotheses": {
+                    "type": "string",
+                    "description": "Giả thuyết cạnh tranh đã loại trừ và lý do",
+                },
+            },
+            "required": ["root_cause", "confidence", "evidence_summary", "propagation", "competing_hypotheses"],
+        },
+    )
+
+
+def _structured_args_to_verdict_text(args: dict) -> str:
+    """E5: Chuyển args từ submit_verdict tool → text format mà _parse_verdict đọc được.
+
+    Tạo text từ structured data nên reliable hơn LLM tự viết free text.
+    """
+    conf_map_inv = {
+        "high": "CAO", "medium": "TRUNG BÌNH",
+        "low": "THẤP", "insufficient": "CHƯA ĐỦ BẰNG CHỨNG",
+    }
+    conf_vi = conf_map_inv.get(
+        str(args.get("confidence", "insufficient")).lower(),
+        "CHƯA ĐỦ BẰNG CHỨNG",
+    )
+    return "\n".join([
+        "VERDICT:",
+        f"Root cause: {args.get('root_cause', '')}",
+        f"Độ tin: {conf_vi}",
+        f"Bằng chứng: {args.get('evidence_summary', '')}",
+        f"Lan truyền: {args.get('propagation', '')}",
+        f"Giả thuyết cạnh tranh: {args.get('competing_hypotheses', '')}",
+    ])
+
+
+def _check_evidence_grounding(verdict: "Verdict", evidence: "List[Evidence]") -> "Verdict":
+    """E2: Kiểm root_cause có neo vào bằng chứng đã thu không.
+
+    Nếu overlap từ khóa giữa root_cause và evidence summaries < 25% → hạ confidence
+    1 bậc + đánh dấu speculative=True. Không chặn verdict — chỉ calibrate tin cậy.
+    """
+    from agent.engine.state import Verdict as _Verdict
+
+    if verdict.confidence == "insufficient":
+        return verdict
+    if not evidence:
+        return _Verdict(
+            root_cause=verdict.root_cause, confidence="insufficient",
+            evidence_summary=verdict.evidence_summary,
+            propagation_note=verdict.propagation_note,
+            competing_hypotheses=verdict.competing_hypotheses,
+            raw_text=verdict.raw_text, speculative=True,
+        )
+
+    import re
+    root_words = set(re.findall(r'\w+', verdict.root_cause.lower())) - _STOP_WORDS
+    if not root_words:
+        return verdict
+
+    all_ev_words: set = set()
+    for ev in evidence:
+        all_ev_words.update(re.findall(r'\w+', (ev.summary or "").lower()))
+
+    overlap = root_words & all_ev_words
+    overlap_ratio = len(overlap) / len(root_words)
+
+    if overlap_ratio >= 0.25:
+        return verdict  # đủ neo bằng chứng
+
+    _downgrade = {"high": "medium", "medium": "low", "low": "insufficient"}
+    new_conf = _downgrade.get(verdict.confidence, verdict.confidence)
+    warning = f" [⚠ speculative — root cause ít neo bằng chứng: {overlap_ratio:.0%} overlap]"
+    logger.warning(
+        "Verdict speculative: overlap=%.0f%% root_words=%s overlap_words=%s",
+        overlap_ratio * 100, list(root_words)[:5], list(overlap)[:5],
+    )
+    return _Verdict(
+        root_cause=verdict.root_cause, confidence=new_conf,
+        evidence_summary=verdict.evidence_summary + warning,
+        propagation_note=verdict.propagation_note,
+        competing_hypotheses=verdict.competing_hypotheses,
+        raw_text=verdict.raw_text, speculative=True,
+    )
+
+
 async def decide_next_action(
     state: InvestigationState,
     llm: LLMClient,
@@ -91,16 +254,24 @@ async def decide_next_action(
     Đúng một trong tool_call/verdict_text sẽ có giá trị; llm_response luôn có (trừ exception).
     """
     user_msg = _build_user_message(state, last_obs)
+    # E5: thêm submit_verdict vào tool list để LLM có thể kết luận có cấu trúc
+    tool_specs = _tools_to_specs(tools) + [_build_verdict_tool_spec()]
     response = await llm.complete(
         messages=[Message(role="user", content=user_msg)],
-        tools=_tools_to_specs(tools),
+        tools=tool_specs,
         system=SYSTEM_PROMPT,
     )
 
     if response.has_tool_calls:
-        return response.tool_calls[0], None, response
+        tc = response.tool_calls[0]
+        # E5: LLM gọi submit_verdict → chuyển args có cấu trúc → verdict text reliable
+        if tc.name == VERDICT_TOOL_NAME:
+            logger.info("[%s] Bước %d → submit_verdict (structured)",
+                        state.investigation_id, state.steps_taken + 1)
+            return None, _structured_args_to_verdict_text(tc.arguments), response
+        return tc, None, response
 
-    # Text response — kiểm tra có phải verdict không
+    # Text response fallback — kiểm tra có phải verdict không (backward compat MockLLM)
     text = response.text or ""
     if "VERDICT" in text.upper():
         return None, text, response
@@ -151,37 +322,125 @@ def update_state(
 
 
 def _update_hypotheses(state: InvestigationState, ev: Evidence) -> None:
-    """Cập nhật/tạo giả thuyết dựa trên bằng chứng mới (heuristic đơn giản)."""
+    """E1: Cập nhật vòng đời giả thuyết dựa trên bằng chứng mới.
+
+    Thay heuristic cũ (append mù vào mọi open hypothesis):
+    - Tạo hypothesis khi evidence signal rõ
+    - Chỉ gắn evidence vào hypothesis CÓ LIÊN QUAN (tool/keyword match)
+    - Chuyển open→confirmed khi bằng chứng xác nhận
+    - Chuyển open→ruled_out khi bằng chứng mâu thuẫn
+    - Set confidence trên hypothesis theo loại bằng chứng
+    """
+    import re
     summary_lower = ev.summary.lower()
+    tool = ev.tool_name
 
-    # Heuristic: deploy gần đây → tạo/cập nhật hypothesis deploy
-    if ev.tool_name == "get_recent_deploys" and "deployment" in summary_lower:
-        _upsert_hypothesis(state, "deploy", ev,
-                           "Deployment gần đây gây ra sự cố")
+    # --- Tạo hypothesis mới từ signal trong evidence ---
+    if tool == "get_recent_deploys":
+        if "tìm thấy" in summary_lower and ("deployment" in summary_lower or "deploy" in summary_lower):
+            _upsert_hypothesis(state, "deploy", ev,
+                               "Deployment gần đây gây ra sự cố",
+                               keywords=["deployment", "deploy", "version"])
+        elif "không tìm thấy" in summary_lower:
+            # Không có deploy → tạo hypothesis với status ruled_out ngay
+            _upsert_hypothesis(state, "deploy", ev,
+                               "Deployment gần đây gây ra sự cố",
+                               keywords=["deployment", "deploy"],
+                               initial_status="ruled_out")
 
-    # Heuristic: lỗi timeout cao bất thường → giả thuyết downstream chậm
-    if ev.tool_name == "get_error_breakdown" and "timeoutexception" in summary_lower:
+    if tool == "get_error_breakdown" and "timeoutexception" in summary_lower:
         _upsert_hypothesis(state, "timeout", ev,
-                           "Downstream service phản hồi chậm gây timeout lan lên")
+                           "Downstream service phản hồi chậm gây timeout lan lên",
+                           keywords=["timeout", "latency", "chậm"])
 
-    # Heuristic: latency spike → giả thuyết tài nguyên hoặc dependency chậm
-    if ev.tool_name == "get_metrics" and ("lệch" in summary_lower or "x baseline" in summary_lower):
+    if tool == "get_metrics" and ("lệch" in summary_lower or "x baseline" in summary_lower):
         _upsert_hypothesis(state, "latency_spike", ev,
-                           "Latency spike — có thể do code thay đổi hoặc dependency chậm")
+                           "Latency spike — có thể do code thay đổi hoặc dependency chậm",
+                           keywords=["latency", "spike", "lệch"])
 
-    # Gắn bằng chứng vào tất cả hypothesis đang open
-    for h in state.hypotheses:
-        if h.status == "open" and ev.id not in h.evidence_ids:
-            h.evidence_ids.append(ev.id)
+    if tool in ("get_metrics", "get_error_breakdown") and (
+        "pool" in summary_lower or "exhaustion" in summary_lower or "wait_time" in summary_lower
+    ):
+        _upsert_hypothesis(state, "pool_exhaustion", ev,
+                           "Connection pool exhaustion — quá nhiều kết nối đồng thời",
+                           keywords=["pool", "exhaustion", "connection", "wait_time"])
+
+    if tool in ("get_dependencies", "get_error_breakdown") and (
+        "unavailable" in summary_lower or "serviceunavailable" in summary_lower
+        or "503" in summary_lower or "sập" in summary_lower
+    ):
+        _upsert_hypothesis(state, "provider_down", ev,
+                           "Provider/dependency ngoài bị sập",
+                           keywords=["provider", "unavailable", "sập"])
+
+    # --- Cập nhật lifecycle cho hypothesis đã có ---
+    ev_words = set(re.findall(r'\w+', summary_lower))
+    for hyp in state.hypotheses:
+        if hyp.status == "ruled_out":
+            continue  # không tái xử lý hypothesis đã loại trừ
+
+        rel_cfg = _HYPOTHESIS_RELEVANCE.get(hyp.id, {})
+        rel_tools: set = rel_cfg.get("tools", set())
+        confirm_kws: set = rel_cfg.get("confirm_kws", set())
+        rule_out_kws: set = rel_cfg.get("rule_out_kws", set())
+        confirm_conf: str = rel_cfg.get("confirm_conf", "medium")
+
+        # Kiểm liên quan: tool match HOẶC keyword overlap với hyp.keywords
+        hyp_kw_set = set(hyp.keywords)
+        is_relevant = (
+            tool in rel_tools
+            or bool(hyp_kw_set & ev_words)
+            or bool(confirm_kws & ev_words)
+        )
+        if not is_relevant:
+            continue  # bằng chứng không liên quan → bỏ qua
+
+        # Gắn evidence vào hypothesis
+        if ev.id not in hyp.evidence_ids:
+            hyp.evidence_ids.append(ev.id)
+
+        # Rule-out: bằng chứng mâu thuẫn
+        if rule_out_kws and any(kw in summary_lower for kw in rule_out_kws):
+            hyp.status = "ruled_out"
+            logger.debug("Hypothesis '%s' ruled_out bởi evidence: %s", hyp.id, ev.summary[:60])
+            continue
+
+        # Confirm: bằng chứng xác nhận mạnh
+        if hyp.status == "open" and confirm_kws and any(kw in summary_lower for kw in confirm_kws):
+            hyp.status = "confirmed"
+            hyp.confidence = confirm_conf
+            logger.debug("Hypothesis '%s' confirmed (conf=%s): %s", hyp.id, confirm_conf, ev.summary[:60])
 
 
-def _upsert_hypothesis(state: InvestigationState, tag: str, ev: Evidence, content: str) -> None:
-    existing = next((h for h in state.hypotheses if tag in h.id or tag in h.content.lower()), None)
+def _upsert_hypothesis(
+    state: InvestigationState,
+    tag: str,
+    ev: Evidence,
+    content: str,
+    keywords: Optional[List[str]] = None,
+    initial_status: str = "open",
+) -> None:
+    """Tạo mới hoặc cập nhật hypothesis theo tag. E1: nhận keywords để match evidence sau."""
+    existing = next(
+        (h for h in state.hypotheses if h.id == tag or tag in h.id),
+        None,
+    )
     if existing is None:
         h = state.add_hypothesis(content)
-        h.id = tag  # dùng tag làm id để dễ upsert
+        h.id = tag
+        h.keywords = list(keywords or [])
+        if initial_status != "open":
+            h.status = initial_status  # type: ignore[assignment]
+        if ev.id not in h.evidence_ids:
+            h.evidence_ids.append(ev.id)
     else:
-        existing.evidence_ids.append(ev.id)
+        # Merge keywords và gắn evidence
+        existing.keywords = list(set(existing.keywords) | set(keywords or []))
+        if ev.id not in existing.evidence_ids:
+            existing.evidence_ids.append(ev.id)
+        # Nếu hypothesis đang open và initial_status là ruled_out → chuyển trạng thái
+        if initial_status == "ruled_out" and existing.status == "open":
+            existing.status = "ruled_out"
 
 
 def _strip_md(s: str) -> str:
@@ -238,9 +497,9 @@ def _parse_verdict(text: str, state: InvestigationState) -> Verdict:
         "CHƯA ĐỦ BẰNG CHỨNG": "insufficient", "INSUFFICIENT": "insufficient",
         "HIGH": "high", "MEDIUM": "medium", "LOW": "low",
     }
-    # Chuẩn hóa confidence_raw: bỏ ký tự thừa, so sánh linh hoạt
+    # E5: Chuẩn hóa confidence_raw; parse fail → "insufficient" (không giả vờ tự tin)
     conf_key = confidence_raw.strip(" *:").upper()
-    confidence = conf_map.get(conf_key, "medium")
+    confidence = conf_map.get(conf_key, "insufficient")
 
     return Verdict(
         root_cause=root_cause or "(không parse được)",
@@ -350,11 +609,14 @@ class InvestigationEngine:
         # --- Finalize ---
         if verdict_text:
             state.verdict = _parse_verdict(verdict_text, state)
+            # E2: Kiểm tra root_cause có neo vào bằng chứng không; hạ confidence nếu không
+            state.verdict = _check_evidence_grounding(state.verdict, state.evidence)
 
         _emit_trace(investigation_id, state.steps_taken, "verdict", {
             "stop_reason": state.stop_reason,
             "root_cause": state.verdict.root_cause if state.verdict else "N/A",
             "confidence": state.verdict.confidence if state.verdict else "N/A",
+            "speculative": state.verdict.speculative if state.verdict else False,
             "total_tokens": state.total_tokens,
         }, project_id=project_id)
         tracer.record_verdict(state.stop_reason, state.verdict)
