@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 VERDICT_TOOL_NAME = "submit_verdict"
 
+# ── E4: Competing hypothesis gate — nudge tool name ─────────────────────────
+
+_NUDGE_TOOL_NAME = "_competing_gate"
+
 # ── E1: Hypothesis lifecycle — relevance config per tag ──────────────────────
 
 _HYPOTHESIS_RELEVANCE: Dict[str, Dict] = {
@@ -243,6 +247,69 @@ def _check_evidence_grounding(verdict: "Verdict", evidence: "List[Evidence]") ->
     )
 
 
+def _quick_parse_confidence(text: str) -> str:
+    """E4: Parse nhanh confidence từ verdict text — không cần full parse."""
+    conf_map = {
+        "CAO": "high", "TRUNG BÌNH": "medium", "THẤP": "low",
+        "CHƯA ĐỦ BẰNG CHỨNG": "insufficient",
+        "HIGH": "high", "MEDIUM": "medium", "LOW": "low",
+        "INSUFFICIENT": "insufficient",
+    }
+    for line in text.split("\n"):
+        low = line.strip().lower()
+        if "độ tin:" in low:
+            raw = low.split("độ tin:", 1)[1].strip(" *:").upper()
+            for k, v in conf_map.items():
+                if k in raw:
+                    return v
+    return "insufficient"
+
+
+def _apply_competing_gate(
+    state: "InvestigationState",
+    vtext: str,
+) -> "Tuple[Optional[ToolCall], Optional[str]]":
+    """E4: Chặn verdict high/medium nếu còn hypothesis cạnh tranh chưa loại trừ.
+
+    Chỉ gate 1 lần (tránh vòng lặp vô hạn). Gate pass khi:
+    - confidence thấp hơn medium
+    - không còn competing hypothesis
+    - không còn budget
+    - gate đã fired rồi
+
+    Returns (nudge_tool_call, None) khi gate fire,
+            (None, vtext) khi gate pass.
+    """
+    if state._competing_gate_fired:
+        return None, vtext
+
+    conf = _quick_parse_confidence(vtext)
+    if conf not in ("high", "medium"):
+        return None, vtext
+
+    competing = state.competing_open()
+    if not competing:
+        return None, vtext
+
+    budget_remaining = state.step_budget - state.steps_taken
+    if budget_remaining <= 1:
+        return None, vtext
+
+    # Gate fires — nudge LLM loại trừ hypothesis cạnh tranh trước khi kết luận
+    state._competing_gate_fired = True
+    names = "; ".join(h.content[:60] for h in competing[:3])
+    logger.info(
+        "[%s] E4 gate cạnh tranh: chặn verdict %s — %d hypothesis open: [%s]",
+        state.investigation_id, conf, len(competing), names[:100],
+    )
+    nudge = ToolCall(
+        id="gate_nudge",
+        name=_NUDGE_TOOL_NAME,
+        arguments={"competing_hypotheses": names, "count": len(competing)},
+    )
+    return nudge, None
+
+
 async def decide_next_action(
     state: InvestigationState,
     llm: LLMClient,
@@ -283,9 +350,24 @@ async def decide_next_action(
 
 async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
     """Pure: nhận tool_call → chạy tool → trả Observation."""
+    # E4: Nudge từ competing gate — không phải tool thật, trả cảnh báo có cấu trúc
+    if tool_call.name == _NUDGE_TOOL_NAME:
+        competing = tool_call.arguments.get("competing_hypotheses", "")
+        count = tool_call.arguments.get("count", "?")
+        return Observation(
+            summary=(
+                f"⚠️ Cổng cạnh tranh: còn {count} giả thuyết chưa loại trừ: [{competing}]. "
+                "Hãy điều tra để loại trừ (hoặc xác nhận) trước khi đưa ra kết luận cuối."
+            ),
+            aggregates={"gate": "competing_hypothesis", "open_count": count},
+            samples=[],
+            total_count=0,
+            truncated=False,
+            metadata={"tool_name": _NUDGE_TOOL_NAME, "gate": "competing"},
+        )
+
     tool = next((t for t in tools if t.name == tool_call.name), None)
     if tool is None:
-        from agent.tools.contracts import Observation
         return Observation(
             summary=f"Tool '{tool_call.name}' không tồn tại trong registry.",
             aggregates={}, samples=[], total_count=0, truncated=False,
@@ -747,11 +829,17 @@ class InvestigationEngine:
             )
 
             if vtext:
-                verdict_text = vtext
-                state.stop_reason = "verdict"
-                state.finished = True
-                tracer.end_step()
-                break
+                # E4: cổng cạnh tranh — chặn verdict high/medium nếu còn hypothesis open
+                nudge_tc, accepted_vtext = _apply_competing_gate(state, vtext)
+                if nudge_tc:
+                    # Gate fires: inject nudge như một tool call, tiếp tục vòng
+                    tool_call = nudge_tc
+                else:
+                    verdict_text = accepted_vtext
+                    state.stop_reason = "verdict"
+                    state.finished = True
+                    tracer.end_step()
+                    break
 
             if tool_call is None:
                 logger.warning("[%s] Không có tool_call lẫn verdict", investigation_id)

@@ -126,10 +126,20 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
     )
 
     if vtext:
+        # E4: cổng cạnh tranh — chặn verdict high/medium nếu còn hypothesis open
+        from agent.engine.loop import _apply_competing_gate, _emit_trace
+        nudge_tc, accepted_vtext = _apply_competing_gate(inv, vtext)
+        if nudge_tc:
+            # Gate fires: inject nudge như tool call, tiếp tục điều tra
+            _emit_trace(investigation_id, current_step, "tool_call", {
+                "tool": nudge_tc.name, "args": nudge_tc.arguments,
+            }, project_id=inv.project_id)
+            return {"inv": inv, "tool_call": nudge_tc, "verdict_text": None}
+
         inv.stop_reason = "verdict"
         inv.finished = True
         tracer.end_step()
-        return {"inv": inv, "verdict_text": vtext, "tool_call": None}
+        return {"inv": inv, "verdict_text": accepted_vtext, "tool_call": None}
 
     if tool_call:
         _emit_trace(investigation_id, current_step, "tool_call", {

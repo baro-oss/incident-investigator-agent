@@ -554,3 +554,79 @@ def get_eval_calibration() -> List[Dict[str, Any]]:
         out.append(d)
     out.sort(key=lambda x: order.get(x["confidence"], 9))
     return out
+
+
+def get_calibration_with_feedback() -> Dict[str, Any]:
+    """E3/D1: Calibration thật — kết hợp eval_results + investigation_feedback (👍/👎).
+
+    Returns dict với 3 list:
+    - "eval": per-confidence từ eval_results (correct rate)
+    - "feedback": per-confidence từ investigation_feedback (positive rate)
+    - "combined": merge cả hai (tổng hợp)
+    """
+    conn = open_db()
+
+    # 1. Từ eval_results — run mới nhất per scenario
+    eval_rows = conn.execute("""
+        SELECT e.confidence, COUNT(*) AS n, SUM(e.correct) AS ok
+        FROM eval_results e
+        INNER JOIN (
+            SELECT scenario, MAX(created_at) AS latest_at
+            FROM eval_results GROUP BY scenario
+        ) latest ON e.scenario = latest.scenario AND e.created_at = latest.latest_at
+        GROUP BY e.confidence
+    """).fetchall()
+
+    # 2. Từ investigation_feedback — join trace_events để lấy confidence
+    feedback_rows = conn.execute("""
+        SELECT
+            json_extract(te.payload, '$.confidence') AS confidence,
+            COUNT(*) AS n,
+            SUM(CASE WHEN f.score > 0 THEN 1 ELSE 0 END) AS positive
+        FROM investigation_feedback f
+        JOIN trace_events te
+            ON te.investigation_id = f.investigation_id
+            AND te.event_type = 'verdict'
+        WHERE json_extract(te.payload, '$.confidence') IS NOT NULL
+          AND json_extract(te.payload, '$.confidence') != 'N/A'
+        GROUP BY json_extract(te.payload, '$.confidence')
+    """).fetchall()
+
+    conn.close()
+
+    order = {"high": 0, "medium": 1, "low": 2, "insufficient": 3}
+
+    eval_out = []
+    for r in eval_rows:
+        d = dict(r)
+        d["rate"] = round((d["ok"] / d["n"]) * 100) if d["n"] else 0
+        eval_out.append(d)
+    eval_out.sort(key=lambda x: order.get(x.get("confidence", ""), 9))
+
+    feedback_out = []
+    for r in feedback_rows:
+        d = dict(r)
+        d["rate"] = round((d["positive"] / d["n"]) * 100) if d["n"] else 0
+        feedback_out.append(d)
+    feedback_out.sort(key=lambda x: order.get(x.get("confidence", ""), 9))
+
+    # Combined: merge cả hai nguồn
+    combined: Dict[str, Dict] = {}
+    for row in eval_out:
+        conf = row.get("confidence") or "unknown"
+        combined[conf] = {"confidence": conf, "n": row["n"], "accurate": int(row["ok"] or 0)}
+    for row in feedback_out:
+        conf = row.get("confidence") or "unknown"
+        if conf in combined:
+            combined[conf]["n"] += row["n"]
+            combined[conf]["accurate"] += int(row.get("positive") or 0)
+        else:
+            combined[conf] = {"confidence": conf, "n": row["n"],
+                              "accurate": int(row.get("positive") or 0)}
+    combined_out = []
+    for d in combined.values():
+        d["rate"] = round((d["accurate"] / d["n"]) * 100) if d["n"] else 0
+        combined_out.append(d)
+    combined_out.sort(key=lambda x: order.get(x.get("confidence", ""), 9))
+
+    return {"eval": eval_out, "feedback": feedback_out, "combined": combined_out}

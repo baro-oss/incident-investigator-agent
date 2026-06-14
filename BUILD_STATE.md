@@ -4,11 +4,10 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 5 ✅ HOÀN TẤT (25/25 ngày). **Phase 6 📋 ĐÃ LÊN KẾ HOẠCH (Ngày 26–30) — chưa bắt đầu code.**
-**Cổng kiểm gần nhất đã qua:** Ngày 25 — MCP auth ✅ · tool test-run ✅ · replay diff ✅ · search ✅ · mock eval 4/4 PASS ✅
-**Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`. **Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
-**Cổng kiểm gần nhất:** Ngày 26 — E1 hypothesis lifecycle ✅ · E5 structured verdict tool ✅ · E2 grounding guard ✅ · eval 4/4 PASS ✅
-**Việc kế tiếp:** Ngày 27 (Engine intelligence — E4 stop/loop thông minh + cổng giả thuyết cạnh tranh + E3/D1 calibration).
+**Giai đoạn:** Phase 6 📋 (Ngày 26–30, đang thực hiện).
+**Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
+**Cổng kiểm gần nhất:** Ngày 27 — E4 loop oscillation ✅ · E4 cổng cạnh tranh ✅ · E3/D1 calibration dashboard ✅ · eval 4/4 PASS ✅
+**Việc kế tiếp:** Ngày 28 (Security + custom LLM — A4 webhook token · A2 secret at-rest · A3 trace retention · per-project LLM endpoint last mile).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -72,7 +71,7 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 26 | Engine core | E1 vòng đời giả thuyết thật · E5 structured verdict · E2 evidence-grounding guard | ✅ |
-| 27 | Engine intelligence | E4 stop/loop thông minh + cổng giả thuyết cạnh tranh · E3/D1 calibration · D2 baseline auto-update | 📋 |
+| 27 | Engine intelligence | E4 stop/loop thông minh + cổng giả thuyết cạnh tranh · E3/D1 calibration · D2 baseline auto-update | ✅ |
 | 28 | Security + custom LLM | A4 API token webhook · A2 secret at-rest · A3 trace retention · per-project LLM endpoint riêng (model/url/header, fallback default) | 📋 |
 | 29 | Reliability infra | A1 graceful shutdown · B3 investigation queue (in-process) · B4 rate limiting | 📋 |
 | 30 | Ecosystem + close | C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 clustering · Cổng Phase 6 | 📋 |
@@ -103,6 +102,39 @@
 - **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
 - **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
 - **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 33 — 2026-06-15] — Ngày 27: Engine Intelligence (E4 + E3/D1)
+
+**A. E4 — Loop detection nâng cấp (dao động A→B→A→B):**
+- `state.py:is_looping()` — nâng từ "2 liên tiếp giống nhau" → bắt được dao động chu kỳ 2 (ABABAB) và 3 (ABCABC) trong window N=6 calls; lọc `_competing_gate` calls khỏi lịch sử kiểm tra để không làm nhiễu phát hiện.
+
+**B. E4 — Cổng giả thuyết cạnh tranh (competing hypothesis gate):**
+- `state.py` — thêm `_competing_gate_fired: bool = False` (tránh loop vô hạn).
+- `loop.py` — thêm `_NUDGE_TOOL_NAME = "_competing_gate"` + `_quick_parse_confidence()` (parse nhanh confidence từ verdict text) + `_apply_competing_gate()` (kiểm gate condition, trả nudge ToolCall khi cần, idempotent).
+- `loop.py:run_tool()` — xử lý `_competing_gate` như synthetic tool: trả Observation cảnh báo "còn N hypothesis chưa loại trừ, hãy điều tra trước".
+- `loop.py:_run_loop()` — sau khi nhận vtext từ LLM: chạy gate trước khi accept verdict; nếu gate fires → inject nudge tool call vào vòng tiếp theo.
+- `graph.py:decide_node()` — tương tự: gate fires → return nudge tool_call (không set verdict_text); routing tự nhiên đi `run_tool → update → decide`.
+
+**C. E3/D1 — Confidence calibration (eval + feedback):**
+- `queries.py:get_calibration_with_feedback()` — merge 3 nguồn: (1) eval_results per-confidence correct rate; (2) investigation_feedback 👍/👎 join trace_events để lấy confidence; (3) combined tổng hợp.
+- `router.py` — import + gọi `get_calibration_with_feedback()`, pass `calib_feedback` vào eval template.
+- `templates/eval.html` — thay 1 calibration card cũ bằng 2-column layout: "Calibration — Eval (correct rate)" | "Calibration — Kết hợp (eval + 👍👎)" với badge màu theo confidence + note số feedbacks.
+
+**D. D2 — Baseline auto-update:** defer (if-time, không đủ thời gian + data synthetic không có time-series cross-day thật).
+
+**Verify:**
+- Loop oscillation ABABAB detected ✅; 2 consecutive detected ✅; nudge calls filtered ✅
+- Gate fires on high/medium verdict khi có competing open hypothesis ✅; idempotent (1 lần) ✅; pass cho insufficient ✅
+- Nudge Observation trả đúng summary + metadata ✅
+- Calibration with feedback query: eval 3 rows + feedback 1 row → combined 3 rows (high merged 5 total) ✅
+- Dashboard /dashboard/eval: 2 calibration card side-by-side, badge màu, feedback note ✅
+- Regression eval 4/4 mock PASS (backward compat không vỡ) ✅
+
+**Cổng Ngày 27 ✅ PASS:** loop oscillation · cổng cạnh tranh · calibration dashboard · regression không vỡ.
+
+**Quyết định lệch:**
+- D2 (baseline auto-update if-time) → defer: data metrics chỉ có 1 ngày synthetic, rolling 7-day không có ý nghĩa thực tế. Không ảnh hưởng cổng.
+- Cổng cạnh tranh end-to-end qua engine khó test tự động (hypothesis lifecycle phụ thuộc synthetic data match keywords); unit test xác nhận cơ chế đúng (gate fire/pass, nudge inject, idempotent).
 
 ### [Session 32 — 2026-06-15] — Ngày 26: Engine Core (E1 + E5 + E2)
 

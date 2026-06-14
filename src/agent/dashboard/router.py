@@ -17,6 +17,7 @@ from agent.auth.deps import NotAuthorized, require_login, require_perm, get_curr
 from agent.dashboard.queries import (
     get_cost_data,
     get_eval_calibration,
+    get_calibration_with_feedback,
     get_eval_summary,
     get_investigation_detail,
     get_investigation_feedback,
@@ -754,6 +755,7 @@ async def dashboard_eval(
     eval_recall = [round((r["recall"] or 0) * 100, 0) for r in eval_rows]
 
     eval_calibration = get_eval_calibration()
+    calib_feedback = get_calibration_with_feedback()
 
     return templates.TemplateResponse("eval.html", _ctx(request, user,
         active="eval",
@@ -766,6 +768,7 @@ async def dashboard_eval(
         eval_steps=eval_steps,
         eval_recall=eval_recall,
         eval_calibration=eval_calibration,
+        calib_feedback=calib_feedback,
     ))
 
 

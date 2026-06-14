@@ -81,6 +81,9 @@ class InvestigationState:
     # Long-term memory: gợi ý warm-start từ investigation_patterns trước
     warm_start_hint: Optional[str] = None
 
+    # E4: Gate cạnh tranh — chỉ nudge 1 lần; tránh vòng lặp vô hạn
+    _competing_gate_fired: bool = False
+
     def add_evidence(self, step: int, tool_name: str, params: Dict[str, Any],
                      obs: Observation) -> Evidence:
         ev = Evidence(
@@ -121,12 +124,40 @@ class InvestigationState:
                 return
 
     def is_looping(self) -> bool:
-        """Phát hiện lặp: 2 tool call liên tiếp cùng name + params giống nhau."""
-        if len(self.tool_call_history) < 2:
+        """E4: Phát hiện lặp — bắt 2 liên tiếp giống hệt + dao động chu kỳ A→B→A→B.
+
+        - Case 1: 2 call liên tiếp cùng name+params (unchanged)
+        - Case 2: Dao động trong window N=6 với chu kỳ 2 hoặc 3
+        Nudge call (_competing_gate) bị lọc ra để không làm nhiễu phát hiện lặp.
+        """
+        # Lọc nudge calls khỏi lịch sử kiểm tra
+        hist = [c for c in self.tool_call_history if c.get("name") != "_competing_gate"]
+        if len(hist) < 2:
             return False
-        last = self.tool_call_history[-1]
-        prev = self.tool_call_history[-2]
-        return last["name"] == prev["name"] and last["params"] == prev["params"]
+
+        # Case 1: 2 liên tiếp giống hệt
+        if hist[-1]["name"] == hist[-2]["name"] and hist[-1]["params"] == hist[-2]["params"]:
+            return True
+
+        # Case 2: Dao động — window N=6, kiểm chu kỳ 2 (A→B→A→B) và 3 (A→B→C→A→B→C)
+        N = 6
+        if len(hist) < N:
+            return False
+        window = hist[-N:]
+        for period in (2, 3):
+            needed = period * 2
+            if len(window) < needed:
+                continue
+            tail = window[-needed:]
+            first_half, second_half = tail[:period], tail[period:]
+            if all(
+                first_half[i]["name"] == second_half[i]["name"]
+                and first_half[i]["params"] == second_half[i]["params"]
+                for i in range(period)
+            ):
+                return True
+
+        return False
 
     def summarize_for_llm(self) -> str:
         """Tổng hợp state gọn để đưa vào context LLM — KHÔNG đưa lịch sử thô."""

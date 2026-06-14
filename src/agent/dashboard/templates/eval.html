@@ -98,33 +98,88 @@
   </div>
 </div>
 
-<div class="card" style="margin-top:16px">
-  <h3 style="margin-bottom:12px">Calibration — độ tin có khớp độ đúng?</h3>
-  {% if eval_calibration %}
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Confidence</th><th>Runs</th><th>Correct</th><th>Rate</th></tr></thead>
-      <tbody>
-        {% for c in eval_calibration %}
-        <tr>
-          <td><span class="tag">{{ c.confidence }}</span></td>
-          <td style="text-align:center">{{ c.n }}</td>
-          <td style="text-align:center">{{ c.ok }}</td>
-          <td style="text-align:center">
-            <span class="eval-rate {{ 'pass' if c.rate >= 70 else 'fail' }}">{{ c.rate }}%</span>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+
+  <!-- Eval calibration (existing) -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Calibration — Eval (correct rate)</h3>
+    {% if eval_calibration %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Confidence</th><th>Runs</th><th>Correct</th><th>Rate</th></tr></thead>
+        <tbody>
+          {% for c in eval_calibration %}
+          <tr>
+            <td><span class="tag">{{ c.confidence }}</span></td>
+            <td style="text-align:center">{{ c.n }}</td>
+            <td style="text-align:center">{{ c.ok }}</td>
+            <td style="text-align:center">
+              <span class="eval-rate {{ 'pass' if c.rate >= 70 else 'fail' }}">{{ c.rate }}%</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="meta" style="margin-top:8px">
+      Từ <code>eval_agent.py</code>. Calibrated tốt: <b>HIGH</b> → rate cao, <b>LOW</b> → rate thấp.
+    </div>
+    {% else %}
+    <div class="meta">Chưa có dữ liệu eval.</div>
+    {% endif %}
   </div>
-  <div class="meta" style="margin-top:8px">
-    Calibrated tốt: <b>HIGH</b> → rate cao, <b>LOW</b> → rate thấp.
-    (Mock ~100% high → ít ý nghĩa; có giá trị khi chạy real-LLM.)
+
+  <!-- Combined calibration (E3/D1) -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Calibration — Kết hợp (eval + 👍👎)</h3>
+    {% set combined = calib_feedback.combined if calib_feedback else [] %}
+    {% set feedback = calib_feedback.feedback if calib_feedback else [] %}
+    {% if combined %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Confidence</th>
+            <th>Total</th>
+            <th>Accurate</th>
+            <th>Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in combined %}
+          {% set color = 'var(--high)' if c.rate >= 70 else ('var(--medium)' if c.rate >= 40 else 'var(--low)') %}
+          <tr>
+            <td>
+              {% if c.confidence == 'high' %}<span class="badge badge-high">HIGH</span>
+              {% elif c.confidence == 'medium' %}<span class="badge badge-medium">MEDIUM</span>
+              {% elif c.confidence == 'low' %}<span class="badge badge-low">LOW</span>
+              {% else %}<span class="tag">{{ c.confidence }}</span>{% endif %}
+            </td>
+            <td style="text-align:center">{{ c.n }}</td>
+            <td style="text-align:center">{{ c.accurate }}</td>
+            <td style="text-align:center">
+              <span style="color:{{ color }};font-weight:600">{{ c.rate }}%</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if feedback %}
+    <div class="meta" style="margin-top:8px">
+      Bao gồm <b>{{ feedback | sum(attribute='n') }} feedbacks</b> từ 👍👎 trong dashboard.
+      Chỉ số cao = agent tự tin đúng mức với bằng chứng.
+    </div>
+    {% else %}
+    <div class="meta" style="margin-top:8px">
+      Chỉ dữ liệu eval (chưa có feedback 👍👎). Bấm 👍👎 trên trang chi tiết investigation để bổ sung.
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="meta">Chưa có dữ liệu kết hợp.</div>
+    {% endif %}
   </div>
-  {% else %}
-  <div class="meta">Chưa có dữ liệu calibration.</div>
-  {% endif %}
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
