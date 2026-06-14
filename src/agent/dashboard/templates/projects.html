@@ -39,10 +39,16 @@
       <span style="font-size:12px;color:var(--muted)">
         {{ p.investigation_count }} investigation{% if p.investigation_count != 1 %}s{% endif %}
       </span>
-      <a href="/dashboard?project_id={{ p.id }}"
-         style="font-size:12px;color:var(--accent);text-decoration:none">
-        Xem history →
-      </a>
+      <div style="display:flex;gap:8px">
+        <a href="/dashboard/projects/{{ p.id }}"
+           style="font-size:12px;color:var(--accent);text-decoration:none">
+          Quản lý →
+        </a>
+        <a href="/dashboard?project_id={{ p.id }}"
+           style="font-size:12px;color:var(--muted);text-decoration:none">
+          History
+        </a>
+      </div>
     </div>
   </div>
   {% else %}

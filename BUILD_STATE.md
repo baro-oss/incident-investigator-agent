@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 3 — Ngày 16 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 3 — Ngày 17 (Dashboard v3 Full Platform UI)
-**Cổng kiểm gần nhất đã qua:** Resilience + CLI + Health/Metrics/Channels dashboard live ✅
+**Giai đoạn:** Phase 3 — Ngày 17 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 4 — Ngày 18 (Fintech domain + Domain Switcher UI)
+**Cổng kiểm gần nhất đã qua:** Full Platform UI — MCP Registry, Project Detail, Replay, Demo Mode ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -50,9 +50,43 @@
 |------|----------|------------|
 | 15 | LangGraph Migration + Multi-agent | ✅ |
 | 16 | Resilience + CLI + Health Dashboard | ✅ |
-| 17 | Dashboard v3 Full Platform UI | ☐ |
+| 17 | Dashboard v3 Full Platform UI | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 21 — 2026-06-14] — Ngày 17: Dashboard v3 Full Platform UI
+
+**Đã làm:**
+- `src/agent/dashboard/queries.py` — thêm 2 functions:
+  - `get_mcp_servers_for_dashboard()` — LEFT JOIN với projects để lấy project_name
+  - `get_project_detail(project_id)` — info + services + mcp_servers + channels + recent investigations (10 rows)
+- `src/agent/dashboard/router.py` — thêm 10 routes mới:
+  - `GET /dashboard/mcp` — MCP Registry UI
+  - `POST /dashboard/mcp/register` — thêm server vào DB, redirect
+  - `POST /dashboard/mcp/{id}/delete` — xóa server với confirm
+  - `POST /dashboard/mcp/{id}/ping` — JSON endpoint cho JS fetch: initialize + tools/list → latency_ms + tools list
+  - `GET /dashboard/projects/{pid}` — Project Detail UI
+  - `POST /dashboard/projects/{pid}/services/add` — thêm service
+  - `POST /dashboard/projects/{pid}/services/{svc}/delete` — xóa service
+  - `POST /dashboard/projects/{pid}/channels/{ch}/config` — update config JSON + toggle enabled
+  - `POST /dashboard/investigations/{inv_id}/replay` — trigger investigation mới từ payload gốc, redirect sang detail
+  - `GET /dashboard/demo` — Demo Mode full-screen
+- `src/agent/dashboard/templates/mcp.html` (mới) — register form inline (4 fields), bảng servers, Ping button (JS fetch → hiện latency + tools), Xóa với confirm
+- `src/agent/dashboard/templates/project_detail.html` (mới) — LLM config, services với add/remove, alert channels (textarea config JSON + toggle), MCP servers list, recent investigations
+- `src/agent/dashboard/templates/demo.html` (mới) — standalone HTML (không extends base), full-screen layout, 4 scenario quick-select buttons, trigger form trái, SSE stream phải, verdict card
+- `src/agent/dashboard/templates/detail.html` — thêm Replay button top-right (form POST với confirm)
+- `src/agent/dashboard/templates/projects.html` — thêm "Quản lý →" link đến `/dashboard/projects/{id}`
+- `src/agent/dashboard/templates/base.html` — thêm 2 nav links: ⬡ MCP Registry, ▣ Demo Mode
+
+**Verify (browser):**
+- `/dashboard/mcp` — form register hiện, 1 server (Investigation Tools, enabled, project=default) ✅
+- Ping button JS call → chờ response (MCP server offline → error đỏ, online → latency + tools) ✅
+- `/dashboard/projects/default` — LLM=anthropic(env), Services(0)+form, 3 channels OFF với textarea JSON, MCP(1 server), 10 recent investigations ✅
+- `/dashboard/investigations/{id}` — ⟳ Replay button top-right ✅
+- `/dashboard/demo` — full-screen, no nav, 4 scenario cards, trigger form, live stream area ✅
+- `/dashboard/projects` — "Quản lý →" link trên mỗi project card ✅
+
+**Cổng Ngày 17 ✅ PASS:** Toàn bộ platform (projects, MCP, channels, trigger, replay) quản lý từ browser.
 
 ### [Session 20 — 2026-06-14] — Ngày 16: Resilience + CLI + Health Dashboard
 

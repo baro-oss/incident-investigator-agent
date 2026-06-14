@@ -249,6 +249,85 @@ def get_channel_config() -> List[Dict[str, Any]]:
     return result
 
 
+def get_mcp_servers_for_dashboard() -> List[Dict[str, Any]]:
+    """Tất cả MCP servers kèm project name."""
+    conn = open_db()
+    rows = conn.execute("""
+        SELECT m.id, m.name, m.url, m.description, m.enabled, m.project_id,
+               p.name AS project_name
+        FROM mcp_servers m
+        LEFT JOIN projects p ON p.id = m.project_id
+        ORDER BY m.project_id, m.created_at
+    """).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
+    """Chi tiết một project: info + services + MCP + channels + recent investigations."""
+    conn = open_db()
+    p = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    if not p:
+        conn.close()
+        return None
+
+    services = [r["service"] for r in conn.execute(
+        "SELECT service FROM project_services WHERE project_id=? ORDER BY service",
+        (project_id,),
+    ).fetchall()]
+
+    mcp_servers = [dict(r) for r in conn.execute(
+        "SELECT id, name, url, enabled FROM mcp_servers WHERE project_id=? ORDER BY created_at",
+        (project_id,),
+    ).fetchall()]
+
+    channels_raw = conn.execute(
+        "SELECT channel, enabled, config FROM project_alert_channels WHERE project_id=? ORDER BY channel",
+        (project_id,),
+    ).fetchall()
+    channels = {r["channel"]: {"enabled": bool(r["enabled"]), "config": r["config"] or "{}"} for r in channels_raw}
+    for ch in ["telegram", "teams", "email"]:
+        if ch not in channels:
+            channels[ch] = {"enabled": False, "config": "{}"}
+
+    recent_invs = conn.execute("""
+        SELECT te.investigation_id,
+               MIN(te.timestamp) AS started_at,
+               MAX(CASE WHEN te.event_type='verdict' THEN te.payload END) AS verdict_payload,
+               MAX(CASE WHEN te.event_type='investigation_start' THEN te.payload END) AS start_payload
+        FROM trace_events te
+        WHERE te.project_id=?
+        GROUP BY te.investigation_id
+        ORDER BY MIN(te.timestamp) DESC
+        LIMIT 10
+    """, (project_id,)).fetchall()
+
+    inv_list = []
+    for r in recent_invs:
+        start = json.loads(r["start_payload"] or "{}")
+        verdict = json.loads(r["verdict_payload"] or "{}")
+        inv_list.append({
+            "investigation_id": r["investigation_id"],
+            "started_at": (r["started_at"] or "")[:19].replace("T", " "),
+            "scenario": start.get("scenario", ""),
+            "root_cause": verdict.get("root_cause", ""),
+            "confidence": verdict.get("confidence", ""),
+        })
+
+    conn.close()
+    return {
+        "id": p["id"],
+        "name": p["name"],
+        "description": p["description"] or "",
+        "llm_provider": p["llm_provider"] or "anthropic (env)",
+        "llm_model": p["llm_model"] or "",
+        "services": services,
+        "mcp_servers": mcp_servers,
+        "channels": channels,
+        "recent_investigations": inv_list,
+    }
+
+
 def get_eval_summary() -> List[Dict[str, Any]]:
     """Kết quả eval gần nhất per scenario."""
     conn = open_db()

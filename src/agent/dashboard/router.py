@@ -18,6 +18,8 @@ from agent.dashboard.queries import (
     list_investigations,
     get_metrics_live,
     get_channel_config,
+    get_mcp_servers_for_dashboard,
+    get_project_detail,
 )
 
 _HERE = Path(__file__).parent
@@ -328,6 +330,210 @@ async def dashboard_channel_toggle(request: Request, project_id: str, channel: s
     conn.close()
     from fastapi.responses import RedirectResponse
     return RedirectResponse("/dashboard/channels", status_code=303)
+
+
+# ── MCP Registry UI ───────────────────────────────────────────────────────────
+
+@router.get("/mcp", response_class=HTMLResponse)
+async def dashboard_mcp(request: Request):
+    servers = get_mcp_servers_for_dashboard()
+    projects = _get_all_project_ids()
+    return templates.TemplateResponse("mcp.html", {
+        "request": request,
+        "active": "mcp",
+        "servers": servers,
+        "projects": projects,
+    })
+
+
+@router.post("/mcp/register", response_class=HTMLResponse)
+async def dashboard_mcp_register(
+    request: Request,
+    name: str = Form(...),
+    url: str = Form(...),
+    project_id: str = Form("default"),
+    description: str = Form(""),
+):
+    from agent.intake.mcp_registry import add_server
+    error = None
+    try:
+        add_server(name=name, url=url, description=description, project_id=project_id)
+    except ValueError as e:
+        error = str(e)
+
+    if error:
+        servers = get_mcp_servers_for_dashboard()
+        projects = _get_all_project_ids()
+        return templates.TemplateResponse("mcp.html", {
+            "request": request,
+            "active": "mcp",
+            "servers": servers,
+            "projects": projects,
+            "register_error": error,
+        })
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/dashboard/mcp", status_code=303)
+
+
+@router.post("/mcp/{server_id}/delete", response_class=HTMLResponse)
+async def dashboard_mcp_delete(request: Request, server_id: int):
+    from agent.intake.mcp_registry import remove_server
+    remove_server(server_id)
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/dashboard/mcp", status_code=303)
+
+
+@router.post("/mcp/{server_id}/ping")
+async def dashboard_mcp_ping(server_id: int):
+    """Ping một MCP server — trả JSON kết quả để JS hiển thị."""
+    import aiohttp, time
+    from agent.intake.mcp_registry import get_server_by_id
+
+    srv = get_server_by_id(server_id)
+    if not srv:
+        return {"status": "error", "error": "Server not found"}
+
+    url = srv["url"]
+    t0 = time.monotonic()
+    try:
+        async with aiohttp.ClientSession() as session:
+            payload = {"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                       "params": {"protocolVersion": "2024-11-05",
+                                  "capabilities": {}, "clientInfo": {"name": "dashboard", "version": "1"}}}
+            async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as resp:
+                data = await resp.json()
+                latency_ms = round((time.monotonic() - t0) * 1000)
+
+            tools_payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
+            async with session.post(url, json=tools_payload, timeout=aiohttp.ClientTimeout(total=5)) as resp2:
+                tools_data = await resp2.json()
+                tools = [t.get("name") for t in (tools_data.get("result", {}).get("tools") or [])]
+
+        return {"status": "ok", "latency_ms": latency_ms, "tools": tools, "tools_count": len(tools)}
+    except Exception as e:
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        return {"status": "error", "error": str(e), "latency_ms": latency_ms}
+
+
+# ── Project Detail UI ─────────────────────────────────────────────────────────
+
+@router.get("/projects/{project_id}", response_class=HTMLResponse)
+async def dashboard_project_detail(request: Request, project_id: str):
+    proj = get_project_detail(project_id)
+    if not proj:
+        return HTMLResponse("<h3>Project not found</h3>", status_code=404)
+    return templates.TemplateResponse("project_detail.html", {
+        "request": request,
+        "active": "projects",
+        "proj": proj,
+    })
+
+
+@router.post("/projects/{project_id}/services/add", response_class=HTMLResponse)
+async def dashboard_project_add_service(request: Request, project_id: str, service: str = Form(...)):
+    from agent.intake.project_registry import add_project_service
+    try:
+        add_project_service(project_id, service.strip())
+    except Exception:
+        pass
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/services/{service}/delete", response_class=HTMLResponse)
+async def dashboard_project_del_service(request: Request, project_id: str, service: str):
+    from agent.intake.project_registry import remove_project_service
+    try:
+        remove_project_service(project_id, service)
+    except Exception:
+        pass
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/channels/{channel}/config", response_class=HTMLResponse)
+async def dashboard_project_channel_config(
+    request: Request, project_id: str, channel: str,
+    config_json: str = Form("{}"),
+    enabled: str = Form("0"),
+):
+    from agent.intake.project_registry import set_project_channel
+    try:
+        set_project_channel(project_id, channel, json.loads(config_json), enabled == "1")
+    except Exception:
+        pass
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+# ── Investigation Replay ───────────────────────────────────────────────────────
+
+@router.post("/investigations/{investigation_id}/replay")
+async def dashboard_investigation_replay(request: Request, investigation_id: str):
+    """Chạy lại investigation gốc — trigger mới, redirect sang detail."""
+    import aiohttp
+    from fastapi.responses import RedirectResponse
+
+    inv = get_investigation_detail(investigation_id)
+    if not inv:
+        return HTMLResponse("<h3>Investigation not found</h3>", status_code=404)
+
+    project_id = inv.get("project_id", "default")
+    raw = next((e for e in inv.get("raw_events", []) if e["event_type"] == "investigation_start"), None)
+    if not raw:
+        return HTMLResponse("<h3>Cannot replay: no start event</h3>", status_code=400)
+
+    start_payload = raw["payload"]
+    payload = {
+        "service": start_payload.get("service", ""),
+        "scenario": start_payload.get("scenario", ""),
+        "time_window": start_payload.get("time_window", ""),
+    }
+    if start_payload.get("symptom"):
+        payload["symptom"] = start_payload["symptom"]
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"http://localhost:8000/projects/{project_id}/trigger",
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=5),
+            ) as resp:
+                result = await resp.json()
+        new_id = result.get("investigation_id", "")
+        if new_id:
+            return RedirectResponse(f"/dashboard/investigations/{new_id}", status_code=303)
+    except Exception as e:
+        return HTMLResponse(f"<h3>Replay failed: {e}</h3>", status_code=500)
+
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+# ── Demo Mode ─────────────────────────────────────────────────────────────────
+
+@router.get("/demo", response_class=HTMLResponse)
+async def dashboard_demo(request: Request):
+    """Full-screen demo view — ẩn nav, chỉ hiện trigger + SSE stream + verdict."""
+    projects = get_projects_overview()
+    quick_scenarios = [
+        {"label": "payment-gateway timeout (14:00)", "service": "payment-gateway",
+         "scenario": "scenario1", "time_window": "14:00-15:00",
+         "symptom": "payment-gateway: tỷ lệ lỗi tăng đột biến từ 14:05, 87% TimeoutException"},
+        {"label": "provider sập (15:00)", "service": "payment-gateway",
+         "scenario": "scenario2", "time_window": "15:00-16:00",
+         "symptom": "payment-gateway: ConnectionRefusedError 92%, latency bình thường"},
+        {"label": "DB pool exhaustion (08:00)", "service": "payment-gateway",
+         "scenario": "scenario3", "time_window": "08:00-09:00",
+         "symptom": "payment-gateway: AuthServiceTimeoutError 83% từ 08:11"},
+        {"label": "traffic surge (10:00)", "service": "api-gateway",
+         "scenario": "scenario4", "time_window": "10:00-11:00",
+         "symptom": "api-gateway: RateLimitError tăng đột biến, request_count tăng 5x"},
+    ]
+    return templates.TemplateResponse("demo.html", {
+        "request": request,
+        "projects": projects,
+        "quick_scenarios": quick_scenarios,
+    })
 
 
 @router.get("/eval", response_class=HTMLResponse)

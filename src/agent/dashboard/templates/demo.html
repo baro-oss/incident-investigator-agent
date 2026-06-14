@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Investigation Agent — Demo</title>
+  <link rel="stylesheet" href="/dashboard/static/style.css">
+  <style>
+    body { background: #0a0c14; }
+
+    .demo-layout {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 32px 48px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .demo-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .demo-logo {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+    .demo-logo span { color: var(--muted); font-size: 13px; font-weight: 400; margin-left: 8px; }
+
+    .demo-exit {
+      font-size: 12px; color: var(--muted); text-decoration: none;
+      padding: 5px 12px; border: 1px solid var(--border); border-radius: 5px;
+      transition: color .15s;
+    }
+    .demo-exit:hover { color: var(--text); }
+
+    .demo-body {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 24px;
+      flex: 1;
+    }
+
+    /* Left panel — trigger */
+    .trigger-panel { display: flex; flex-direction: column; gap: 16px; }
+
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .scenario-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+      font-size: 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .scenario-btn:hover { border-color: var(--accent); background: var(--surface2); }
+    .scenario-btn.active { border-color: var(--accent); background: #1a1d3a; }
+    .scenario-btn strong { display: block; margin-bottom: 2px; color: var(--accent); }
+
+    .form-group { margin-bottom: 12px; }
+    .form-group label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; }
+    .form-group select, .form-group input, .form-group textarea {
+      width: 100%;
+      padding: 8px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      color: var(--text);
+      font-size: 13px;
+    }
+    .form-group textarea { resize: vertical; font-family: var(--font); }
+
+    .btn-trigger {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-trigger:hover { background: var(--accent-hover); }
+    .btn-trigger:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+
+    /* Right panel — stream */
+    .stream-panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 500px;
+    }
+
+    .stream-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .stream-title { font-size: 14px; font-weight: 600; }
+
+    .stream-box {
+      flex: 1;
+      background: #0d0f1a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-y: auto;
+      min-height: 400px;
+      max-height: 60vh;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .stream-idle {
+      color: var(--muted);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 8px;
+    }
+    .stream-idle .big-icon { font-size: 48px; opacity: .25; }
+
+    .tl-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #1a1d2a;
+      animation: fadeIn .3s ease;
+    }
+    .tl-item:last-child { border-bottom: none; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; } }
+
+    .tl-step { color: var(--muted); font-size: 10px; margin-bottom: 3px; }
+    .tl-tool { color: var(--accent); font-weight: 600; font-size: 13px; }
+    .tl-summary { color: var(--text); font-size: 12px; margin-top: 3px; }
+
+    .verdict-card {
+      margin-top: 16px;
+      padding: 20px;
+      border-radius: 8px;
+      border: 2px solid;
+      animation: fadeIn .4s ease;
+    }
+    .verdict-card.high   { border-color: var(--high);   background: #0a1f0a; }
+    .verdict-card.medium { border-color: var(--medium); background: #1a1200; }
+    .verdict-card.low    { border-color: var(--low);    background: #1a0808; }
+
+    .verdict-badge {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 8px;
+    }
+    .verdict-badge.high   { background: var(--high);   color: #000; }
+    .verdict-badge.medium { background: var(--medium); color: #000; }
+    .verdict-badge.low    { background: var(--low);    color: #fff; }
+
+    .verdict-cause { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .verdict-detail-link { font-size: 12px; color: var(--accent); text-decoration: none; }
+
+    .running-indicator {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--accent);
+    }
+    .running-indicator.visible { display: flex; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+           animation: pulse 1.2s infinite; }
+    .dot:nth-child(2) { animation-delay: .2s; }
+    .dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes pulse { 0%,80%,100%{opacity:.2} 40%{opacity:1} }
+  </style>
+</head>
+<body>
+<div class="demo-layout">
+
+  <div class="demo-header">
+    <div class="demo-logo">
+      ⚡ Investigation Agent
+      <span>AI-powered microservice incident investigation</span>
+    </div>
+    <a href="/dashboard" class="demo-exit">← Dashboard</a>
+  </div>
+
+  <div class="demo-body">
+
+    <!-- Left: Trigger Panel -->
+    <div class="trigger-panel">
+      <div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">QUICK SCENARIOS</div>
+        <div class="scenario-grid" id="scenario-grid">
+          {% for sc in quick_scenarios %}
+          <button class="scenario-btn" onclick="fillScenario({{ loop.index0 }})"
+                  id="sc-btn-{{ loop.index0 }}">
+            <strong>{{ sc.scenario }}</strong>
+            {{ sc.label }}
+          </button>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="card" style="margin:0;padding:16px">
+        <form id="trigger-form" onsubmit="submitTrigger(event)">
+          <div class="form-group">
+            <label>Project</label>
+            <select name="project_id" id="field-project">
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.id }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Service</label>
+            <input type="text" name="service" id="field-service" value="payment-gateway" required>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group">
+              <label>Scenario</label>
+              <input type="text" name="scenario" id="field-scenario" value="scenario1" required>
+            </div>
+            <div class="form-group">
+              <label>Time window</label>
+              <input type="text" name="time_window" id="field-window" value="14:00-15:00" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Symptom</label>
+            <textarea name="symptom" id="field-symptom" rows="2">payment-gateway: tỷ lệ lỗi tăng đột biến từ 14:05, 87% TimeoutException</textarea>
+          </div>
+          <button type="submit" class="btn-trigger" id="btn-trigger">▶ Bắt đầu điều tra</button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Right: Stream Panel -->
+    <div class="stream-panel">
+      <div class="stream-header">
+        <div class="stream-title">Live Investigation Stream</div>
+        <div class="running-indicator" id="running-ind">
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <span>Đang điều tra...</span>
+        </div>
+      </div>
+
+      <div class="stream-box" id="stream-box">
+        <div class="stream-idle" id="stream-idle">
+          <span class="big-icon">⚡</span>
+          <span>Chọn scenario và nhấn Bắt đầu điều tra</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const scenarios = {{ quick_scenarios | tojson }};
+
+function fillScenario(idx) {
+  document.querySelectorAll('.scenario-btn').forEach((b, i) => {
+    b.classList.toggle('active', i === idx);
+  });
+  const sc = scenarios[idx];
+  document.getElementById('field-service').value = sc.service;
+  document.getElementById('field-scenario').value = sc.scenario;
+  document.getElementById('field-window').value = sc.time_window;
+  document.getElementById('field-symptom').value = sc.symptom;
+}
+
+// Fill first scenario on load
+fillScenario(0);
+
+let currentEs = null;
+
+async function submitTrigger(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = Object.fromEntries(new FormData(form));
+
+  // Reset stream
+  const box = document.getElementById('stream-box');
+  box.innerHTML = '';
+  document.getElementById('running-ind').classList.add('visible');
+  document.getElementById('btn-trigger').disabled = true;
+
+  // Close previous SSE
+  if (currentEs) { currentEs.close(); currentEs = null; }
+
+  // Trigger
+  let invId;
+  try {
+    const resp = await fetch('/projects/' + data.project_id + '/trigger', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        service: data.service,
+        scenario: data.scenario,
+        time_window: data.time_window,
+        symptom: data.symptom,
+      }),
+    });
+    const result = await resp.json();
+    invId = result.investigation_id;
+    if (!invId) throw new Error(JSON.stringify(result));
+  } catch(err) {
+    box.innerHTML = `<div style="color:var(--low)">✗ Trigger failed: ${err}</div>`;
+    document.getElementById('running-ind').classList.remove('visible');
+    document.getElementById('btn-trigger').disabled = false;
+    return;
+  }
+
+  // Add header
+  addStreamItem(box, null, `🔍 Investigation started`, `ID: ${invId}`, 'start');
+
+  // SSE stream
+  const es = new EventSource('/dashboard/stream/' + invId);
+  currentEs = es;
+
+  es.addEventListener('tool_call', ev => {
+    const d = JSON.parse(ev.data);
+    addStreamItem(box, d.step, `⟳ ${d.tool_name}`, JSON.stringify(d.tool_input || {}).slice(0, 120), 'tool');
+  });
+
+  es.addEventListener('tool_result', ev => {
+    const d = JSON.parse(ev.data);
+    const el = box.querySelector(`[data-step="${d.step}"] .tl-summary`);
+    if (el) el.textContent = '↳ ' + (d.summary || '').slice(0, 200);
+  });
+
+  es.addEventListener('verdict', ev => {
+    const d = JSON.parse(ev.data);
+    es.close();
+    currentEs = null;
+    document.getElementById('running-ind').classList.remove('visible');
+    document.getElementById('btn-trigger').disabled = false;
+    renderVerdict(box, d, invId);
+  });
+
+  es.addEventListener('done', () => {
+    es.close(); currentEs = null;
+    document.getElementById('running-ind').classList.remove('visible');
+    document.getElementById('btn-trigger').disabled = false;
+  });
+
+  es.onerror = () => {
+    if (es.readyState === EventSource.CLOSED) return;
+    es.close(); currentEs = null;
+    document.getElementById('running-ind').classList.remove('visible');
+    document.getElementById('btn-trigger').disabled = false;
+  };
+}
+
+function addStreamItem(box, step, tool, summary, type) {
+  const div = document.createElement('div');
+  div.className = 'tl-item';
+  if (step) div.dataset.step = step;
+  div.innerHTML = (step ? `<div class="tl-step">STEP ${step}</div>` : '')
+    + `<div class="tl-tool">${tool}</div>`
+    + `<div class="tl-summary">${summary}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderVerdict(box, d, invId) {
+  const conf = (d.confidence || 'low').toLowerCase();
+  const card = document.createElement('div');
+  card.className = `verdict-card ${conf}`;
+  card.innerHTML = `
+    <span class="verdict-badge ${conf}">${conf} confidence</span>
+    <div class="verdict-cause">${d.root_cause || 'No root cause identified'}</div>
+    ${d.evidence_summary ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px">${d.evidence_summary}</div>` : ''}
+    <a class="verdict-detail-link" href="/dashboard/investigations/${invId}" target="_blank">
+      Xem trace chi tiết →
+    </a>
+  `;
+  box.appendChild(card);
+  box.scrollTop = box.scrollHeight;
+}
+</script>
+</body>
+</html>

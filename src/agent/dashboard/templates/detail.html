@@ -3,13 +3,19 @@
 {% block content %}
 
 <div class="page-header">
-  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
-    <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px">← Investigations</a>
-    <span style="color:var(--border)">·</span>
-    <code style="font-size:13px;color:var(--accent)">{{ inv.investigation_id }}</code>
-    {% if inv.get('project_id') %}
-    <span class="tag">{{ inv.project_id }}</span>
-    {% endif %}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px">← Investigations</a>
+      <span style="color:var(--border)">·</span>
+      <code style="font-size:13px;color:var(--accent)">{{ inv.investigation_id }}</code>
+      {% if inv.get('project_id') %}
+      <span class="tag">{{ inv.project_id }}</span>
+      {% endif %}
+    </div>
+    <form method="post" action="/dashboard/investigations/{{ inv.investigation_id }}/replay"
+          onsubmit="return confirm('Chạy lại investigation này?')">
+      <button type="submit" class="btn btn-ghost" style="font-size:12px">⟳ Replay</button>
+    </form>
   </div>
   <h1 style="font-size:15px;font-weight:400;color:var(--muted)">{{ inv.get('symptom','') }}</h1>
   <div class="meta">

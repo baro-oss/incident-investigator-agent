@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Project: {{ proj.id }}{% endblock %}
+{% block content %}
+
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+  <div>
+    <h1 style="font-size:18px;font-weight:500">{{ proj.name }}</h1>
+    <div class="meta">
+      <code style="color:var(--accent)">{{ proj.id }}</code>
+      {% if proj.description %} · {{ proj.description }}{% endif %}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px">
+    <a href="/dashboard/trigger?project_id={{ proj.id }}"
+       class="btn btn-primary" style="font-size:12px">▶ Trigger</a>
+    <a href="/dashboard/projects" class="btn btn-ghost" style="font-size:12px">← Projects</a>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+  <!-- LLM Config -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">LLM Config</h3>
+    <table style="width:100%;font-size:13px">
+      <tr>
+        <td style="color:var(--muted);padding:4px 0;width:40%">Provider</td>
+        <td><code>{{ proj.llm_provider }}</code></td>
+      </tr>
+      {% if proj.llm_model %}
+      <tr>
+        <td style="color:var(--muted);padding:4px 0">Model</td>
+        <td><code>{{ proj.llm_model }}</code></td>
+      </tr>
+      {% endif %}
+    </table>
+    <a href="/projects/{{ proj.id }}/llm"
+       style="font-size:11px;color:var(--muted);text-decoration:none;display:inline-block;margin-top:8px">
+      Chỉnh qua API: PATCH /projects/{{ proj.id }}/llm →
+    </a>
+  </div>
+
+  <!-- Services -->
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <h3 style="margin:0">Services ({{ proj.services|length }})</h3>
+    </div>
+    {% if proj.services %}
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+      {% for svc in proj.services %}
+      <div style="display:flex;align-items:center;gap:4px;background:var(--surface2);
+                  border:1px solid var(--border);border-radius:4px;padding:3px 8px">
+        <span style="font-size:12px">{{ svc }}</span>
+        <form method="post" action="/dashboard/projects/{{ proj.id }}/services/{{ svc }}/delete"
+              style="display:inline" onsubmit="return confirm('Xóa service {{ svc }}?')">
+          <button type="submit"
+                  style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;
+                         padding:0 0 0 4px;line-height:1" title="Xóa">✕</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Chưa có service nào.</p>
+    {% endif %}
+    <form method="post" action="/dashboard/projects/{{ proj.id }}/services/add"
+          style="display:flex;gap:6px">
+      <input type="text" name="service" placeholder="payment-gateway" required
+             style="flex:1;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
+                    border-radius:5px;color:var(--text);font-size:12px">
+      <button type="submit" class="btn btn-primary" style="font-size:12px;padding:6px 12px">+ Thêm</button>
+    </form>
+  </div>
+
+</div>
+
+<!-- Alert Channels -->
+<div class="card" style="margin-top:0">
+  <h3 style="margin-bottom:14px">Alert Channels</h3>
+  {% set ch_icons = {'telegram': '✈', 'teams': '⊞', 'email': '✉'} %}
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+    {% for ch_name, ch_data in proj.channels.items() %}
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:16px">{{ ch_icons.get(ch_name, '·') }}</span>
+          <span style="font-size:13px;font-weight:500;text-transform:capitalize">{{ ch_name }}</span>
+        </div>
+        {% if ch_data.enabled %}
+        <span class="badge badge-high" style="font-size:10px">ON</span>
+        {% else %}
+        <span class="badge badge-default" style="font-size:10px">OFF</span>
+        {% endif %}
+      </div>
+
+      <!-- Config textarea -->
+      <form method="post" action="/dashboard/projects/{{ proj.id }}/channels/{{ ch_name }}/config">
+        <textarea name="config_json" rows="3"
+                  style="width:100%;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);
+                         border-radius:4px;color:var(--text);font-size:11px;font-family:monospace;
+                         resize:vertical;margin-bottom:8px">{{ ch_data.config }}</textarea>
+        <div style="display:flex;gap:6px">
+          <input type="hidden" name="enabled" value="{{ '1' if ch_data.enabled else '0' }}">
+          <button type="submit" class="btn btn-ghost" style="font-size:11px;padding:4px 10px;flex:1">
+            💾 Lưu config
+          </button>
+          <button type="submit" name="enabled" value="{{ '0' if ch_data.enabled else '1' }}"
+                  class="btn {{ 'btn-ghost' if ch_data.enabled else 'btn-primary' }}"
+                  style="font-size:11px;padding:4px 10px">
+            {{ '⊠ Tắt' if ch_data.enabled else '⊡ Bật' }}
+          </button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- MCP Servers -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">MCP Servers ({{ proj.mcp_servers|length }})</h3>
+    <a href="/dashboard/mcp" style="font-size:12px;color:var(--accent);text-decoration:none">
+      + Đăng ký mới →
+    </a>
+  </div>
+  {% if proj.mcp_servers %}
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Name</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">URL</th>
+        <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for srv in proj.mcp_servers %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 6px">{{ srv.name }}</td>
+        <td style="padding:7px 6px"><code style="font-size:11px">{{ srv.url }}</code></td>
+        <td style="text-align:center;padding:7px 6px">
+          {% if srv.enabled %}
+          <span class="badge badge-high" style="font-size:10px">enabled</span>
+          {% else %}
+          <span class="badge badge-default" style="font-size:10px">disabled</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:12px">Chưa có MCP server nào gắn với project này.</p>
+  {% endif %}
+</div>
+
+<!-- Recent Investigations -->
+<div class="card">
+  <h3 style="margin-bottom:12px">Investigations gần đây</h3>
+  {% if proj.recent_investigations %}
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Thời gian</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Scenario</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Root Cause</th>
+        <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">Confidence</th>
+        <th style="padding:5px 6px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for inv in proj.recent_investigations %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 6px;color:var(--muted)">{{ inv.started_at }}</td>
+        <td style="padding:7px 6px"><span class="tag">{{ inv.scenario }}</span></td>
+        <td style="padding:7px 6px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          {{ inv.root_cause or '—' }}
+        </td>
+        <td style="text-align:center;padding:7px 6px">
+          {% if inv.confidence %}
+          <span class="badge badge-{{ inv.confidence }}">{{ inv.confidence }}</span>
+          {% else %}
+          <span style="color:var(--muted)">—</span>
+          {% endif %}
+        </td>
+        <td style="padding:7px 6px;white-space:nowrap">
+          <a href="/dashboard/investigations/{{ inv.investigation_id }}"
+             style="color:var(--accent);text-decoration:none;font-size:11px">detail →</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:12px">Chưa có investigation nào cho project này.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

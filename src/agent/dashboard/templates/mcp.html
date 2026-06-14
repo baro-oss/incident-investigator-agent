@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}MCP Registry{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1 style="font-size:18px;font-weight:500">MCP Registry</h1>
+  <div class="meta">Quản lý MCP servers — đăng ký, ping, xóa</div>
+</div>
+
+{% if register_error %}
+<div class="card" style="border-color:#ef4444;background:#1a0a0a;margin-bottom:16px;padding:12px 16px">
+  <span style="color:#ef4444;font-size:13px">⚠ {{ register_error }}</span>
+</div>
+{% endif %}
+
+<!-- Register Form -->
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header" style="margin-bottom:12px">
+    <h3 style="margin:0">Đăng ký MCP Server mới</h3>
+  </div>
+  <form method="post" action="/dashboard/mcp/register"
+        style="display:grid;grid-template-columns:1fr 2fr 1fr auto;gap:10px;align-items:end">
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Name</label>
+      <input type="text" name="name" placeholder="my-mcp-server" required
+             style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                    border-radius:5px;color:var(--text);font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">URL</label>
+      <input type="url" name="url" placeholder="http://localhost:9000/mcp" required
+             style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                    border-radius:5px;color:var(--text);font-size:13px">
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Project</label>
+      <select name="project_id"
+              style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+                     border-radius:5px;color:var(--text);font-size:13px">
+        {% for pid in projects %}
+        <option value="{{ pid }}">{{ pid }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary" style="padding:7px 16px">+ Register</button>
+    </div>
+  </form>
+</div>
+
+<!-- Servers Table -->
+{% if servers %}
+<div class="card">
+  <h3 style="margin-bottom:14px">{{ servers|length }} Server{% if servers|length != 1 %}s{% endif %}</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Name</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">URL</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Project</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500">Status</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Ping Result</th>
+        <th style="padding:6px 8px"></th>
+      </tr>
+    </thead>
+    <tbody id="mcp-table-body">
+    {% for s in servers %}
+    <tr id="row-{{ s.id }}" style="border-bottom:1px solid var(--border)">
+      <td style="padding:9px 8px;font-weight:500">{{ s.name }}</td>
+      <td style="padding:9px 8px"><code style="font-size:11px">{{ s.url }}</code></td>
+      <td style="padding:9px 8px">
+        <a href="/dashboard/projects/{{ s.project_id }}" style="color:var(--accent);text-decoration:none">
+          {{ s.project_id }}
+        </a>
+      </td>
+      <td style="text-align:center;padding:9px 8px">
+        {% if s.enabled %}
+        <span class="badge badge-high">enabled</span>
+        {% else %}
+        <span class="badge badge-default">disabled</span>
+        {% endif %}
+      </td>
+      <td style="padding:9px 8px">
+        <span id="ping-result-{{ s.id }}" style="color:var(--muted);font-size:12px">—</span>
+      </td>
+      <td style="padding:9px 8px;white-space:nowrap;display:flex;gap:6px">
+        <button onclick="pingServer({{ s.id }})"
+                class="btn btn-ghost" style="font-size:11px;padding:4px 10px">
+          ⟳ Ping
+        </button>
+        <form method="post" action="/dashboard/mcp/{{ s.id }}/delete"
+              onsubmit="return confirm('Xóa server {{ s.name }}?')">
+          <button type="submit" class="btn" style="font-size:11px;padding:4px 10px;
+                  background:#2a0a0a;border-color:#5a1a1a;color:#f87171">
+            ✕ Xóa
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;padding:48px;color:var(--muted)">
+  Chưa có MCP server nào. Đăng ký server đầu tiên ở trên.
+</div>
+{% endif %}
+
+<script>
+async function pingServer(id) {
+  const el = document.getElementById('ping-result-' + id);
+  el.style.color = 'var(--muted)';
+  el.textContent = '⟳ đang ping...';
+  try {
+    const resp = await fetch('/dashboard/mcp/' + id + '/ping', {method: 'POST'});
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      const toolList = (data.tools || []).slice(0, 5).join(', ');
+      const more = data.tools_count > 5 ? ` +${data.tools_count - 5}` : '';
+      el.style.color = 'var(--high)';
+      el.innerHTML = `✓ ${data.latency_ms}ms · ${data.tools_count} tools`
+        + (toolList ? `<br><span style="color:var(--muted);font-size:11px">${toolList}${more}</span>` : '');
+    } else {
+      el.style.color = 'var(--low)';
+      el.textContent = '✗ ' + (data.error || 'error') + (data.latency_ms ? ` (${data.latency_ms}ms)` : '');
+    }
+  } catch(e) {
+    el.style.color = 'var(--low)';
+    el.textContent = '✗ network error';
+  }
+}
+</script>
+
+{% endblock %}
