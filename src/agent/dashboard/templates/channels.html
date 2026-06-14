@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Alert Channels{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1 style="font-size:18px;font-weight:500">Alert Channels</h1>
+  <div class="meta">Cấu hình kênh thông báo per-project</div>
+</div>
+
+{% if channel_rows %}
+
+{% set channel_icons = {'telegram': '✈', 'teams': '⊞', 'email': '✉'} %}
+
+{% set ns = namespace(current_project='') %}
+{% for row in channel_rows %}
+{% if row.project_id != ns.current_project %}
+{% set ns.current_project = row.project_id %}
+
+<div class="card" style="margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <h3 style="margin:0">{{ row.project_id }}</h3>
+    <span class="tag">project</span>
+  </div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+
+    {% for row2 in channel_rows if row2.project_id == row.project_id %}
+    <div style="border:1px solid var(--border);border-radius:6px;padding:14px 18px;min-width:160px;
+                background:{{ 'var(--surface)' if row2.enabled else '#0d0d0d' }}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+        <span style="font-size:18px">{{ channel_icons.get(row2.channel, '·') }}</span>
+        <span style="font-size:13px;font-weight:500;text-transform:capitalize">{{ row2.channel }}</span>
+      </div>
+      <div style="margin-bottom:12px">
+        {% if row2.enabled %}
+        <span class="badge badge-high">enabled</span>
+        {% else %}
+        <span class="badge badge-default">disabled</span>
+        {% endif %}
+      </div>
+      <form method="post" action="/dashboard/channels/{{ row2.project_id }}/{{ row2.channel }}/toggle">
+        <button type="submit" class="btn {{ 'btn-ghost' if row2.enabled else 'btn-primary' }}"
+                style="font-size:11px;padding:4px 10px;width:100%">
+          {{ 'Tắt' if row2.enabled else 'Bật' }}
+        </button>
+      </form>
+    </div>
+    {% endfor %}
+
+  </div>
+</div>
+
+{% endif %}
+{% endfor %}
+
+{% else %}
+<div class="card" style="text-align:center;padding:40px;color:var(--muted)">
+  Chưa có project nào. <a href="/dashboard/projects" style="color:var(--accent)">Tạo project →</a>
+</div>
+{% endif %}
+
+<div style="margin-top:8px;font-size:12px;color:var(--muted)">
+  Thay đổi có hiệu lực ngay với phiên điều tra tiếp theo.
+</div>
+
+{% endblock %}

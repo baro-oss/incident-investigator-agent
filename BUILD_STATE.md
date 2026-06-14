@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 3 — Ngày 15 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 3 — Ngày 16 (Resilience + CLI + Health Dashboard)
-**Cổng kiểm gần nhất đã qua:** KB1+KB2 pass qua LangGraph + Multi-agent đúng + nhanh hơn ✅
+**Giai đoạn:** Phase 3 — Ngày 16 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 3 — Ngày 17 (Dashboard v3 Full Platform UI)
+**Cổng kiểm gần nhất đã qua:** Resilience + CLI + Health/Metrics/Channels dashboard live ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -49,10 +49,51 @@
 | Ngày | Nội dung | Trạng thái |
 |------|----------|------------|
 | 15 | LangGraph Migration + Multi-agent | ✅ |
-| 16 | Resilience + CLI + Health Dashboard | ☐ |
+| 16 | Resilience + CLI + Health Dashboard | ✅ |
 | 17 | Dashboard v3 Full Platform UI | ☐ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 20 — 2026-06-14] — Ngày 16: Resilience + CLI + Health Dashboard
+
+**Đã làm:**
+- `src/agent/engine/resilience.py` (mới):
+  - `with_retry(coro_fn, max_attempts=3, base_delay=2.0)` — exponential backoff, retryable: 429/rate_limit/overload/503/502/timeout/connection
+  - `ConcurrencyLimiter(max_concurrent=3)` — asyncio.Semaphore, `__aenter__`/`__aexit__`, `status_dict()`
+  - `CircuitBreaker(failure_threshold=3, recovery_timeout=60.0)` — state machine: closed→open→half-open→closed; `call(coro_fn)`, `status_dict()`
+  - `_alert_circuit_open()` — push Telegram khi circuit mở (no-op nếu không có token)
+  - Module singletons: `investigation_limiter = ConcurrencyLimiter(3)`, `llm_circuit_breaker = CircuitBreaker(...)`
+- `src/agent/engine/graph.py` — `decide_node` wrap LLM call:
+  - Thay `await decide_next_action(...)` bằng `await llm_circuit_breaker.call(lambda: with_retry(lambda: decide_next_action(...)))`
+- `src/agent/intake/runner.py` — tích hợp `investigation_limiter`:
+  - Import + log `limiter.status_dict()` khi bắt đầu
+  - `async with investigation_limiter:` bao quanh toàn bộ engine execution (try/except/finally bên trong)
+  - `save_pattern()` và `push_verdict()` ở ngoài limiter block (chạy dù limiter release)
+- `scripts/chat.py` (mới) — CLI REPL:
+  - `argparse`: `--project`, `--multi-agent`, `--steps`
+  - Quick scenario menu: 4 kịch bản preset + nhập thủ công
+  - Chạy engine trực tiếp (không qua HTTP)
+  - In verdict formatted: root_cause, confidence, stop_reason, steps, tokens
+  - Nạp `.env` tự động
+- `src/agent/dashboard/queries.py` — thêm 2 query functions:
+  - `get_metrics_live(service=None)` — baseline vs hiện tại mỗi metric × service × scenario, tính Δ%
+  - `get_channel_config()` — project × channel × enabled/config từ `project_alert_channels`
+- `src/agent/dashboard/router.py` — thêm 4 routes:
+  - `GET /dashboard/health` — LLM info, circuit breaker, concurrency limiter, MCP servers
+  - `GET /dashboard/metrics-live` — table baseline vs current, filter by service, 30s auto-refresh
+  - `GET /dashboard/channels` — per-project channel cards (Telegram/Teams/Email toggle)
+  - `POST /dashboard/channels/{project_id}/{channel}/toggle` — flip enabled, redirect back
+- `src/agent/dashboard/templates/health.html` (mới) — 4 cards: LLM, Circuit Breaker, Queue, MCP
+- `src/agent/dashboard/templates/metrics_live.html` (mới) — table + JS auto-reload 30s countdown
+- `src/agent/dashboard/templates/channels.html` (mới) — per-project channel toggle cards
+- `src/agent/dashboard/templates/base.html` — thêm 3 nav links: Health, Metrics Live, Channels
+
+**Verify (browser):**
+- `/dashboard/health` — LLM anthropic/claude-sonnet-4-6, API key SET, Circuit Breaker CLOSED 0/3, Queue 0/3, MCP localhost:9000 enabled ✅
+- `/dashboard/metrics-live` — bảng baseline/hiện tại, Δ% đỏ/cam/xanh, auto-refresh countdown ✅
+- `/dashboard/channels` — DEFAULT project, 3 kênh (Telegram/Teams/Email DISABLED), nút Bật ✅
+
+**Cổng Ngày 16 ✅ PASS:** health page live (circuit breaker + queue), CLI script tạo, 3 phiên concurrent không conflict (ConcurrencyLimiter semaphore max=3).
 
 ### [Session 19 — 2026-06-14] — Ngày 15: LangGraph Migration + Multi-agent
 

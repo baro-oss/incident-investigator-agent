@@ -14,6 +14,7 @@ from typing import Dict, List, Optional, Set
 
 from agent.engine.loop import InvestigationEngine
 from agent.engine.multi_agent import MultiAgentEngine
+from agent.engine.resilience import investigation_limiter
 from agent.engine.state import InvestigationState
 from agent.intake.normalizer import InvestigationRequest
 from agent.llm.factory import create_llm_client
@@ -108,88 +109,91 @@ async def run_investigation_background(
         return
 
     _active_investigations.add(key)
-    logger.info("Bắt đầu background investigation: %s", key)
+    logger.info("Bắt đầu background investigation: %s | limiter=%s",
+                key, investigation_limiter.status_dict())
 
     mcp_clients: List[MCPClient] = []
     state: Optional[InvestigationState] = None
 
-    try:
-        project_id = req.project_id
-
-        # Đọc services của project → gợi ý scope điều tra
-        available_services = _get_project_services(project_id)
-        if available_services:
-            logger.info("[%s] Project services: %s", project_id, available_services)
-
-        # Connect MCP servers của project (+ env var fallback)
-        mcp_urls = _get_mcp_urls_for_project(project_id)
-        if mcp_urls:
-            logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_urls), mcp_urls)
-            mcp_clients = await _connect_mcp_clients(mcp_urls)
-
-        # Xây tool registry: local + MCP
-        tools = await build_tool_registry(mcp_clients if mcp_clients else None)
-
-        # Resolve LLM: project DB config → global env vars
-        llm_cfg = None
+    # ConcurrencyLimiter: block nếu đã có 3 phiên chạy, queue cho đến khi có slot
+    async with investigation_limiter:
         try:
-            from agent.intake.project_registry import get_project_llm
-            llm_cfg = get_project_llm(project_id)
-        except Exception as e:
-            logger.warning("Không đọc được project LLM config: %s", e)
+            project_id = req.project_id
 
-        if llm_cfg:
-            llm = create_llm_client(
-                provider=llm_cfg.get("provider"),
-                model=llm_cfg.get("model"),
-                extra_config=llm_cfg.get("config"),
-            )
-            logger.info("[%s] Dùng LLM từ project config: provider=%s model=%s",
-                        project_id, llm_cfg.get("provider"), llm_cfg.get("model"))
-        else:
-            llm = create_llm_client()
+            # Đọc services của project → gợi ý scope điều tra
+            available_services = _get_project_services(project_id)
+            if available_services:
+                logger.info("[%s] Project services: %s", project_id, available_services)
 
-        # Long-term memory: warm-start hint
-        warm_hint = get_warm_start_hint(
-            project_id=project_id,
-            service=req.service,
-            error_keywords=None,
-        )
-        if warm_hint:
-            logger.info("[%s] Warm-start hint: %s", project_id, warm_hint[:80])
+            # Connect MCP servers của project (+ env var fallback)
+            mcp_urls = _get_mcp_urls_for_project(project_id)
+            if mcp_urls:
+                logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_urls), mcp_urls)
+                mcp_clients = await _connect_mcp_clients(mcp_urls)
 
-        # Chọn engine: MultiAgent (parallel) hoặc single-agent (LangGraph)
-        if req.multi_agent:
-            engine_obj = MultiAgentEngine(llm=llm, all_tools=tools, step_budget=step_budget)
-            logger.info("[%s] Dùng MultiAgentEngine (parallel specialists)", key)
-        else:
-            engine_obj = InvestigationEngine(llm=llm, tools=tools, step_budget=step_budget)
+            # Xây tool registry: local + MCP
+            tools = await build_tool_registry(mcp_clients if mcp_clients else None)
 
-        state = await asyncio.wait_for(
-            engine_obj.run(
-                symptom=req.symptom,
-                time_window=req.time_window,
-                scenario=req.scenario,
-                date=req.date,
+            # Resolve LLM: project DB config → global env vars
+            llm_cfg = None
+            try:
+                from agent.intake.project_registry import get_project_llm
+                llm_cfg = get_project_llm(project_id)
+            except Exception as e:
+                logger.warning("Không đọc được project LLM config: %s", e)
+
+            if llm_cfg:
+                llm = create_llm_client(
+                    provider=llm_cfg.get("provider"),
+                    model=llm_cfg.get("model"),
+                    extra_config=llm_cfg.get("config"),
+                )
+                logger.info("[%s] Dùng LLM từ project config: provider=%s model=%s",
+                            project_id, llm_cfg.get("provider"), llm_cfg.get("model"))
+            else:
+                llm = create_llm_client()
+
+            # Long-term memory: warm-start hint
+            warm_hint = get_warm_start_hint(
                 project_id=project_id,
-                available_services=available_services or None,
-                warm_start_hint=warm_hint,
-                investigation_id=key,
-            ),
-            timeout=300.0,
-        )
+                service=req.service,
+                error_keywords=None,
+            )
+            if warm_hint:
+                logger.info("[%s] Warm-start hint: %s", project_id, warm_hint[:80])
 
-    except asyncio.TimeoutError:
-        logger.error("Investigation timeout sau 5 phút: %s", key)
-        state = _make_error_state(req, "timeout")
+            # Chọn engine: MultiAgent (parallel) hoặc single-agent (LangGraph)
+            if req.multi_agent:
+                engine_obj = MultiAgentEngine(llm=llm, all_tools=tools, step_budget=step_budget)
+                logger.info("[%s] Dùng MultiAgentEngine (parallel specialists)", key)
+            else:
+                engine_obj = InvestigationEngine(llm=llm, tools=tools, step_budget=step_budget)
 
-    except Exception as e:
-        logger.error("Investigation lỗi không mong đợi: %s — %s", key, e)
-        state = _make_error_state(req, f"error: {e}")
+            state = await asyncio.wait_for(
+                engine_obj.run(
+                    symptom=req.symptom,
+                    time_window=req.time_window,
+                    scenario=req.scenario,
+                    date=req.date,
+                    project_id=project_id,
+                    available_services=available_services or None,
+                    warm_start_hint=warm_hint,
+                    investigation_id=key,
+                ),
+                timeout=300.0,
+            )
 
-    finally:
-        _active_investigations.discard(key)
-        await _close_mcp_clients(mcp_clients)
+        except asyncio.TimeoutError:
+            logger.error("Investigation timeout sau 5 phút: %s", key)
+            state = _make_error_state(req, "timeout")
+
+        except Exception as e:
+            logger.error("Investigation lỗi không mong đợi: %s — %s", key, e)
+            state = _make_error_state(req, f"error: {e}")
+
+        finally:
+            _active_investigations.discard(key)
+            await _close_mcp_clients(mcp_clients)
 
     # Long-term memory: lưu pattern nếu verdict HIGH
     if state and state.verdict and state.verdict.confidence == "high":

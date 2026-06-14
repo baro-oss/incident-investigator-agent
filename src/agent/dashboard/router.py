@@ -16,6 +16,8 @@ from agent.dashboard.queries import (
     get_investigation_detail,
     get_projects_overview,
     list_investigations,
+    get_metrics_live,
+    get_channel_config,
 )
 
 _HERE = Path(__file__).parent
@@ -233,6 +235,99 @@ async def dashboard_projects(request: Request):
         "active": "projects",
         "projects": projects,
     })
+
+
+@router.get("/health", response_class=HTMLResponse)
+async def dashboard_health(request: Request):
+    """Trang sức khoẻ hệ thống: LLM, limiter, circuit breaker, MCP."""
+    import os
+    from agent.engine.resilience import investigation_limiter, llm_circuit_breaker
+    from agent.intake.mcp_registry import list_servers
+
+    limiter = investigation_limiter.status_dict()
+    breaker = llm_circuit_breaker.status_dict()
+
+    provider = os.getenv("LLM_PROVIDER", "anthropic")
+    model = os.getenv("LLM_MODEL", os.getenv("ANTHROPIC_MODEL", "claude-3-5-haiku-20241022"))
+    llm_key_set = bool(
+        os.getenv("ANTHROPIC_API_KEY") or
+        os.getenv("OPENAI_API_KEY") or
+        os.getenv("GROQ_API_KEY")
+    )
+
+    mcp_servers_raw = []
+    try:
+        mcp_servers_raw = list_servers(project_id=None)
+    except Exception:
+        pass
+
+    return templates.TemplateResponse("health.html", {
+        "request": request,
+        "active": "health",
+        "limiter": limiter,
+        "breaker": breaker,
+        "provider": provider,
+        "model": model,
+        "llm_key_set": llm_key_set,
+        "mcp_servers": mcp_servers_raw,
+    })
+
+
+@router.get("/metrics-live", response_class=HTMLResponse)
+async def dashboard_metrics_live(request: Request, service: Optional[str] = None):
+    """Live metrics panel — baseline vs current per service."""
+    metrics = get_metrics_live(service=service)
+    projects = get_projects_overview()
+    all_services = sorted({m["service"] for m in metrics})
+
+    return templates.TemplateResponse("metrics_live.html", {
+        "request": request,
+        "active": "metrics",
+        "metrics": metrics,
+        "selected_service": service or "",
+        "all_services": all_services,
+        "projects": projects,
+    })
+
+
+@router.get("/channels", response_class=HTMLResponse)
+async def dashboard_channels(request: Request):
+    """Alert channel config per project."""
+    channels = get_channel_config()
+    projects = get_projects_overview()
+
+    return templates.TemplateResponse("channels.html", {
+        "request": request,
+        "active": "channels",
+        "channel_rows": channels,
+        "projects": projects,
+    })
+
+
+@router.post("/channels/{project_id}/{channel}/toggle", response_class=HTMLResponse)
+async def dashboard_channel_toggle(request: Request, project_id: str, channel: str):
+    """Toggle enable/disable một kênh alert."""
+    from agent.storage.db import open_db
+    conn = open_db()
+    existing = conn.execute(
+        "SELECT enabled FROM project_alert_channels WHERE project_id=? AND channel=?",
+        (project_id, channel),
+    ).fetchone()
+    if existing:
+        new_val = 0 if existing["enabled"] else 1
+        conn.execute(
+            "UPDATE project_alert_channels SET enabled=? WHERE project_id=? AND channel=?",
+            (new_val, project_id, channel),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO project_alert_channels (project_id, channel, config, enabled) VALUES (?,?,?,1)",
+            (project_id, channel, "{}"),
+        )
+    conn.commit()
+    conn.close()
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse("/dashboard/channels", status_code=303)
 
 
 @router.get("/eval", response_class=HTMLResponse)

@@ -178,6 +178,77 @@ def get_projects_overview() -> List[Dict[str, Any]]:
     return result
 
 
+def get_metrics_live(service: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Baseline vs hiện tại mỗi metric_name × service."""
+    conn = open_db()
+
+    params: list = []
+    service_clause = ""
+    if service:
+        service_clause = "WHERE m.service = ?"
+        params.append(service)
+
+    rows = conn.execute(f"""
+        SELECT
+            m.service,
+            m.scenario,
+            m.metric_name,
+            ROUND(AVG(CASE WHEN m.is_baseline=0 THEN m.value END), 2) AS current_avg,
+            ROUND(AVG(CASE WHEN m.is_baseline=1 THEN m.value END), 2) AS baseline_avg,
+            COUNT(CASE WHEN m.is_baseline=0 THEN 1 END) AS current_samples,
+            MAX(CASE WHEN m.is_baseline=0 THEN m.timestamp END) AS last_ts
+        FROM metrics m
+        {service_clause}
+        GROUP BY m.service, m.scenario, m.metric_name
+        ORDER BY m.service, m.metric_name
+    """, params).fetchall()
+    conn.close()
+
+    result = []
+    for r in rows:
+        cur = r["current_avg"] or 0
+        base = r["baseline_avg"] or 0
+        pct_change = round((cur - base) / base * 100, 1) if base else None
+        result.append({
+            "service": r["service"],
+            "scenario": r["scenario"],
+            "metric_name": r["metric_name"],
+            "current_avg": cur,
+            "baseline_avg": base,
+            "pct_change": pct_change,
+            "current_samples": r["current_samples"],
+            "last_ts": (r["last_ts"] or "")[:19].replace("T", " "),
+        })
+    return result
+
+
+def get_channel_config() -> List[Dict[str, Any]]:
+    """Alert channel config: mỗi hàng là (project_id, channel, enabled, config)."""
+    conn = open_db()
+    # Lấy tất cả project × channel chuẩn; join bảng config
+    projects = conn.execute("SELECT id FROM projects ORDER BY id").fetchall()
+    channels = ["telegram", "teams", "email"]
+
+    result = []
+    for p in projects:
+        pid = p["id"]
+        for ch in channels:
+            row = conn.execute(
+                "SELECT enabled, config FROM project_alert_channels WHERE project_id=? AND channel=?",
+                (pid, ch),
+            ).fetchone()
+            enabled = row["enabled"] if row else 0
+            config_str = row["config"] if row else "{}"
+            result.append({
+                "project_id": pid,
+                "channel": ch,
+                "enabled": bool(enabled),
+                "config": config_str,
+            })
+    conn.close()
+    return result
+
+
 def get_eval_summary() -> List[Dict[str, Any]]:
     """Kết quả eval gần nhất per scenario."""
     conn = open_db()

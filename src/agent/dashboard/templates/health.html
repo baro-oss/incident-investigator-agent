@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}System Health{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1 style="font-size:18px;font-weight:500">System Health</h1>
+  <div class="meta">Trạng thái real-time — tải lại để cập nhật</div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+
+  <!-- LLM Status -->
+  <div class="card">
+    <h3 style="margin-bottom:14px">LLM</h3>
+    <table style="width:100%;font-size:13px">
+      <tr>
+        <td style="color:var(--muted);padding:5px 0;width:40%">Provider</td>
+        <td><code>{{ provider }}</code></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);padding:5px 0">Model</td>
+        <td><code>{{ model }}</code></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);padding:5px 0">API key</td>
+        <td>
+          {% if llm_key_set %}
+          <span class="badge badge-high">SET</span>
+          {% else %}
+          <span class="badge badge-default">MISSING</span>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- Circuit Breaker -->
+  <div class="card">
+    <h3 style="margin-bottom:14px">Circuit Breaker — LLM</h3>
+    {% set state = breaker.state %}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="width:14px;height:14px;border-radius:50%;background:
+        {{ '#4caf50' if state == 'closed' else ('#ff9800' if state == 'half-open' else '#f44336') }}">
+      </div>
+      <span style="font-size:15px;font-weight:500;text-transform:uppercase">{{ state }}</span>
+    </div>
+    <table style="width:100%;font-size:13px">
+      <tr>
+        <td style="color:var(--muted);padding:4px 0;width:55%">Failures liên tiếp</td>
+        <td><strong>{{ breaker.failures }}</strong> / {{ breaker.threshold }}</td>
+      </tr>
+      {% if breaker.remaining_s > 0 %}
+      <tr>
+        <td style="color:var(--muted);padding:4px 0">Recovery còn</td>
+        <td><strong>{{ breaker.remaining_s }}s</strong></td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <!-- Concurrency Limiter -->
+  <div class="card">
+    <h3 style="margin-bottom:14px">Investigation Queue</h3>
+    <table style="width:100%;font-size:13px">
+      <tr>
+        <td style="color:var(--muted);padding:4px 0;width:55%">Đang chạy</td>
+        <td>
+          <strong>{{ limiter.active }}</strong> / {{ limiter.max_concurrent }}
+          <div style="width:100%;background:var(--border);border-radius:2px;height:4px;margin-top:4px">
+            <div style="width:{{ [limiter.active * 100 // limiter.max_concurrent, 100] | min }}%;
+                        background:var(--accent);border-radius:2px;height:4px"></div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);padding:4px 0">Đang xếp hàng</td>
+        <td><strong>{{ limiter.queued }}</strong></td>
+      </tr>
+      <tr>
+        <td style="color:var(--muted);padding:4px 0">Slot khả dụng</td>
+        <td><strong>{{ limiter.available }}</strong></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- MCP Servers -->
+  <div class="card">
+    <h3 style="margin-bottom:14px">MCP Servers</h3>
+    {% if mcp_servers %}
+    <table style="width:100%;font-size:12px">
+      <thead>
+        <tr>
+          <th style="text-align:left;color:var(--muted);padding-bottom:6px">URL</th>
+          <th style="text-align:left;color:var(--muted);padding-bottom:6px">Project</th>
+          <th style="text-align:center;color:var(--muted);padding-bottom:6px">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in mcp_servers %}
+        <tr>
+          <td style="padding:4px 0"><code style="font-size:11px">{{ s.url }}</code></td>
+          <td style="padding:4px 0">{{ s.project_id or '—' }}</td>
+          <td style="text-align:center;padding:4px 0">
+            {% if s.enabled %}
+            <span class="badge badge-high" style="font-size:10px">enabled</span>
+            {% else %}
+            <span class="badge badge-default" style="font-size:10px">disabled</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="color:var(--muted);font-size:13px">Không có MCP server nào được đăng ký.</p>
+    {% endif %}
+    <a href="/projects/default/mcp-servers" style="font-size:12px;color:var(--accent);text-decoration:none;display:inline-block;margin-top:8px">
+      Quản lý MCP →
+    </a>
+  </div>
+
+</div>
+
+<div style="margin-top:16px">
+  <a href="/dashboard/health" class="btn btn-ghost" style="font-size:12px">↺ Tải lại</a>
+  <a href="/dashboard" class="btn btn-ghost" style="font-size:12px;margin-left:8px">← Investigations</a>
+</div>
+
+{% endblock %}

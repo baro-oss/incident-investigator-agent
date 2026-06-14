@@ -84,10 +84,14 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
 
     tracer.start_step(current_step)
 
-    # --- Call pure function ---
+    # --- Call pure function: retry + circuit breaker ---
+    from agent.engine.resilience import with_retry, llm_circuit_breaker
+
     try:
         t_llm = time.monotonic()
-        tool_call, vtext, llm_resp = await decide_next_action(inv, llm, tools, last_obs)
+        tool_call, vtext, llm_resp = await llm_circuit_breaker.call(
+            lambda: with_retry(lambda: decide_next_action(inv, llm, tools, last_obs))
+        )
         llm_ms = (time.monotonic() - t_llm) * 1000
     except Exception as e:
         logger.error("[%s] LLM error tại bước %d: %s", investigation_id, current_step, e)
