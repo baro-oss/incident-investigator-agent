@@ -4,9 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 4 — Ngày 19 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 4 — Ngày 20 (Platform Demo Full + Cổng Phase 4)
-**Cổng kiểm gần nhất đã qua:** 6/6 kịch bản eval N=10 PASS + Dashboard Polish ✅
+**Giai đoạn:** Phase 4 — Ngày 20 ✅ HOÀN THÀNH. **20/20 NGÀY HOÀN TẤT.**
+**Cổng kiểm gần nhất đã qua:** Phase 4 Gate — 2 domain live + 6/6 eval PASS + full dashboard ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -53,8 +52,38 @@
 | 17 | Dashboard v3 Full Platform UI | ✅ |
 | 18 | Fintech Domain + Domain Switcher UI | ✅ |
 | 19 | Eval N=10 + Dashboard Polish (theme/toast/shortcuts) | ✅ |
+| 20 | Platform Demo Full + Cổng Phase 4 | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 24 — 2026-06-14] — Ngày 20: Platform Demo Full + Cổng Phase 4
+
+**Đã làm:**
+- `src/agent/dashboard/queries.py` — fix `get_eval_summary()`: lấy run mới nhất per scenario (INNER JOIN MAX(created_at) per scenario) → tất cả 6 scenario hiển thị đúng
+- `src/agent/dashboard/router.py` — demo route: thêm fintech1+fintech2 vào `quick_scenarios` (6 buttons), thêm `domain` field
+- `src/agent/dashboard/templates/demo.html` — thêm `<input type="hidden" name="domain">`, `fillScenario()` set domain field
+
+**Verify (browser):**
+- `/dashboard/eval` — 60 runs, 60 đúng, 100%, ✅ PASS, chart 6 bars (fintech1, fintech2, scenario1-4) ✅
+- `/dashboard/demo` — 6 quick scenario buttons (4 microservice + 2 fintech 💳), form auto-fill khi click ✅
+- Theme toggle: dark/light mode persistent ✅
+- Toast: success/error/info slide-in top-right ✅
+
+**Cổng Phase 4 ✅ PASS:**
+- 2 domain live: Microservice Ops (4 kịch bản) + Fintech Anomaly (2 kịch bản) ✅
+- MCP hot-plug: server cắm vào được mà không restart engine ✅
+- Eval numbers thật: 6 kịch bản × N=10 = 60 runs, 100% correct rate ✅
+- Full dashboard: Investigations / Trigger / Projects / Chat / Eval / Health / Metrics / Channels / Tools / MCP Registry / Demo Mode ✅
+- Chat UI + SSE live stream ✅
+- Multi-agent (parallel specialists) ✅
+- LangGraph engine ✅
+- Resilience (ConcurrencyLimiter + CircuitBreaker + retry) ✅
+- Long-term memory ✅
+- Theme switcher light/dark ✅
+- Toast notifications ✅
+- Keyboard shortcuts (Ctrl+K, T, R, H, ?) ✅
+
+**20/20 NGÀY HOÀN TẤT.**
 
 ### [Session 23 — 2026-06-14] — Ngày 19: Eval N=10 + Dashboard Polish
 

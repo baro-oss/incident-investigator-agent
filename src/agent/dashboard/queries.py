@@ -345,27 +345,25 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
 
 
 def get_eval_summary() -> List[Dict[str, Any]]:
-    """Kết quả eval gần nhất per scenario."""
+    """Kết quả eval gần nhất per scenario — lấy run mới nhất của từng scenario."""
     conn = open_db()
-    # Lấy run_id mới nhất
-    latest = conn.execute(
-        "SELECT run_id FROM eval_results ORDER BY created_at DESC LIMIT 1"
-    ).fetchone()
-    if not latest:
-        conn.close()
-        return []
-
+    # Lấy run_id mới nhất cho mỗi scenario
     rows = conn.execute("""
-        SELECT scenario,
+        SELECT e.scenario,
                COUNT(*) as n,
-               SUM(correct) as ok,
-               AVG(steps_taken) as avg_steps,
-               AVG(recall_at_1) as recall,
-               SUM(hallucination) as hall,
-               AVG(token_total) as avg_tokens
-        FROM eval_results WHERE run_id=?
-        GROUP BY scenario ORDER BY scenario
-    """, (latest["run_id"],)).fetchall()
+               SUM(e.correct) as ok,
+               AVG(e.steps_taken) as avg_steps,
+               AVG(e.recall_at_1) as recall,
+               SUM(e.hallucination) as hall,
+               AVG(e.token_total) as avg_tokens
+        FROM eval_results e
+        INNER JOIN (
+            SELECT scenario, MAX(created_at) AS latest_at
+            FROM eval_results
+            GROUP BY scenario
+        ) latest ON e.scenario = latest.scenario AND e.created_at = latest.latest_at
+        GROUP BY e.scenario
+        ORDER BY e.scenario
+    """).fetchall()
     conn.close()
-
     return [dict(r) for r in rows]

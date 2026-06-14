@@ -244,6 +244,7 @@
             <label>Symptom</label>
             <textarea name="symptom" id="field-symptom" rows="2">payment-gateway: tỷ lệ lỗi tăng đột biến từ 14:05, 87% TimeoutException</textarea>
           </div>
+          <input type="hidden" name="domain" id="field-domain" value="microservice">
           <button type="submit" class="btn-trigger" id="btn-trigger">▶ Bắt đầu điều tra</button>
         </form>
       </div>
@@ -282,6 +283,7 @@ function fillScenario(idx) {
   document.getElementById('field-scenario').value = sc.scenario;
   document.getElementById('field-window').value = sc.time_window;
   document.getElementById('field-symptom').value = sc.symptom;
+  document.getElementById('field-domain').value = sc.domain || 'microservice';
 }
 
 // Fill first scenario on load

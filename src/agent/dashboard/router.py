@@ -518,17 +518,23 @@ async def dashboard_demo(request: Request):
     projects = get_projects_overview()
     quick_scenarios = [
         {"label": "payment-gateway timeout (14:00)", "service": "payment-gateway",
-         "scenario": "scenario1", "time_window": "14:00-15:00",
+         "scenario": "scenario1", "time_window": "14:00-15:00", "domain": "microservice",
          "symptom": "payment-gateway: tỷ lệ lỗi tăng đột biến từ 14:05, 87% TimeoutException"},
         {"label": "provider sập (15:00)", "service": "payment-gateway",
-         "scenario": "scenario2", "time_window": "15:00-16:00",
+         "scenario": "scenario2", "time_window": "15:00-16:00", "domain": "microservice",
          "symptom": "payment-gateway: ConnectionRefusedError 92%, latency bình thường"},
         {"label": "DB pool exhaustion (08:00)", "service": "payment-gateway",
-         "scenario": "scenario3", "time_window": "08:00-09:00",
+         "scenario": "scenario3", "time_window": "08:00-09:00", "domain": "microservice",
          "symptom": "payment-gateway: AuthServiceTimeoutError 83% từ 08:11"},
         {"label": "traffic surge (10:00)", "service": "api-gateway",
-         "scenario": "scenario4", "time_window": "10:00-11:00",
+         "scenario": "scenario4", "time_window": "10:00-11:00", "domain": "microservice",
          "symptom": "api-gateway: RateLimitError tăng đột biến, request_count tăng 5x"},
+        {"label": "💳 processor timeout credit_card", "service": "proc-alpha",
+         "scenario": "fintech1", "time_window": "10:00-11:00", "domain": "fintech",
+         "symptom": "credit_card: 65% fail từ 10:15, ProcessorTimeoutError — nghi lỗi processor"},
+        {"label": "💳 merchant price bug refund 8x", "service": "merch-buzz",
+         "scenario": "fintech2", "time_window": "14:00-15:00", "domain": "fintech",
+         "symptom": "merch-buzz: refund_rate 14.8% từ 14:00 (~8x baseline) — nghi price bug"},
     ]
     return templates.TemplateResponse("demo.html", {
         "request": request,
