@@ -21,6 +21,7 @@ class InvestigationRequest:
     dedup_key: str         # project + service + scenario + time_window → dedup
     project_id: str = "default"
     multi_agent: bool = False  # True → dùng MultiAgentEngine (parallel specialists)
+    domain: str = "microservice"  # "microservice" | "fintech"
 
     @classmethod
     def from_raw(
@@ -100,6 +101,7 @@ def map_simple_payload(payload: Dict[str, Any]) -> Optional[InvestigationRequest
     symptom = payload.get("symptom")
     date = payload.get("date", "2024-01-15")
     multi_agent = bool(payload.get("multi_agent", False))
+    domain = payload.get("domain", "microservice")
 
     req = InvestigationRequest.from_raw(
         service=service,
@@ -110,4 +112,5 @@ def map_simple_payload(payload: Dict[str, Any]) -> Optional[InvestigationRequest
         raw_payload=payload,
     )
     req.multi_agent = multi_agent
+    req.domain = domain
     return req

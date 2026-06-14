@@ -26,6 +26,17 @@
     <form method="post" action="/dashboard/trigger">
 
       <div class="form-group">
+        <label>Domain</label>
+        <div style="display:flex;gap:8px" id="domain-tabs">
+          <button type="button" onclick="switchDomain('microservice')" id="tab-microservice"
+                  class="btn btn-primary" style="font-size:12px;flex:1">⚙ Microservice Ops</button>
+          <button type="button" onclick="switchDomain('fintech')" id="tab-fintech"
+                  class="btn btn-ghost" style="font-size:12px;flex:1">💳 Fintech Anomaly</button>
+        </div>
+        <input type="hidden" name="domain" id="field-domain" value="microservice">
+      </div>
+
+      <div class="form-group">
         <label>Project</label>
         <select name="project_id" id="project_id" onchange="updateServices()">
           {% for p in projects %}
@@ -55,29 +66,21 @@
 
       <div class="form-group">
         <label>Scenario (dữ liệu seed)</label>
-        <select name="scenario">
-          <option value="scenario1" {{ 'selected' if selected_scenario == 'scenario1' }}>
-            scenario1 — Deploy bug (payment-gateway timeout cascade)
-          </option>
-          <option value="scenario2" {{ 'selected' if selected_scenario == 'scenario2' }}>
-            scenario2 — Provider sập (third-party-provider down)
-          </option>
-          <option value="scenario3" {{ 'selected' if selected_scenario == 'scenario3' }}>
-            scenario3 — DB pool exhaustion (auth-service)
-          </option>
-          <option value="scenario4" {{ 'selected' if selected_scenario == 'scenario4' }}>
-            scenario4 — Traffic surge (api-gateway rate limit)
-          </option>
+        <select name="scenario" id="scenario-sel">
+          <option value="scenario1">scenario1 — Deploy bug (payment-gateway timeout)</option>
+          <option value="scenario2">scenario2 — Provider sập (third-party-provider down)</option>
+          <option value="scenario3">scenario3 — DB pool exhaustion (auth-service)</option>
+          <option value="scenario4">scenario4 — Traffic surge (api-gateway rate limit)</option>
         </select>
       </div>
 
       <div class="form-group">
         <label>Time Window</label>
-        <select name="time_window">
-          <option value="14:00-15:00">14:00 – 15:00 (scenario1)</option>
-          <option value="15:00-16:00">15:00 – 16:00 (scenario2)</option>
-          <option value="08:00-09:00">08:00 – 09:00 (scenario3)</option>
-          <option value="10:00-11:00">10:00 – 11:00 (scenario4)</option>
+        <select name="time_window" id="window-sel">
+          <option value="14:00-15:00">14:00 – 15:00</option>
+          <option value="15:00-16:00">15:00 – 16:00</option>
+          <option value="08:00-09:00">08:00 – 09:00</option>
+          <option value="10:00-11:00">10:00 – 11:00</option>
         </select>
       </div>
 
@@ -133,14 +136,55 @@
 
 <script>
 const projectServices = {{ project_services_json | safe }};
+
+const DOMAIN_DATA = {
+  microservice: {
+    services: ['payment-gateway','auth-service','api-gateway','order-service','third-party-provider'],
+    scenarios: [
+      {value:'scenario1', label:'scenario1 — Deploy bug (payment-gateway timeout)'},
+      {value:'scenario2', label:'scenario2 — Provider sập (third-party-provider down)'},
+      {value:'scenario3', label:'scenario3 — DB pool exhaustion (auth-service)'},
+      {value:'scenario4', label:'scenario4 — Traffic surge (api-gateway rate limit)'},
+    ],
+    windows: ['14:00-15:00','15:00-16:00','08:00-09:00','10:00-11:00'],
+  },
+  fintech: {
+    services: ['merch-a','merch-b','merch-c','merch-buzz','proc-alpha'],
+    scenarios: [
+      {value:'fintech1', label:'fintech1 — Payment processor timeout (credit_card)'},
+      {value:'fintech2', label:'fintech2 — Merchant price bug (refund surge)'},
+    ],
+    windows: ['10:00-11:00','14:00-15:00'],
+  },
+};
+
+function switchDomain(domain) {
+  document.getElementById('field-domain').value = domain;
+  document.getElementById('tab-microservice').className = domain==='microservice' ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('tab-fintech').className = domain==='fintech' ? 'btn btn-primary' : 'btn btn-ghost';
+
+  const d = DOMAIN_DATA[domain];
+  const scenSel = document.getElementById('scenario-sel');
+  scenSel.innerHTML = d.scenarios.map(s=>`<option value="${s.value}">${s.label}</option>`).join('');
+
+  const winSel = document.getElementById('window-sel');
+  winSel.innerHTML = d.windows.map(w=>`<option value="${w}">${w}</option>`).join('');
+
+  const svcSel = document.getElementById('service_sel');
+  const pid = document.getElementById('project_id').value;
+  const projSvcs = projectServices[pid] || [];
+  const svcs = projSvcs.length ? projSvcs : d.services;
+  svcSel.innerHTML = svcs.map(s=>`<option value="${s}">${s}</option>`).join('');
+}
+
 function updateServices() {
+  const domain = document.getElementById('field-domain').value;
   const pid = document.getElementById('project_id').value;
   const sel = document.getElementById('service_sel');
   const svcs = projectServices[pid] || [];
   sel.innerHTML = svcs.length
     ? svcs.map(s => `<option value="${s}">${s}</option>`).join('')
-    : ['payment-gateway','auth-service','api-gateway','order-service','third-party-provider']
-        .map(s => `<option value="${s}">${s}</option>`).join('');
+    : DOMAIN_DATA[domain].services.map(s=>`<option value="${s}">${s}</option>`).join('');
 }
 </script>
 {% endblock %}

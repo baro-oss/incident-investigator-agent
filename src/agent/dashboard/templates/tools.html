@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Tool Registry{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1 style="font-size:18px;font-weight:500">Tool Registry</h1>
+  <div class="meta">Tất cả tools theo domain — engine dùng toolset tương ứng khi điều tra</div>
+</div>
+
+<!-- Domain tabs -->
+<div style="display:flex;gap:8px;margin-bottom:20px">
+  {% for dom in all_tools.keys() %}
+  <a href="/dashboard/tools?domain={{ dom }}"
+     style="padding:7px 18px;border-radius:5px;text-decoration:none;font-size:13px;font-weight:500;
+            {% if dom == selected_domain %}
+            background:var(--accent);color:#fff;
+            {% else %}
+            background:var(--surface);border:1px solid var(--border);color:var(--muted);
+            {% endif %}">
+    {% if dom == 'microservice' %}⚙ Microservice Ops{% else %}💳 Fintech Anomaly{% endif %}
+    <span style="opacity:.7;font-weight:400;font-size:11px;margin-left:4px">
+      ({{ all_tools[dom]|length }} tools)
+    </span>
+  </a>
+  {% endfor %}
+</div>
+
+<!-- Tool cards -->
+{% set tools = all_tools[selected_domain] %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+  {% for t in tools %}
+  <div class="card" style="padding:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <code style="color:var(--accent);font-size:13px;font-weight:600">{{ t.name }}</code>
+      <span class="tag" style="font-size:10px">{{ selected_domain }}</span>
+    </div>
+    <p style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px">
+      {{ t.description[:250] }}{% if t.description|length > 250 %}…{% endif %}
+    </p>
+    {% if t.params %}
+    <div style="font-size:11px;color:var(--muted)">
+      <span style="color:var(--text);font-weight:500">Params:</span>
+      {% for p in t.params %}
+      <code style="margin-left:4px;background:var(--surface2);padding:1px 5px;border-radius:3px">{{ p }}</code>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<!-- MCP Tools note -->
+<div class="card" style="margin-top:16px;padding:14px 16px;border-color:var(--surface2)">
+  <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)">
+    <span>⬡</span>
+    <span>Tools từ MCP servers được merge vào registry khi investigation chạy. Xem
+      <a href="/dashboard/mcp" style="color:var(--accent)">MCP Registry →</a>
+    </span>
+  </div>
+</div>
+
+{% endblock %}

@@ -249,6 +249,22 @@ def get_channel_config() -> List[Dict[str, Any]]:
     return result
 
 
+def get_all_tools_for_dashboard() -> dict:
+    """Trả {domain: [tool_dict]} cho Tool Registry Viewer."""
+    from agent.tools.registry import ALL_LOCAL_TOOLS
+    from agent.tools.registry_fintech import ALL_FINTECH_TOOLS
+
+    def _fmt(tools):
+        return [{"name": t.name, "description": t.description,
+                 "params": list(t.input_schema.get("properties", {}).keys())}
+                for t in tools]
+
+    return {
+        "microservice": _fmt(ALL_LOCAL_TOOLS),
+        "fintech": _fmt(ALL_FINTECH_TOOLS),
+    }
+
+
 def get_mcp_servers_for_dashboard() -> List[Dict[str, Any]]:
     """Tất cả MCP servers kèm project name."""
     conn = open_db()

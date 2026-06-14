@@ -20,6 +20,7 @@ from agent.dashboard.queries import (
     get_channel_config,
     get_mcp_servers_for_dashboard,
     get_project_detail,
+    get_all_tools_for_dashboard,
 )
 
 _HERE = Path(__file__).parent
@@ -533,6 +534,19 @@ async def dashboard_demo(request: Request):
         "request": request,
         "projects": projects,
         "quick_scenarios": quick_scenarios,
+    })
+
+
+@router.get("/tools", response_class=HTMLResponse)
+async def dashboard_tools(request: Request, domain: Optional[str] = None):
+    """Tool Registry Viewer — danh sách tools theo domain."""
+    all_tools = get_all_tools_for_dashboard()
+    selected = domain or "microservice"
+    return templates.TemplateResponse("tools.html", {
+        "request": request,
+        "active": "tools",
+        "all_tools": all_tools,
+        "selected_domain": selected,
     })
 
 

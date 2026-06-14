@@ -565,6 +565,7 @@ Mục tiêu: Mọi thứ đã build được quản lý từ browser — không 
 - Loading states, error states cho mọi API call
 - Toast notifications khi investigation complete
 - Keyboard shortcuts: `Ctrl+K` mở chat, `R` refresh, `T` trigger
+- **Theme switcher**: Light / Dark mode — toggle trên nav bar, lưu preference vào `localStorage`
 
 **C. Demo Prep:**
 - Kiểm tra toàn bộ flow demo 5 phút (script bên dưới)

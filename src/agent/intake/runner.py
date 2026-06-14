@@ -131,8 +131,13 @@ async def run_investigation_background(
                 logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_urls), mcp_urls)
                 mcp_clients = await _connect_mcp_clients(mcp_urls)
 
-            # Xây tool registry: local + MCP
-            tools = await build_tool_registry(mcp_clients if mcp_clients else None)
+            # Xây tool registry: fintech hoặc local + MCP
+            if getattr(req, "domain", "microservice") == "fintech":
+                from agent.tools.registry_fintech import get_fintech_tool_registry
+                tools = get_fintech_tool_registry()
+                logger.info("[%s] Dùng Fintech tool registry (%d tools)", key, len(tools))
+            else:
+                tools = await build_tool_registry(mcp_clients if mcp_clients else None)
 
             # Resolve LLM: project DB config → global env vars
             llm_cfg = None

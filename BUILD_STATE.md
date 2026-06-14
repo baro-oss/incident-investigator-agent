@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 3 — Ngày 17 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 4 — Ngày 18 (Fintech domain + Domain Switcher UI)
-**Cổng kiểm gần nhất đã qua:** Full Platform UI — MCP Registry, Project Detail, Replay, Demo Mode ✅
+**Giai đoạn:** Phase 4 — Ngày 18 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 4 — Ngày 19 (Eval N=10 + Dashboard Polish)
+**Cổng kiểm gần nhất đã qua:** Fintech 2/2 mock eval PASS (KB-F1 + KB-F2) ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -51,8 +51,36 @@
 | 15 | LangGraph Migration + Multi-agent | ✅ |
 | 16 | Resilience + CLI + Health Dashboard | ✅ |
 | 17 | Dashboard v3 Full Platform UI | ✅ |
+| 18 | Fintech Domain + Domain Switcher UI | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 22 — 2026-06-14] — Ngày 18: Fintech Domain + Domain Switcher UI
+
+**Đã làm:**
+- `data/migrate_fintech.py` (mới) — migration idempotent: 4 bảng (`ft_transactions`, `ft_revenue`, `ft_merchants`, `ft_settlements`) + indexes
+- `data/seed_fintech1.py` (mới) — KB-F1: proc-alpha timeout → credit_card 65% fail từ 10:15 (23,325 tx rows)
+- `data/seed_fintech2.py` (mới) — KB-F2: merch-buzz price bug → refund_rate 14.8% (~8x baseline, 11,250 tx rows)
+- `src/agent/tools/fintech/__init__.py` (mới) — package marker
+- `src/agent/tools/fintech/get_revenue_breakdown.py` (mới) — revenue theo channel, Δ% vs baseline
+- `src/agent/tools/fintech/get_transaction_anomaly.py` (mới) — fail/refund rates per merchant và channel
+- `src/agent/tools/fintech/get_merchant_status.py` (mới) — trạng thái merchant + notes (flags bug/price/fraud)
+- `src/agent/tools/fintech/get_settlement_lag.py` (mới) — processing_time_s vs baseline per merchant
+- `src/agent/tools/registry_fintech.py` (mới) — `ALL_FINTECH_TOOLS`, `get_fintech_tool_registry()`
+- `src/agent/intake/normalizer.py` — thêm `domain: str = "microservice"` vào `InvestigationRequest`
+- `src/agent/intake/runner.py` — domain routing: `domain=="fintech"` → fintech tool registry
+- `src/agent/dashboard/queries.py` — thêm `get_all_tools_for_dashboard()` → `{microservice: [...], fintech: [...]}`
+- `src/agent/dashboard/templates/tools.html` (mới) — Tool Registry Viewer: domain tabs + tool cards
+- `src/agent/dashboard/templates/trigger.html` — domain switcher buttons (⚙ Microservice / 💳 Fintech), JS `switchDomain()`, DOMAIN_DATA dict
+- `src/agent/dashboard/templates/base.html` — thêm `⚙ Tools` nav link
+- `scripts/eval_fintech.py` (mới) — MockLLM_FT1 (KB-F1), MockLLM_FT2 (KB-F2), evaluate_run, save_eval_to_db
+
+**Verify:**
+- `python scripts/eval_fintech.py` — 2/2 PASS (fintech1: conf=high steps=3, fintech2: conf=high steps=3) ✅
+- KB-F1: root_cause="proc-alpha payment processor timeout từ 10:15 gây 65% fail trên kênh credit_card" ✅
+- KB-F2: root_cause="merch-buzz price bug từ 14:00 gây refund_rate 14.8% (~8x baseline 1.9%)" ✅
+
+**Cổng Ngày 18 ✅ PASS:** Fintech 2/2 mock eval PASS, domain switcher hoạt động trên trigger UI.
 
 ### [Session 21 — 2026-06-14] — Ngày 17: Dashboard v3 Full Platform UI
 
