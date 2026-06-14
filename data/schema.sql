@@ -140,3 +140,65 @@ CREATE TABLE IF NOT EXISTS investigation_patterns (
     updated_at      TEXT    NOT NULL,
     UNIQUE(project_id, service, error_pattern)
 );
+
+-- ── RBAC (Auth & RBAC — Phase 5 Ngày 22) ────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS users (
+    id            TEXT    PRIMARY KEY,  -- UUID slug
+    username      TEXT    NOT NULL UNIQUE,
+    password_hash TEXT    NOT NULL,
+    is_root       INTEGER NOT NULL DEFAULT 0,  -- 1 = super-admin, bypass all checks
+    is_active     INTEGER NOT NULL DEFAULT 1,
+    created_at    TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+    id          TEXT    PRIMARY KEY,  -- slug vd "admin", "operator"
+    name        TEXT    NOT NULL UNIQUE,
+    description TEXT    NOT NULL DEFAULT '',
+    is_system   INTEGER NOT NULL DEFAULT 0   -- 1 = seed role, cấm xóa
+);
+
+CREATE TABLE IF NOT EXISTS permissions (
+    key         TEXT    PRIMARY KEY,  -- vd "investigation.view"
+    description TEXT    NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+    role_id        TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    permission_key TEXT NOT NULL REFERENCES permissions(key) ON DELETE CASCADE,
+    PRIMARY KEY (role_id, permission_key)
+);
+
+CREATE TABLE IF NOT EXISTS project_groups (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_group_members (
+    group_id    TEXT NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    PRIMARY KEY (group_id, project_id)
+);
+
+CREATE TABLE IF NOT EXISTS role_assignments (
+    id               TEXT PRIMARY KEY,  -- UUID
+    user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    role_id          TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+    scope_type       TEXT NOT NULL DEFAULT 'global',  -- 'global' | 'group' | 'project'
+    scope_group_id   TEXT,  -- set khi scope_type='group'
+    scope_project_id TEXT   -- set khi scope_type='project'
+);
+
+CREATE INDEX IF NOT EXISTS idx_role_assignments_user ON role_assignments (user_id);
+
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id          TEXT PRIMARY KEY,       -- UUID
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash  TEXT NOT NULL UNIQUE,   -- sha256 hex của token thực
+    name        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    last_used   TEXT
+);

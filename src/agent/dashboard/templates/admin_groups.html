@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Admin · Groups — Investigation Agent{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Quản lý Project Groups</h2>
+  <div style="display:flex;gap:.5rem">
+    <a href="/dashboard/admin/users" class="btn btn-secondary">Users →</a>
+    <a href="/dashboard/admin/roles" class="btn btn-secondary">Roles →</a>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">Tạo group mới</div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/admin/groups" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label class="form-label">Tên group</label>
+        <input class="form-input" type="text" name="name" required placeholder="vd: Production Projects">
+      </div>
+      <div>
+        <label class="form-label">Mô tả</label>
+        <input class="form-input" type="text" name="description" placeholder="Tuỳ chọn">
+      </div>
+      <button type="submit" class="btn btn-primary">Tạo group</button>
+    </form>
+  </div>
+</div>
+
+{% for g in groups %}
+<div class="card" style="margin-bottom:1.2rem">
+  <div class="card-header">
+    <strong>{{ g.name }}</strong>
+    <span style="color:var(--text-muted);font-size:.8rem;margin-left:.5rem">{{ g.description }}</span>
+  </div>
+  <div class="card-body">
+    <div style="margin-bottom:.8rem">
+      <div style="font-size:.8rem;color:var(--text-muted);margin-bottom:.4rem">Projects trong group:</div>
+      {% if g.members %}
+        {% for pid in g.members %}
+        <span style="display:inline-flex;align-items:center;gap:.3rem;margin:.1rem">
+          <span class="badge badge-medium">{{ pid }}</span>
+          <form method="post" action="/dashboard/admin/groups/{{ g.id }}/remove-member" style="display:inline">
+            <input type="hidden" name="project_id" value="{{ pid }}">
+            <button type="submit" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:.75rem;padding:0 2px">✕</button>
+          </form>
+        </span>
+        {% endfor %}
+      {% else %}
+        <span style="color:var(--text-muted);font-size:.8rem">Chưa có project</span>
+      {% endif %}
+    </div>
+    <form method="post" action="/dashboard/admin/groups/{{ g.id }}/add-member" style="display:flex;gap:.5rem;align-items:center">
+      <select name="project_id" class="form-select">
+        {% for p in projects %}
+        <option value="{{ p.id }}">{{ p.name }} ({{ p.id }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-secondary" style="padding:.3rem .7rem;font-size:.8rem">Thêm</button>
+    </form>
+  </div>
+</div>
+{% else %}
+<div class="card"><div class="card-body" style="color:var(--text-muted)">Chưa có group nào. Tạo group để gán role theo nhóm project.</div></div>
+{% endfor %}
+{% endblock %}

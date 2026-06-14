@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 21 ✅** (storage seam + real-LLM eval smoke + recursion bugfix). Tiếp theo: **Ngày 22 (Auth & RBAC)**.
-**Cổng kiểm gần nhất đã qua:** Ngày 21 — real-LLM eval 6/6 KB correct + calibration dashboard + storage seam DB-swappable + recursion bug fixed ✅
+**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 22 ✅** (Auth & RBAC động đầy đủ). Tiếp theo: **Ngày 23 (Observability — Cost dashboard)**.
+**Cổng kiểm gần nhất đã qua:** Ngày 22 — root login ✅ · guard chặn đúng quyền ✅ · tạo user + tạo role động + gán scope (project/default) ✅
 **Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
 
 ## Cái lõi (không được vỡ) — tình trạng
@@ -60,12 +60,59 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 21 | Engine & Quality + Storage seam | Tier-1 storage seam (DB-swappable) · real-LLM eval smoke 6/6 · calibration · recursion bugfix | ✅ |
-| 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ☐ |
+| 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ✅ |
 | 23 | Observability | Cost dashboard + verdict feedback loop + trace retention | ☐ |
 | 24 | Integrations | Webhook signature + Slack + real MCP pack | ☐ |
 | 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 27 — 2026-06-14] — Ngày 22: Auth & RBAC động đầy đủ
+
+**A. Schema RBAC (7 bảng mới):**
+- `data/schema.sql` — appended: `users`, `roles`, `permissions`, `role_permissions`, `project_groups`, `project_group_members`, `role_assignments`, `api_tokens`.
+- `data/migrate_rbac.py` (mới) — migration idempotent: CREATE TABLE IF NOT EXISTS 8 bảng, seed 12 permissions catalog, seed 3 system roles (admin/operator/viewer), bootstrap root user từ env `ROOT_USERNAME`/`ROOT_PASSWORD`.
+- Chạy OK: "Tạo 6 bảng RBAC + api_tokens OK" · "Seed 12 permissions + 3 system roles OK" · "Root user 'root' tạo mới OK".
+
+**B. Auth package (`src/agent/auth/`):**
+- `permissions.py` — `PERMISSION_CATALOG` (12 quyền), `ROLE_SEEDS` (3 system roles + perms), `PERMISSION_GROUPS` (5 nhóm cho checkbox grid UI).
+- `rbac.py` — hàm CRUD đầy đủ: user CRUD, role CRUD, role_permissions, role_assignments, `user_can(user_id, perm_key, project_id)` (is_root shortcut → global → project → group), project_groups, api_tokens. Dùng `from agent.storage import open_db, IntegrityError` (KHÔNG import sqlite3). Password: `hashlib.pbkdf2_hmac("sha256", ..., salt, 100_000)`.
+- `deps.py` — `NotAuthenticated`/`NotAuthorized` exceptions; `get_current_user()`, `require_login()` (session + X-API-Token header), `require_perm("perm")` factory trả plain callable (caller làm `Depends(require_perm("perm"))`).
+
+**C. Server v0.8.0 (`src/agent/intake/server.py`):**
+- `SessionMiddleware` (itsdangerous, `ia_session` cookie, max_age=7 ngày, dev secret).
+- Exception handlers: `NotAuthenticated` → redirect `/auth/login?next=...`; `NotAuthorized` → HTML 403.
+- Routes mới: `GET /auth/login`, `POST /auth/login`, `POST /auth/logout`.
+- `bootstrap_root()` gọi trong lifespan (wrapped try/except).
+- `pyproject.toml` — thêm `itsdangerous>=2.0.0`.
+
+**D. Dashboard guards + Admin UI (`src/agent/dashboard/router.py`):**
+- Tất cả route `/dashboard/*` guard bằng `Depends(require_login)`.
+- Admin routes: `GET/POST /admin/users`, `POST /admin/users/{uid}/toggle`, `POST /admin/users/{uid}/assign`, `POST /admin/assignments/{aid}/remove`, `GET/POST /admin/roles`, `POST /admin/roles/{rid}/permissions`, `POST /admin/roles/{rid}/delete`, `GET/POST /admin/groups`, `POST /admin/groups/{gid}/add-member`, `POST /admin/groups/{gid}/remove-member`.
+
+**E. Templates mới/sửa:**
+- `login.html` — standalone dark-theme, form POST /auth/login, error display.
+- `admin_users.html` — danh sách users, create form, assign-role form (role/scope/project_id), toggle enable/disable.
+- `admin_roles.html` — create role form, permission checkbox grid nhóm theo PERMISSION_GROUPS, Lưu quyền + Xóa.
+- `admin_groups.html` — create group, add/remove project members.
+- `base.html` — v0.8 · Phase 5, ⛨ Admin nav link, user info + logout button in nav.
+- `static/style.css` — `.page-header`, `.card`, `.btn`, `.form-*`, `.badge-info`, `.alert`, `.table` styles.
+
+**Verify (browser end-to-end):**
+- `/dashboard` → redirect `/auth/login` (unauthenticated guard) ✅
+- Login root/admin123 → dashboard v0.8, Admin nav link, ROOT badge, logout button ✅
+- `/dashboard/admin/users` — render Quản lý Users ✅
+- Tạo user alice/alice123 → Danh sách users (2) ✅
+- Gán alice → operator / scope=project / project_id=default → "OPERATOR project/default" trong bảng ✅
+- `/dashboard/admin/roles` — 3 system roles, permission checkbox grid (5 nhóm × 12 perms) ✅
+- Regression: `eval_agent.py --mock --n 1` → 4/4 PASS ✅
+
+**Cổng Ngày 22 ✅ PASS:** root login · guard đúng · tạo user + role động + gán scope hoạt động.
+
+**Quyết định lệch / spill:**
+- Admin badge trong base.html hiển thị cho TẤT CẢ logged-in user (không chỉ admin) — UX đơn giản hơn, route tự từ chối 403 nếu thiếu quyền.
+- Spill OK: api_tokens CRUD đã có code trong rbac.py (tạo/list/revoke/verify), chưa có UI + route riêng → để Ngày 23/24.
+- Spill OK: groups UI đã có code + route, chưa test end-to-end browser → tốt cho Ngày 24.
 
 ### [Session 26 — 2026-06-14] — Ngày 21: Storage seam Tier-1 + Real-LLM eval (smoke) + Recursion bugfix
 

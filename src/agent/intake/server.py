@@ -26,18 +26,28 @@ POST   /projects/{pid}/mcp-servers
 PATCH  /projects/{pid}/mcp-servers/{mid}
 DELETE /projects/{pid}/mcp-servers/{mid}
 POST   /projects/{pid}/mcp-servers/{mid}/ping
+
+── Auth (Phase 5 Ngày 22) ───────────────────────────────────
+GET    /auth/login
+POST   /auth/login
+POST   /auth/logout
 """
 from __future__ import annotations
 
 import logging
+import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path as _Path
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, FastAPI, Header, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, FastAPI, Form, Header, HTTPException, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 
+from agent.auth.deps import NotAuthenticated, NotAuthorized
 from agent.intake.adapters import list_sources, route_adapter
 from agent.intake.mcp_registry import (
     add_server,
@@ -68,6 +78,9 @@ from agent.intake.runner import _active_investigations, trigger_investigation
 logger = logging.getLogger(__name__)
 _start_time = time.time()
 
+_TEMPLATES_DIR = _Path(__file__).parent.parent / "dashboard" / "templates"
+_auth_templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,7 +92,6 @@ def _project_or_404(project_id: str):
 
 
 def _resolve_request(source: Optional[str], payload: Dict[str, Any], project_id: str = "default"):
-    """Chọn adapter → InvestigationRequest gắn project_id."""
     if source:
         req = route_adapter(source, payload)
         if req is None:
@@ -92,7 +104,6 @@ def _resolve_request(source: Optional[str], payload: Dict[str, Any], project_id:
         if req is None:
             raise HTTPException(status_code=422, detail="Không thể parse payload")
 
-    # Gán project — ghi đè dedup_key để include project
     req.project_id = project_id
     req.dedup_key = f"{project_id}|{req.service}|{req.scenario}|{req.time_window}"
     return req
@@ -102,6 +113,13 @@ def _resolve_request(source: Optional[str], payload: Dict[str, Any], project_id:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Bootstrap root user từ env ROOT_USERNAME/ROOT_PASSWORD
+    try:
+        from agent.auth.rbac import bootstrap_root
+        bootstrap_root()
+    except Exception as e:
+        logger.warning("bootstrap_root failed (migration not run yet?): %s", e)
+
     projects = list_projects()
     for p in projects:
         servers = list_servers(project_id=p["id"])
@@ -114,10 +132,96 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Investigation Agent", version="0.5.0", docs_url="/docs", lifespan=lifespan)
+app = FastAPI(title="Investigation Agent", version="0.8.0", docs_url="/docs", lifespan=lifespan)
+
+# ── SessionMiddleware (RBAC — Phase 5 Ngày 22) ───────────────────────────────
+_SESSION_SECRET = os.getenv("SESSION_SECRET_KEY", "dev-secret-rbac-change-in-prod")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=_SESSION_SECRET,
+    session_cookie="ia_session",
+    max_age=3600 * 24 * 7,  # 1 tuần
+    https_only=False,
+    same_site="lax",
+)
+
+
+# ── Exception handlers ────────────────────────────────────────────────────────
+
+@app.exception_handler(NotAuthenticated)
+async def not_authenticated_handler(request: Request, exc: NotAuthenticated):
+    # Nếu request là AJAX/API → JSON 401; ngược lại redirect HTML
+    accept = request.headers.get("Accept", "")
+    if "application/json" in accept or request.url.path.startswith("/api"):
+        return JSONResponse(status_code=401, content={"detail": "Chưa đăng nhập"})
+    return RedirectResponse(f"/auth/login?next={request.url.path}", status_code=303)
+
+
+@app.exception_handler(NotAuthorized)
+async def not_authorized_handler(request: Request, exc: NotAuthorized):
+    accept = request.headers.get("Accept", "")
+    if "application/json" in accept:
+        return JSONResponse(status_code=403, content={"detail": f"Thiếu quyền: {exc.perm}"})
+    return HTMLResponse(
+        f"<h3 style='font-family:sans-serif;padding:2rem'>403 Forbidden — thiếu quyền: <code>{exc.perm}</code>"
+        f"<br><a href='/dashboard'>← Về dashboard</a></h3>",
+        status_code=403,
+    )
+
+
+# ── Auth routes ───────────────────────────────────────────────────────────────
+
+@app.get("/auth/login", response_class=HTMLResponse)
+async def auth_login_get(request: Request, next: str = "/dashboard"):
+    # Nếu đã đăng nhập → redirect
+    if request.session.get("user_id"):
+        return RedirectResponse(next or "/dashboard", status_code=303)
+    return _auth_templates.TemplateResponse("login.html", {
+        "request": request,
+        "next": next,
+        "error": None,
+    })
+
+
+@app.post("/auth/login", response_class=HTMLResponse)
+async def auth_login_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    next: str = Form(default="/dashboard"),
+):
+    from agent.auth.rbac import get_user_by_username, verify_password
+    user = get_user_by_username(username)
+    error = None
+    if not user:
+        error = "Tên đăng nhập hoặc mật khẩu không đúng"
+    elif not user["is_active"]:
+        error = "Tài khoản bị vô hiệu hóa"
+    elif not verify_password(password, user["password_hash"]):
+        error = "Tên đăng nhập hoặc mật khẩu không đúng"
+
+    if error:
+        return _auth_templates.TemplateResponse("login.html", {
+            "request": request,
+            "next": next,
+            "error": error,
+        })
+
+    request.session["user_id"] = user["id"]
+    request.session["username"] = user["username"]
+    request.session["is_root"] = bool(user["is_root"])
+    redirect_to = next if next.startswith("/") else "/dashboard"
+    return RedirectResponse(redirect_to, status_code=303)
+
+
+@app.post("/auth/logout")
+async def auth_logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/auth/login", status_code=303)
+
 
 # ── Dashboard UI ──────────────────────────────────────────────────────────────
-from pathlib import Path as _Path
+
 from agent.dashboard.router import router as _dash_router
 
 _STATIC = _Path(__file__).parent.parent / "dashboard" / "static"
@@ -135,7 +239,7 @@ async def trigger_global(
     return await _do_trigger("default", payload, x_alert_source)
 
 
-# ── Backward compat: global MCP server management → default project ───────────
+# ── Backward compat: global MCP server management ─────────────────────────────
 
 @app.get("/mcp-servers")
 def get_mcp_servers_global() -> Dict[str, Any]:
@@ -244,8 +348,6 @@ def del_project(project_id: str) -> Dict[str, Any]:
     return {"status": "deleted", "id": project_id}
 
 
-# ── Per-project trigger ───────────────────────────────────────────────────────
-
 @project_router.post("/{project_id}/trigger", status_code=202)
 async def trigger_project(
     project_id: str,
@@ -255,8 +357,6 @@ async def trigger_project(
     _project_or_404(project_id)
     return await _do_trigger(project_id, payload, x_alert_source)
 
-
-# ── Per-project services ──────────────────────────────────────────────────────
 
 @project_router.get("/{project_id}/services")
 def get_services(project_id: str) -> Dict[str, Any]:
@@ -283,8 +383,6 @@ def del_service(project_id: str, service: str) -> Dict[str, Any]:
     return {"project_id": project_id, "service": service, "status": "removed"}
 
 
-# ── Per-project alert channels ────────────────────────────────────────────────
-
 @project_router.get("/{project_id}/channels")
 def get_channels(project_id: str) -> Dict[str, Any]:
     _project_or_404(project_id)
@@ -307,11 +405,8 @@ def post_channel(project_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
     if not isinstance(config, dict):
         raise HTTPException(422, "'config' phải là object JSON")
     enabled = bool(body.get("enabled", True))
-
-    # Validate: email cần có 'to'
     if channel == "email" and not config.get("to") and not __import__("os").getenv("SMTP_TO"):
         raise HTTPException(422, "Email channel cần config['to'] hoặc env SMTP_TO")
-
     try:
         return set_project_channel(project_id, channel, config=config, enabled=enabled)
     except ValueError as e:
@@ -325,7 +420,6 @@ def patch_channel(project_id: str, channel: str, body: Dict[str, Any]) -> Dict[s
     entry = next((c for c in existing if c["channel"] == channel), None)
     if entry is None:
         raise HTTPException(404, f"Channel '{channel}' chưa cấu hình cho project '{project_id}'")
-
     new_config = body.get("config", entry["config"])
     new_enabled = bool(body.get("enabled", entry["enabled"]))
     try:
@@ -342,17 +436,11 @@ def del_channel(project_id: str, channel: str) -> Dict[str, Any]:
     return {"project_id": project_id, "channel": channel, "status": "removed"}
 
 
-# ── Per-project LLM config ───────────────────────────────────────────────────
-
 @project_router.get("/{project_id}/llm")
 def get_llm_config(project_id: str) -> Dict[str, Any]:
     _project_or_404(project_id)
     cfg = get_project_llm(project_id)
-    return {
-        "project_id": project_id,
-        "llm": cfg,
-        "using_global_env": cfg is None,
-    }
+    return {"project_id": project_id, "llm": cfg, "using_global_env": cfg is None}
 
 
 @project_router.patch("/{project_id}/llm")
@@ -371,8 +459,6 @@ def patch_llm_config(project_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(422, str(e))
     return {"project_id": project_id, "llm": result}
 
-
-# ── Per-project MCP servers ───────────────────────────────────────────────────
 
 @project_router.get("/{project_id}/mcp-servers")
 def get_mcp_servers(project_id: str) -> Dict[str, Any]:
@@ -407,7 +493,7 @@ async def ping_mcp_server(project_id: str, server_id: int) -> Dict[str, Any]:
 app.include_router(project_router)
 
 
-# ── Shared implementation (dùng bởi global và project-scoped routes) ──────────
+# ── Shared implementation ─────────────────────────────────────────────────────
 
 async def _do_trigger(
     project_id: str,

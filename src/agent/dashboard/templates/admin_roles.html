@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Admin · Roles — Investigation Agent{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Quản lý Roles</h2>
+  <div style="display:flex;gap:.5rem">
+    <a href="/dashboard/admin/users" class="btn btn-secondary">Users →</a>
+    <a href="/dashboard/admin/groups" class="btn btn-secondary">Groups →</a>
+  </div>
+</div>
+
+{% if create_error %}
+<div class="alert alert-error">{{ create_error }}</div>
+{% endif %}
+
+<!-- Tạo role mới -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">Tạo role mới</div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/admin/roles" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label class="form-label">ID (slug)</label>
+        <input class="form-input" type="text" name="role_id" required placeholder="vd: developer">
+      </div>
+      <div>
+        <label class="form-label">Tên hiển thị</label>
+        <input class="form-input" type="text" name="name" required placeholder="vd: Developer">
+      </div>
+      <div>
+        <label class="form-label">Mô tả</label>
+        <input class="form-input" type="text" name="description" placeholder="Tóm tắt quyền hạn">
+      </div>
+      <button type="submit" class="btn btn-primary">Tạo role</button>
+    </form>
+  </div>
+</div>
+
+<!-- Danh sách roles + permission grid -->
+{% for r in roles %}
+<div class="card" style="margin-bottom:1.2rem">
+  <div class="card-header" style="display:flex;align-items:center;gap:.8rem">
+    <strong>{{ r.name }}</strong>
+    <code style="font-size:.75rem;color:var(--text-muted)">#{{ r.id }}</code>
+    {% if r.is_system %}
+    <span class="badge badge-info">system</span>
+    {% else %}
+    <span class="badge badge-low">custom</span>
+    <form method="post" action="/dashboard/admin/roles/{{ r.id }}/delete"
+          onsubmit="return confirm('Xóa role {{ r.name }}?')" style="margin-left:auto">
+      <button type="submit" class="btn btn-secondary" style="padding:.25rem .6rem;font-size:.75rem;color:#f66">Xóa</button>
+    </form>
+    {% endif %}
+    <span style="color:var(--text-muted);font-size:.8rem;{% if r.is_system %}margin-left:auto{% endif %}">{{ r.description }}</span>
+  </div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/admin/roles/{{ r.id }}/permissions">
+      {% for group_name, pkeys in permission_groups.items() %}
+      <div style="margin-bottom:.8rem">
+        <div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.05em">{{ group_name }}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+          {% for pkey in pkeys %}
+          <label style="display:inline-flex;align-items:center;gap:.3rem;font-size:.83rem;cursor:pointer">
+            <input type="checkbox" name="{{ pkey }}" {% if pkey in r.perms %}checked{% endif %}
+                   style="accent-color:var(--accent)">
+            <span>{{ pkey.split('.')[1] }}</span>
+            <span style="color:var(--text-muted);font-size:.73rem" title="{{ permission_catalog[pkey] }}">(?)</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      {% endfor %}
+      <button type="submit" class="btn btn-primary" style="margin-top:.4rem;padding:.35rem .9rem">Lưu quyền</button>
+    </form>
+  </div>
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,4 +1,6 @@
-"""Dashboard APIRouter — mount vào server.py tại /dashboard."""
+"""Dashboard APIRouter — mount vào server.py tại /dashboard.
+Phase 5 Ngày 22: tất cả route đều require_login; admin routes guard thêm permission.
+"""
 from __future__ import annotations
 
 import json
@@ -6,11 +8,12 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from agent.auth.deps import NotAuthorized, require_login, require_perm, get_current_user
 from agent.dashboard.queries import (
     get_eval_calibration,
     get_eval_summary,
@@ -48,6 +51,11 @@ def _get_project_services_map() -> Dict[str, list]:
         return {}
 
 
+def _ctx(request: Request, user: dict, **kwargs) -> dict:
+    """Context dict chuẩn cho template — mang theo user info."""
+    return {"request": request, "current_user": user, **kwargs}
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @router.get("/", response_class=HTMLResponse)
@@ -55,25 +63,28 @@ async def dashboard_home(
     request: Request,
     project_id: Optional[str] = None,
     confidence: Optional[str] = None,
+    user: dict = Depends(require_login),
 ):
     invs = list_investigations(
         project_id=project_id or None,
         confidence=confidence or None,
         limit=100,
     )
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "active": "home",
-        "investigations": invs,
-        "total": len(invs),
-        "projects": _get_all_project_ids(),
-        "filter_project": project_id or "",
-        "filter_confidence": confidence or "",
-    })
+    return templates.TemplateResponse("index.html", _ctx(request, user,
+        active="home",
+        investigations=invs,
+        total=len(invs),
+        projects=_get_all_project_ids(),
+        filter_project=project_id or "",
+        filter_confidence=confidence or "",
+    ))
 
 
 @router.get("/investigations/{investigation_id}", response_class=HTMLResponse)
-async def dashboard_detail(request: Request, investigation_id: str):
+async def dashboard_detail(
+    request: Request, investigation_id: str,
+    user: dict = Depends(require_login),
+):
     inv = get_investigation_detail(investigation_id)
     if not inv:
         return HTMLResponse("<h3>Investigation not found</h3>", status_code=404)
@@ -83,17 +94,16 @@ async def dashboard_detail(request: Request, investigation_id: str):
         host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
         langfuse_url = f"{host}/traces"
 
-    return templates.TemplateResponse("detail.html", {
-        "request": request,
-        "active": "home",
-        "inv": inv,
-        "langfuse_url": langfuse_url,
-    })
+    return templates.TemplateResponse("detail.html", _ctx(request, user,
+        active="home",
+        inv=inv,
+        langfuse_url=langfuse_url,
+    ))
 
 
 @router.get("/stream/{investigation_id}")
 async def dashboard_stream(investigation_id: str):
-    """SSE endpoint — stream trace events của investigation đang chạy."""
+    """SSE endpoint — không cần login (JS fetch không dễ kiểm session)."""
     from agent.dashboard.sse import stream as sse_stream
 
     async def event_generator():
@@ -105,14 +115,17 @@ async def dashboard_stream(investigation_id: str):
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",  # tắt nginx buffer nếu có
+            "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
     )
 
 
 @router.get("/chat", response_class=HTMLResponse)
-async def dashboard_chat(request: Request):
+async def dashboard_chat(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     projects = get_projects_overview()
 
     quick_scenarios = [
@@ -146,12 +159,11 @@ async def dashboard_chat(request: Request):
         },
     ]
 
-    return templates.TemplateResponse("chat.html", {
-        "request": request,
-        "active": "chat",
-        "projects": projects,
-        "quick_scenarios": quick_scenarios,
-    })
+    return templates.TemplateResponse("chat.html", _ctx(request, user,
+        active="chat",
+        projects=projects,
+        quick_scenarios=quick_scenarios,
+    ))
 
 
 @router.get("/trigger", response_class=HTMLResponse)
@@ -159,6 +171,7 @@ async def dashboard_trigger_get(
     request: Request,
     scenario: Optional[str] = None,
     project_id: Optional[str] = None,
+    user: dict = Depends(require_login),
 ):
     projects = get_projects_overview()
     svc_map = _get_project_services_map()
@@ -167,18 +180,17 @@ async def dashboard_trigger_get(
     services = svc_map.get(first_pid, [])
     recent = list_investigations(limit=5)
 
-    return templates.TemplateResponse("trigger.html", {
-        "request": request,
-        "active": "trigger",
-        "projects": projects,
-        "services": services,
-        "selected_project": first_pid,
-        "selected_service": services[0] if services else "",
-        "selected_scenario": scenario or "scenario1",
-        "project_services_json": json.dumps(svc_map),
-        "recent": recent[:5],
-        "result": None,
-    })
+    return templates.TemplateResponse("trigger.html", _ctx(request, user,
+        active="trigger",
+        projects=projects,
+        services=services,
+        selected_project=first_pid,
+        selected_service=services[0] if services else "",
+        selected_scenario=scenario or "scenario1",
+        project_services_json=json.dumps(svc_map),
+        recent=recent[:5],
+        result=None,
+    ))
 
 
 @router.post("/trigger", response_class=HTMLResponse)
@@ -189,6 +201,7 @@ async def dashboard_trigger_post(
     scenario: str = Form(...),
     time_window: str = Form(...),
     symptom: str = Form(""),
+    user: dict = Depends(require_login),
 ):
     import aiohttp
 
@@ -217,34 +230,36 @@ async def dashboard_trigger_post(
     services = svc_map.get(project_id, [])
     recent = list_investigations(limit=5)
 
-    return templates.TemplateResponse("trigger.html", {
-        "request": request,
-        "active": "trigger",
-        "projects": projects,
-        "services": services,
-        "selected_project": project_id,
-        "selected_service": service,
-        "selected_scenario": scenario,
-        "project_services_json": json.dumps(svc_map),
-        "recent": recent[:5],
-        "result": result,
-    })
+    return templates.TemplateResponse("trigger.html", _ctx(request, user,
+        active="trigger",
+        projects=projects,
+        services=services,
+        selected_project=project_id,
+        selected_service=service,
+        selected_scenario=scenario,
+        project_services_json=json.dumps(svc_map),
+        recent=recent[:5],
+        result=result,
+    ))
 
 
 @router.get("/projects", response_class=HTMLResponse)
-async def dashboard_projects(request: Request):
+async def dashboard_projects(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     projects = get_projects_overview()
-    return templates.TemplateResponse("projects.html", {
-        "request": request,
-        "active": "projects",
-        "projects": projects,
-    })
+    return templates.TemplateResponse("projects.html", _ctx(request, user,
+        active="projects",
+        projects=projects,
+    ))
 
 
 @router.get("/health", response_class=HTMLResponse)
-async def dashboard_health(request: Request):
-    """Trang sức khoẻ hệ thống: LLM, limiter, circuit breaker, MCP."""
-    import os
+async def dashboard_health(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     from agent.engine.resilience import investigation_limiter, llm_circuit_breaker
     from agent.intake.mcp_registry import list_servers
 
@@ -265,52 +280,56 @@ async def dashboard_health(request: Request):
     except Exception:
         pass
 
-    return templates.TemplateResponse("health.html", {
-        "request": request,
-        "active": "health",
-        "limiter": limiter,
-        "breaker": breaker,
-        "provider": provider,
-        "model": model,
-        "llm_key_set": llm_key_set,
-        "mcp_servers": mcp_servers_raw,
-    })
+    return templates.TemplateResponse("health.html", _ctx(request, user,
+        active="health",
+        limiter=limiter,
+        breaker=breaker,
+        provider=provider,
+        model=model,
+        llm_key_set=llm_key_set,
+        mcp_servers=mcp_servers_raw,
+    ))
 
 
 @router.get("/metrics-live", response_class=HTMLResponse)
-async def dashboard_metrics_live(request: Request, service: Optional[str] = None):
-    """Live metrics panel — baseline vs current per service."""
+async def dashboard_metrics_live(
+    request: Request,
+    service: Optional[str] = None,
+    user: dict = Depends(require_login),
+):
     metrics = get_metrics_live(service=service)
     projects = get_projects_overview()
     all_services = sorted({m["service"] for m in metrics})
 
-    return templates.TemplateResponse("metrics_live.html", {
-        "request": request,
-        "active": "metrics",
-        "metrics": metrics,
-        "selected_service": service or "",
-        "all_services": all_services,
-        "projects": projects,
-    })
+    return templates.TemplateResponse("metrics_live.html", _ctx(request, user,
+        active="metrics",
+        metrics=metrics,
+        selected_service=service or "",
+        all_services=all_services,
+        projects=projects,
+    ))
 
 
 @router.get("/channels", response_class=HTMLResponse)
-async def dashboard_channels(request: Request):
-    """Alert channel config per project."""
+async def dashboard_channels(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     channels = get_channel_config()
     projects = get_projects_overview()
 
-    return templates.TemplateResponse("channels.html", {
-        "request": request,
-        "active": "channels",
-        "channel_rows": channels,
-        "projects": projects,
-    })
+    return templates.TemplateResponse("channels.html", _ctx(request, user,
+        active="channels",
+        channel_rows=channels,
+        projects=projects,
+    ))
 
 
 @router.post("/channels/{project_id}/{channel}/toggle", response_class=HTMLResponse)
-async def dashboard_channel_toggle(request: Request, project_id: str, channel: str):
-    """Toggle enable/disable một kênh alert."""
+async def dashboard_channel_toggle(
+    request: Request, project_id: str, channel: str,
+    user: dict = Depends(require_login),
+):
     from agent.storage.db import open_db
     conn = open_db()
     existing = conn.execute(
@@ -330,22 +349,23 @@ async def dashboard_channel_toggle(request: Request, project_id: str, channel: s
         )
     conn.commit()
     conn.close()
-    from fastapi.responses import RedirectResponse
     return RedirectResponse("/dashboard/channels", status_code=303)
 
 
 # ── MCP Registry UI ───────────────────────────────────────────────────────────
 
 @router.get("/mcp", response_class=HTMLResponse)
-async def dashboard_mcp(request: Request):
+async def dashboard_mcp(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     servers = get_mcp_servers_for_dashboard()
     projects = _get_all_project_ids()
-    return templates.TemplateResponse("mcp.html", {
-        "request": request,
-        "active": "mcp",
-        "servers": servers,
-        "projects": projects,
-    })
+    return templates.TemplateResponse("mcp.html", _ctx(request, user,
+        active="mcp",
+        servers=servers,
+        projects=projects,
+    ))
 
 
 @router.post("/mcp/register", response_class=HTMLResponse)
@@ -355,6 +375,7 @@ async def dashboard_mcp_register(
     url: str = Form(...),
     project_id: str = Form("default"),
     description: str = Form(""),
+    user: dict = Depends(require_login),
 ):
     from agent.intake.mcp_registry import add_server
     error = None
@@ -366,28 +387,27 @@ async def dashboard_mcp_register(
     if error:
         servers = get_mcp_servers_for_dashboard()
         projects = _get_all_project_ids()
-        return templates.TemplateResponse("mcp.html", {
-            "request": request,
-            "active": "mcp",
-            "servers": servers,
-            "projects": projects,
-            "register_error": error,
-        })
-    from fastapi.responses import RedirectResponse
+        return templates.TemplateResponse("mcp.html", _ctx(request, user,
+            active="mcp",
+            servers=servers,
+            projects=projects,
+            register_error=error,
+        ))
     return RedirectResponse("/dashboard/mcp", status_code=303)
 
 
 @router.post("/mcp/{server_id}/delete", response_class=HTMLResponse)
-async def dashboard_mcp_delete(request: Request, server_id: int):
+async def dashboard_mcp_delete(
+    request: Request, server_id: int,
+    user: dict = Depends(require_login),
+):
     from agent.intake.mcp_registry import remove_server
     remove_server(server_id)
-    from fastapi.responses import RedirectResponse
     return RedirectResponse("/dashboard/mcp", status_code=303)
 
 
 @router.post("/mcp/{server_id}/ping")
 async def dashboard_mcp_ping(server_id: int):
-    """Ping một MCP server — trả JSON kết quả để JS hiển thị."""
     import aiohttp, time
     from agent.intake.mcp_registry import get_server_by_id
 
@@ -403,7 +423,7 @@ async def dashboard_mcp_ping(server_id: int):
                        "params": {"protocolVersion": "2024-11-05",
                                   "capabilities": {}, "clientInfo": {"name": "dashboard", "version": "1"}}}
             async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                data = await resp.json()
+                await resp.json()
                 latency_ms = round((time.monotonic() - t0) * 1000)
 
             tools_payload = {"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}}
@@ -420,36 +440,43 @@ async def dashboard_mcp_ping(server_id: int):
 # ── Project Detail UI ─────────────────────────────────────────────────────────
 
 @router.get("/projects/{project_id}", response_class=HTMLResponse)
-async def dashboard_project_detail(request: Request, project_id: str):
+async def dashboard_project_detail(
+    request: Request, project_id: str,
+    user: dict = Depends(require_login),
+):
     proj = get_project_detail(project_id)
     if not proj:
         return HTMLResponse("<h3>Project not found</h3>", status_code=404)
-    return templates.TemplateResponse("project_detail.html", {
-        "request": request,
-        "active": "projects",
-        "proj": proj,
-    })
+    return templates.TemplateResponse("project_detail.html", _ctx(request, user,
+        active="projects",
+        proj=proj,
+    ))
 
 
 @router.post("/projects/{project_id}/services/add", response_class=HTMLResponse)
-async def dashboard_project_add_service(request: Request, project_id: str, service: str = Form(...)):
+async def dashboard_project_add_service(
+    request: Request, project_id: str,
+    service: str = Form(...),
+    user: dict = Depends(require_login),
+):
     from agent.intake.project_registry import add_project_service
     try:
         add_project_service(project_id, service.strip())
     except Exception:
         pass
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
 
 
 @router.post("/projects/{project_id}/services/{service}/delete", response_class=HTMLResponse)
-async def dashboard_project_del_service(request: Request, project_id: str, service: str):
+async def dashboard_project_del_service(
+    request: Request, project_id: str, service: str,
+    user: dict = Depends(require_login),
+):
     from agent.intake.project_registry import remove_project_service
     try:
         remove_project_service(project_id, service)
     except Exception:
         pass
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
 
 
@@ -458,23 +485,22 @@ async def dashboard_project_channel_config(
     request: Request, project_id: str, channel: str,
     config_json: str = Form("{}"),
     enabled: str = Form("0"),
+    user: dict = Depends(require_login),
 ):
     from agent.intake.project_registry import set_project_channel
     try:
         set_project_channel(project_id, channel, json.loads(config_json), enabled == "1")
     except Exception:
         pass
-    from fastapi.responses import RedirectResponse
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
 
 
-# ── Investigation Replay ───────────────────────────────────────────────────────
-
 @router.post("/investigations/{investigation_id}/replay")
-async def dashboard_investigation_replay(request: Request, investigation_id: str):
-    """Chạy lại investigation gốc — trigger mới, redirect sang detail."""
+async def dashboard_investigation_replay(
+    request: Request, investigation_id: str,
+    user: dict = Depends(require_login),
+):
     import aiohttp
-    from fastapi.responses import RedirectResponse
 
     inv = get_investigation_detail(investigation_id)
     if not inv:
@@ -511,11 +537,11 @@ async def dashboard_investigation_replay(request: Request, investigation_id: str
     return RedirectResponse("/dashboard", status_code=303)
 
 
-# ── Demo Mode ─────────────────────────────────────────────────────────────────
-
 @router.get("/demo", response_class=HTMLResponse)
-async def dashboard_demo(request: Request):
-    """Full-screen demo view — ẩn nav, chỉ hiện trigger + SSE stream + verdict."""
+async def dashboard_demo(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     projects = get_projects_overview()
     quick_scenarios = [
         {"label": "payment-gateway timeout (14:00)", "service": "payment-gateway",
@@ -532,40 +558,43 @@ async def dashboard_demo(request: Request):
          "symptom": "api-gateway: RateLimitError tăng đột biến, request_count tăng 5x"},
         {"label": "💳 processor timeout credit_card", "service": "proc-alpha",
          "scenario": "fintech1", "time_window": "10:00-11:00", "domain": "fintech",
-         "symptom": "credit_card: 65% fail từ 10:15, ProcessorTimeoutError — nghi lỗi processor"},
+         "symptom": "credit_card: 65% fail từ 10:15, ProcessorTimeoutError"},
         {"label": "💳 merchant price bug refund 8x", "service": "merch-buzz",
          "scenario": "fintech2", "time_window": "14:00-15:00", "domain": "fintech",
-         "symptom": "merch-buzz: refund_rate 14.8% từ 14:00 (~8x baseline) — nghi price bug"},
+         "symptom": "merch-buzz: refund_rate 14.8% từ 14:00 (~8x baseline)"},
     ]
-    return templates.TemplateResponse("demo.html", {
-        "request": request,
-        "projects": projects,
-        "quick_scenarios": quick_scenarios,
-    })
+    return templates.TemplateResponse("demo.html", _ctx(request, user,
+        projects=projects,
+        quick_scenarios=quick_scenarios,
+    ))
 
 
 @router.get("/tools", response_class=HTMLResponse)
-async def dashboard_tools(request: Request, domain: Optional[str] = None):
-    """Tool Registry Viewer — danh sách tools theo domain."""
+async def dashboard_tools(
+    request: Request,
+    domain: Optional[str] = None,
+    user: dict = Depends(require_login),
+):
     all_tools = get_all_tools_for_dashboard()
     selected = domain or "microservice"
-    return templates.TemplateResponse("tools.html", {
-        "request": request,
-        "active": "tools",
-        "all_tools": all_tools,
-        "selected_domain": selected,
-    })
+    return templates.TemplateResponse("tools.html", _ctx(request, user,
+        active="tools",
+        all_tools=all_tools,
+        selected_domain=selected,
+    ))
 
 
 @router.get("/eval", response_class=HTMLResponse)
-async def dashboard_eval(request: Request):
+async def dashboard_eval(
+    request: Request,
+    user: dict = Depends(require_login),
+):
     eval_rows = get_eval_summary()
 
     total_runs    = sum(r["n"]  for r in eval_rows)
     total_correct = sum(r["ok"] for r in eval_rows)
     overall_rate  = (total_correct * 100 // total_runs) if total_runs else 0
 
-    # Dữ liệu cho Chart.js
     eval_labels = [r["scenario"] for r in eval_rows]
     eval_rates  = [(r["ok"] * 100 // r["n"]) if r["n"] else 0 for r in eval_rows]
     eval_steps  = [round(r["avg_steps"], 1) for r in eval_rows]
@@ -573,16 +602,239 @@ async def dashboard_eval(request: Request):
 
     eval_calibration = get_eval_calibration()
 
-    return templates.TemplateResponse("eval.html", {
-        "request": request,
-        "active": "eval",
-        "eval_rows": eval_rows,
-        "total_runs": total_runs,
-        "total_correct": total_correct,
-        "overall_rate": overall_rate,
-        "eval_labels": eval_labels,
-        "eval_rates": eval_rates,
-        "eval_steps": eval_steps,
-        "eval_recall": eval_recall,
-        "eval_calibration": eval_calibration,
-    })
+    return templates.TemplateResponse("eval.html", _ctx(request, user,
+        active="eval",
+        eval_rows=eval_rows,
+        total_runs=total_runs,
+        total_correct=total_correct,
+        overall_rate=overall_rate,
+        eval_labels=eval_labels,
+        eval_rates=eval_rates,
+        eval_steps=eval_steps,
+        eval_recall=eval_recall,
+        eval_calibration=eval_calibration,
+    ))
+
+
+# ── Admin: Users ──────────────────────────────────────────────────────────────
+
+@router.get("/admin/users", response_class=HTMLResponse)
+async def admin_users_get(
+    request: Request,
+    user: dict = Depends(require_perm("user.manage")),
+):
+    from agent.auth.rbac import list_users, list_roles, list_user_assignments
+    users = list_users()
+    roles = list_roles()
+    # Enrich với assignments
+    for u in users:
+        u["assignments"] = list_user_assignments(u["id"])
+    return templates.TemplateResponse("admin_users.html", _ctx(request, user,
+        active="admin",
+        users=users,
+        roles=roles,
+    ))
+
+
+@router.post("/admin/users", response_class=HTMLResponse)
+async def admin_users_post(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    user: dict = Depends(require_perm("user.manage")),
+):
+    from agent.auth.rbac import create_user, list_users, list_roles, list_user_assignments
+    error = None
+    try:
+        create_user(username.strip(), password)
+    except ValueError as e:
+        error = str(e)
+
+    if error:
+        users = list_users()
+        roles = list_roles()
+        for u in users:
+            u["assignments"] = list_user_assignments(u["id"])
+        return templates.TemplateResponse("admin_users.html", _ctx(request, user,
+            active="admin",
+            users=users,
+            roles=roles,
+            create_error=error,
+        ))
+    return RedirectResponse("/dashboard/admin/users", status_code=303)
+
+
+@router.post("/admin/users/{target_user_id}/toggle", response_class=HTMLResponse)
+async def admin_user_toggle(
+    request: Request, target_user_id: str,
+    user: dict = Depends(require_perm("user.manage")),
+):
+    from agent.auth.rbac import get_user_by_id, update_user
+    target = get_user_by_id(target_user_id)
+    if target and not target["is_root"]:
+        update_user(target_user_id, is_active=not bool(target["is_active"]))
+    return RedirectResponse("/dashboard/admin/users", status_code=303)
+
+
+@router.post("/admin/users/{target_user_id}/assign", response_class=HTMLResponse)
+async def admin_user_assign(
+    request: Request, target_user_id: str,
+    role_id: str = Form(...),
+    scope_type: str = Form("global"),
+    scope_project_id: str = Form(""),
+    user: dict = Depends(require_perm("role.manage")),
+):
+    from agent.auth.rbac import assign_role
+    try:
+        assign_role(
+            target_user_id, role_id,
+            scope_type=scope_type,
+            scope_project_id=scope_project_id or None,
+        )
+    except Exception:
+        pass
+    return RedirectResponse("/dashboard/admin/users", status_code=303)
+
+
+@router.post("/admin/assignments/{assignment_id}/remove", response_class=HTMLResponse)
+async def admin_assignment_remove(
+    request: Request, assignment_id: str,
+    user: dict = Depends(require_perm("role.manage")),
+):
+    from agent.auth.rbac import remove_assignment
+    remove_assignment(assignment_id)
+    return RedirectResponse("/dashboard/admin/users", status_code=303)
+
+
+# ── Admin: Roles ──────────────────────────────────────────────────────────────
+
+@router.get("/admin/roles", response_class=HTMLResponse)
+async def admin_roles_get(
+    request: Request,
+    user: dict = Depends(require_perm("role.manage")),
+):
+    from agent.auth.rbac import list_roles, get_role_permissions
+    from agent.auth.permissions import PERMISSION_CATALOG, PERMISSION_GROUPS
+    roles = list_roles()
+    for r in roles:
+        r["perms"] = set(get_role_permissions(r["id"]))
+    return templates.TemplateResponse("admin_roles.html", _ctx(request, user,
+        active="admin",
+        roles=roles,
+        permission_catalog=PERMISSION_CATALOG,
+        permission_groups=PERMISSION_GROUPS,
+    ))
+
+
+@router.post("/admin/roles", response_class=HTMLResponse)
+async def admin_roles_post(
+    request: Request,
+    role_id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    user: dict = Depends(require_perm("role.manage")),
+):
+    from agent.auth.rbac import create_role, list_roles, get_role_permissions
+    from agent.auth.permissions import PERMISSION_CATALOG, PERMISSION_GROUPS
+    error = None
+    try:
+        create_role(role_id.strip().lower(), name.strip(), description.strip())
+    except ValueError as e:
+        error = str(e)
+
+    if error:
+        roles = list_roles()
+        for r in roles:
+            r["perms"] = set(get_role_permissions(r["id"]))
+        return templates.TemplateResponse("admin_roles.html", _ctx(request, user,
+            active="admin",
+            roles=roles,
+            permission_catalog=PERMISSION_CATALOG,
+            permission_groups=PERMISSION_GROUPS,
+            create_error=error,
+        ))
+    return RedirectResponse("/dashboard/admin/roles", status_code=303)
+
+
+@router.post("/admin/roles/{role_id}/permissions", response_class=HTMLResponse)
+async def admin_role_set_permissions(
+    request: Request, role_id: str,
+    user: dict = Depends(require_perm("role.manage")),
+):
+    from agent.auth.rbac import set_role_permissions
+    from agent.auth.permissions import PERMISSION_CATALOG
+    form = await request.form()
+    # Checkboxes: key = permission key, value = "on"
+    selected = [k for k in PERMISSION_CATALOG.keys() if form.get(k) == "on"]
+    set_role_permissions(role_id, selected)
+    return RedirectResponse("/dashboard/admin/roles", status_code=303)
+
+
+@router.post("/admin/roles/{role_id}/delete", response_class=HTMLResponse)
+async def admin_role_delete(
+    request: Request, role_id: str,
+    user: dict = Depends(require_perm("role.manage")),
+):
+    from agent.auth.rbac import delete_role
+    try:
+        delete_role(role_id)
+    except ValueError:
+        pass
+    return RedirectResponse("/dashboard/admin/roles", status_code=303)
+
+
+# ── Admin: Project Groups ─────────────────────────────────────────────────────
+
+@router.get("/admin/groups", response_class=HTMLResponse)
+async def admin_groups_get(
+    request: Request,
+    user: dict = Depends(require_perm("group.manage")),
+):
+    from agent.auth.rbac import list_groups, list_group_members
+    from agent.intake.project_registry import list_projects
+    groups = list_groups()
+    for g in groups:
+        g["members"] = list_group_members(g["id"])
+    projects = list_projects()
+    return templates.TemplateResponse("admin_groups.html", _ctx(request, user,
+        active="admin",
+        groups=groups,
+        projects=projects,
+    ))
+
+
+@router.post("/admin/groups", response_class=HTMLResponse)
+async def admin_groups_post(
+    request: Request,
+    name: str = Form(...),
+    description: str = Form(""),
+    user: dict = Depends(require_perm("group.manage")),
+):
+    from agent.auth.rbac import create_group
+    try:
+        create_group(name.strip(), description.strip())
+    except ValueError:
+        pass
+    return RedirectResponse("/dashboard/admin/groups", status_code=303)
+
+
+@router.post("/admin/groups/{group_id}/add-member", response_class=HTMLResponse)
+async def admin_group_add_member(
+    request: Request, group_id: str,
+    project_id: str = Form(...),
+    user: dict = Depends(require_perm("group.manage")),
+):
+    from agent.auth.rbac import add_group_member
+    add_group_member(group_id, project_id)
+    return RedirectResponse("/dashboard/admin/groups", status_code=303)
+
+
+@router.post("/admin/groups/{group_id}/remove-member", response_class=HTMLResponse)
+async def admin_group_remove_member(
+    request: Request, group_id: str,
+    project_id: str = Form(...),
+    user: dict = Depends(require_perm("group.manage")),
+):
+    from agent.auth.rbac import remove_group_member
+    remove_group_member(group_id, project_id)
+    return RedirectResponse("/dashboard/admin/groups", status_code=303)

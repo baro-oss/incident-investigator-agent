@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Admin · Users — Investigation Agent{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Quản lý Users</h2>
+  <div style="display:flex;gap:.5rem">
+    <a href="/dashboard/admin/roles" class="btn btn-secondary">Roles →</a>
+    <a href="/dashboard/admin/groups" class="btn btn-secondary">Groups →</a>
+  </div>
+</div>
+
+{% if create_error %}
+<div class="alert alert-error">{{ create_error }}</div>
+{% endif %}
+
+<!-- Tạo user mới -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">Tạo user mới</div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/admin/users" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label class="form-label">Username</label>
+        <input class="form-input" type="text" name="username" required placeholder="vd: alice">
+      </div>
+      <div>
+        <label class="form-label">Mật khẩu</label>
+        <input class="form-input" type="password" name="password" required placeholder="≥8 ký tự">
+      </div>
+      <button type="submit" class="btn btn-primary">Tạo user</button>
+    </form>
+  </div>
+</div>
+
+<!-- Danh sách users -->
+<div class="card">
+  <div class="card-header">Danh sách users ({{ users|length }})</div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Loại</th>
+        <th>Trạng thái</th>
+        <th>Roles được gán</th>
+        <th>Gán role</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>
+          <strong>{{ u.username }}</strong>
+          {% if u.id == current_user.id %}
+          <span class="badge badge-info" style="margin-left:.4rem">bạn</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.is_root %}
+          <span class="badge badge-high">root</span>
+          {% else %}
+          <span class="badge badge-low">user</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.is_active %}
+          <span class="badge" style="background:rgba(0,200,100,.15);color:#0c8">active</span>
+          {% else %}
+          <span class="badge" style="background:rgba(200,50,50,.15);color:#f66">disabled</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.assignments %}
+            {% for a in u.assignments %}
+            <span style="display:inline-flex;align-items:center;gap:.3rem;margin:.1rem">
+              <span class="badge badge-medium">{{ a.role_name }}</span>
+              <small style="color:var(--text-muted)">{{ a.scope_type }}{% if a.scope_project_id %}/{{ a.scope_project_id }}{% endif %}</small>
+              <form method="post" action="/dashboard/admin/assignments/{{ a.id }}/remove" style="display:inline">
+                <button type="submit" title="Xoá gán" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:0 2px;font-size:.75rem">✕</button>
+              </form>
+            </span>
+            {% endfor %}
+          {% else %}
+            <span style="color:var(--text-muted);font-size:.8rem">Chưa có role</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if not u.is_root %}
+          <form method="post" action="/dashboard/admin/users/{{ u.id }}/assign" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+            <select name="role_id" class="form-select" style="min-width:110px">
+              {% for r in roles %}
+              <option value="{{ r.id }}">{{ r.name }}</option>
+              {% endfor %}
+            </select>
+            <select name="scope_type" class="form-select">
+              <option value="global">global</option>
+              <option value="project">project</option>
+            </select>
+            <input type="text" name="scope_project_id" class="form-input" placeholder="project-id (nếu project scope)" style="width:140px">
+            <button type="submit" class="btn btn-secondary" style="padding:.3rem .6rem">Gán</button>
+          </form>
+          {% endif %}
+        </td>
+        <td>
+          {% if not u.is_root %}
+          <form method="post" action="/dashboard/admin/users/{{ u.id }}/toggle">
+            <button type="submit" class="btn btn-secondary" style="padding:.3rem .7rem;font-size:.8rem">
+              {{ "Disable" if u.is_active else "Enable" }}
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
