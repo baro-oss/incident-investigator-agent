@@ -1,14 +1,14 @@
 """
-Langfuse tracer — emit spans song song với SQLite trace, không thay thế.
+Langfuse tracer (v3 API) — emit spans song song với SQLite trace, không thay thế.
 
 Opt-in: chỉ hoạt động khi LANGFUSE_PUBLIC_KEY được set.
 Mọi method đều catch exception — không bao giờ làm vỡ investigation.
 
-Span hierarchy:
-  trace(investigation)
-    └── span(step_N)
-          ├── generation(llm_decision)   ← token usage, latency
-          └── span(tool_call)            ← tool name, args, result summary
+Span hierarchy (Langfuse v3):
+  root_span (investigation)          ← lf.start_span()
+    └── step_span (step_N)           ← root_span.start_span()
+          ├── generation (llm)       ← step_span.start_generation()
+          └── span (tool_call)       ← step_span.start_span()
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ class LangfuseTracer:
     ) -> None:
         self._enabled = False
         self._lf = None
-        self._trace = None
+        self._root_span = None
         self._step_span = None
         self._model = model or os.getenv("LLM_MODEL", "unknown")
 
@@ -41,31 +41,32 @@ class LangfuseTracer:
             return  # silent no-op
 
         try:
-            from langfuse import Langfuse  # lazy import — không lỗi khi chưa cài
+            from langfuse import Langfuse
             self._lf = Langfuse(
                 public_key=public_key,
                 secret_key=os.getenv("LANGFUSE_SECRET_KEY", ""),
                 host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
             )
-            self._trace = self._lf.trace(
+            self._root_span = self._lf.start_span(
                 name="investigation",
-                id=investigation_id,
                 input={"symptom": symptom, "scenario": scenario},
-                metadata={"project_id": project_id},
-                tags=[project_id, scenario],
+                metadata={"project_id": project_id, "investigation_id": investigation_id},
             )
             self._enabled = True
-            logger.info("Langfuse trace started: %s", investigation_id)
+            logger.info(
+                "Langfuse trace started: inv=%s trace_id=%s",
+                investigation_id, self._root_span.trace_id,
+            )
         except Exception as exc:
             logger.warning("Langfuse init thất bại (bỏ qua): %s", exc)
 
     # ── Step lifecycle ────────────────────────────────────────────────────────
 
     def start_step(self, step: int) -> None:
-        if not self._enabled:
+        if not self._enabled or self._root_span is None:
             return
         try:
-            self._step_span = self._trace.span(
+            self._step_span = self._root_span.start_span(
                 name=f"step_{step}",
                 input={"step": step},
             )
@@ -93,13 +94,17 @@ class LangfuseTracer:
         if not self._enabled or self._step_span is None:
             return
         try:
-            gen = self._step_span.generation(
+            usage_details = (
+                {"input": usage.get("input_tokens", 0),
+                 "output": usage.get("output_tokens", 0)}
+                if usage else {}
+            )
+            gen = self._step_span.start_generation(
                 name="llm_decision",
                 model=self._model,
                 input=[{"role": "user", "content": input_summary[:500]}],
                 output=output_summary[:300],
-                usage={"input": usage.get("input_tokens", 0),
-                       "output": usage.get("output_tokens", 0)} if usage else {},
+                usage_details=usage_details,
                 metadata={"latency_ms": round(latency_ms)},
             )
             gen.end()
@@ -118,7 +123,7 @@ class LangfuseTracer:
         if not self._enabled or self._step_span is None:
             return
         try:
-            span = self._step_span.span(
+            span = self._step_span.start_span(
                 name="tool_call",
                 input={"tool": tool_name, "args": args},
                 output={"summary": result_summary[:300]},
@@ -131,22 +136,25 @@ class LangfuseTracer:
     # ── Verdict ───────────────────────────────────────────────────────────────
 
     def record_verdict(self, stop_reason: str, verdict: Any) -> None:
-        if not self._enabled or self._trace is None:
+        if not self._enabled or self._root_span is None:
             return
         try:
             output: Dict[str, Any] = {"stop_reason": stop_reason}
             if verdict:
                 output["root_cause"] = verdict.root_cause
                 output["confidence"] = verdict.confidence
-            self._trace.update(output=output)
+
+            self._root_span.update(output=output)
 
             if verdict:
                 _CONF_SCORE = {"high": 1.0, "medium": 0.6, "low": 0.3, "insufficient": 0.0}
-                self._trace.score(
+                self._root_span.score_trace(
                     name="confidence",
                     value=_CONF_SCORE.get(verdict.confidence, 0.0),
                     comment=verdict.root_cause[:100],
                 )
+
+            self._root_span.end()
         except Exception as exc:
             logger.debug("Langfuse record_verdict: %s", exc)
 
