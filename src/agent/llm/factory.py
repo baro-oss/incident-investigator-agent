@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from .anthropic import AnthropicClient
 from .base import LLMClient
@@ -12,12 +12,14 @@ from .openai_compat import OpenAICompatibleClient
 def create_llm_client(
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    extra_config: Optional[Dict[str, Any]] = None,
 ) -> LLMClient:
     """
     Trả LLMClient phù hợp.
 
     Provider hợp lệ:
       - "anthropic"  → AnthropicClient
+      - "gemini"     → GeminiClient (google-genai)
       - "openai" / "groq" / "mistral" / "together" / "ollama" / bất kỳ
         → OpenAICompatibleClient (đổi base_url qua OPENAI_BASE_URL)
     """
@@ -26,5 +28,9 @@ def create_llm_client(
 
     if provider == "anthropic":
         return AnthropicClient(model=model)
-    else:
-        return OpenAICompatibleClient(model=model)
+
+    if provider == "gemini":
+        from .gemini import GeminiClient
+        return GeminiClient(model=model, extra_config=extra_config)
+
+    return OpenAICompatibleClient(model=model)

@@ -52,12 +52,14 @@ from agent.intake.project_registry import (
     create_project,
     delete_project,
     get_project,
+    get_project_llm,
     list_project_channels,
     list_project_services,
     list_projects,
     remove_project_channel,
     remove_project_service,
     set_project_channel,
+    set_project_llm,
     update_project,
 )
 from agent.intake.runner import _active_investigations, trigger_investigation
@@ -329,6 +331,36 @@ def del_channel(project_id: str, channel: str) -> Dict[str, Any]:
     if not remove_project_channel(project_id, channel):
         raise HTTPException(404, f"Channel '{channel}' chưa cấu hình cho project '{project_id}'")
     return {"project_id": project_id, "channel": channel, "status": "removed"}
+
+
+# ── Per-project LLM config ───────────────────────────────────────────────────
+
+@project_router.get("/{project_id}/llm")
+def get_llm_config(project_id: str) -> Dict[str, Any]:
+    _project_or_404(project_id)
+    cfg = get_project_llm(project_id)
+    return {
+        "project_id": project_id,
+        "llm": cfg,
+        "using_global_env": cfg is None,
+    }
+
+
+@project_router.patch("/{project_id}/llm")
+def patch_llm_config(project_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+    _project_or_404(project_id)
+    provider = (body.get("provider") or "").strip().lower()
+    model = body.get("model") or None
+    config = body.get("config") or {}
+    if not provider:
+        raise HTTPException(422, "'provider' là bắt buộc (anthropic|gemini|openai|groq|...)")
+    if not isinstance(config, dict):
+        raise HTTPException(422, "'config' phải là object JSON")
+    try:
+        result = set_project_llm(project_id, provider, model=model, config=config)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    return {"project_id": project_id, "llm": result}
 
 
 # ── Per-project MCP servers ───────────────────────────────────────────────────

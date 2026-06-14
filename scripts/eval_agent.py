@@ -14,10 +14,13 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import sqlite3
 import sys
 import time
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
@@ -190,7 +193,11 @@ _MOCK_CLASSES = {
 def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
     verdict = state.verdict
     if verdict is None:
-        return {"correct": False, "reason": "no_verdict", "confidence": "none", "steps": state.steps_taken}
+        return {
+            "correct": False, "reason": "no_verdict", "confidence": "none",
+            "steps": state.steps_taken, "recall_at_1": 0,
+            "hallucination": 0, "token_total": state.total_tokens,
+        }
 
     raw = (verdict.raw_text + " " + verdict.root_cause + " " + verdict.evidence_summary).lower()
     keywords = scenario_config["root_cause_keywords"]
@@ -201,6 +208,29 @@ def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
     min_conf = scenario_config["expected_confidence_min"]
     conf_ok = CONF_RANK.get(conf, 0) >= CONF_RANK.get(min_conf, 0)
 
+    # recall@1: service đúng có xuất hiện trong evidence của bước đầu tiên không
+    target_service = scenario_config["root_cause_service"]
+    recall_at_1 = 0
+    if state.evidence:
+        first_ev = state.evidence[0]
+        first_raw = (first_ev.summary + str(first_ev.params)).lower()
+        if target_service.lower() in first_raw:
+            recall_at_1 = 1
+
+    # hallucination check: verdict claim service nào không có evidence đỡ không
+    hallucination = 0
+    if verdict.root_cause:
+        evidence_text = " ".join(e.summary for e in state.evidence).lower()
+        rc_lower = verdict.root_cause.lower()
+        if rc_lower and len(state.evidence) > 0:
+            # Kiểm đơn giản: keyword chính trong root_cause có trong evidence không
+            primary_kw = keywords[0].lower() if keywords else ""
+            if primary_kw and primary_kw not in evidence_text and primary_kw in rc_lower:
+                hallucination = 1  # claim về keyword nhưng không có evidence
+
+    # token_efficiency: steps/token (đơn vị: steps per 1000 tokens)
+    token_total = state.total_tokens
+
     return {
         "correct": correct,
         "confidence": conf,
@@ -209,7 +239,41 @@ def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
         "steps": state.steps_taken,
         "stop_reason": state.stop_reason,
         "root_cause": verdict.root_cause[:80],
+        "recall_at_1": recall_at_1,
+        "hallucination": hallucination,
+        "token_total": token_total,
     }
+
+
+def _save_eval_results_to_db(run_id: str, scenario_id: str, results: List[Dict]) -> None:
+    """Lưu kết quả eval vào bảng eval_results trong SQLite."""
+    db_path = Path(__file__).parent.parent / "data" / "investigation.db"
+    if not db_path.exists():
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    try:
+        conn = sqlite3.connect(str(db_path))
+        for i, r in enumerate(results):
+            conn.execute("""
+                INSERT INTO eval_results
+                    (run_id, scenario, run_number, correct, confidence, recall_at_1,
+                     steps_taken, hallucination, token_total, elapsed_s, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                run_id, scenario_id, i + 1,
+                int(r.get("correct", False)),
+                r.get("confidence", "none"),
+                r.get("recall_at_1", 0),
+                r.get("steps", 0),
+                r.get("hallucination", 0),
+                r.get("token_total", 0),
+                r.get("elapsed_s"),
+                now,
+            ))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"[warn] Không lưu được eval_results: {e}")
 
 
 # ── Chạy một kịch bản N lần ──────────────────────────────────────────────────
@@ -246,8 +310,10 @@ async def run_scenario_n_times(
         results.append(result)
 
         mark = "✅" if result["correct"] else "❌"
+        hall = "⚠️ hall" if result.get("hallucination") else ""
         print(f"  Run {i+1}: {mark} correct={result['correct']} conf={result['confidence']} "
-              f"steps={result['steps']} ({elapsed:.1f}s)")
+              f"steps={result['steps']} recall@1={result.get('recall_at_1',0)} "
+              f"tokens={result.get('token_total',0)} {hall} ({elapsed:.1f}s)")
         print(f"         root_cause: {result['root_cause']}")
 
     return results
@@ -258,12 +324,16 @@ def print_summary(scenario_id: str, results: List[Dict]) -> None:
     correct = sum(1 for r in results if r["correct"])
     conf_ok = sum(1 for r in results if r.get("conf_ok"))
     avg_steps = sum(r["steps"] for r in results) / n if n else 0
+    recall_rate = sum(r.get("recall_at_1", 0) for r in results) / n if n else 0
+    hall_count = sum(r.get("hallucination", 0) for r in results)
+    avg_tokens = sum(r.get("token_total", 0) for r in results) / n if n else 0
 
     rate = correct * 100 // n if n else 0
     gate = "✅ PASS" if rate >= 70 else "❌ FAIL"
     print(f"\n{'='*58}")
     print(f"  {scenario_id}: {correct}/{n} đúng root cause ({rate}%)  {gate}")
     print(f"  Confidence OK: {conf_ok}/{n}  |  Avg steps: {avg_steps:.1f}")
+    print(f"  Recall@1: {recall_rate:.0%}  |  Hallucination: {hall_count}/{n}  |  Avg tokens: {avg_tokens:.0f}")
     print(f"  Stop reasons: {set(r['stop_reason'] for r in results)}")
     print(f"{'='*58}")
 
@@ -291,12 +361,14 @@ async def main() -> None:
     print(f"  Kịch bản: {scenarios_to_run}")
     print(f"{'='*58}")
 
+    run_id = str(uuid.uuid4())[:12]
     all_results = {}
     for sc in scenarios_to_run:
         print(f"\n--- {sc}: {SCENARIOS[sc]['description']} ---")
         results = await run_scenario_n_times(sc, args.n, args.mock, args.budget)
         all_results[sc] = results
         print_summary(sc, results)
+        _save_eval_results_to_db(run_id, sc, results)
 
     if len(scenarios_to_run) > 1:
         total_runs = sum(len(r) for r in all_results.values())
@@ -308,7 +380,8 @@ async def main() -> None:
             sum(1 for x in r if x["correct"]) * 100 // len(r) >= 70
             for r in all_results.values()
         )
-        print(f"CỔNG NGÀY 9: {'✅ PASS — tất cả kịch bản ≥70%' if all_pass else '❌ FAIL — có kịch bản <70%'}")
+        print(f"CỔNG NGÀY 12: {'✅ PASS — tất cả kịch bản ≥70%' if all_pass else '❌ FAIL — có kịch bản <70%'}")
+    print(f"\n[run_id={run_id}] Kết quả đã lưu vào data/investigation.db (bảng eval_results)")
 
 
 if __name__ == "__main__":

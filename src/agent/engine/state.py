@@ -73,6 +73,12 @@ class InvestigationState:
     # Lịch sử tool calls để phát hiện lặp
     tool_call_history: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Token tracking (accumulate từ llm_resp.usage)
+    total_tokens: int = 0
+
+    # Long-term memory: gợi ý warm-start từ investigation_patterns trước
+    warm_start_hint: Optional[str] = None
+
     def add_evidence(self, step: int, tool_name: str, params: Dict[str, Any],
                      obs: Observation) -> Evidence:
         ev = Evidence(
@@ -145,5 +151,9 @@ class InvestigationState:
         if self.tool_call_history:
             called = [f"{c['name']}({list(c['params'].keys())})" for c in self.tool_call_history[-5:]]
             lines.append(f"## Tool đã gọi (gần nhất): {' → '.join(called)}")
+
+        # Warm-start hint từ long-term memory
+        if self.warm_start_hint:
+            lines.insert(0, f"## Gợi ý từ điều tra trước\n  {self.warm_start_hint}\n")
 
         return "\n".join(lines) if lines else "(chưa có bằng chứng)"

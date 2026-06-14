@@ -106,3 +106,35 @@ CREATE TABLE IF NOT EXISTS project_alert_channels (
 );
 
 CREATE INDEX IF NOT EXISTS idx_alert_channels ON project_alert_channels (project_id);
+
+-- Eval results (lưu kết quả mỗi lần chạy eval_agent.py)
+CREATE TABLE IF NOT EXISTS eval_results (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id       TEXT    NOT NULL,   -- UUID per eval run (cùng run_id cho tất cả scenario trong 1 lần chạy)
+    scenario     TEXT    NOT NULL,
+    run_number   INTEGER NOT NULL,
+    correct      INTEGER NOT NULL,   -- 0/1
+    confidence   TEXT,
+    recall_at_1  INTEGER,            -- 0/1: service đúng có trong evidence sau bước 1 không
+    steps_taken  INTEGER,
+    hallucination INTEGER NOT NULL DEFAULT 0,  -- 1 = verdict claim gì không có evidence đỡ
+    token_total  INTEGER NOT NULL DEFAULT 0,
+    elapsed_s    REAL,
+    created_at   TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_eval_results ON eval_results (run_id, scenario);
+
+-- Long-term memory: pattern điều tra thành công
+CREATE TABLE IF NOT EXISTS investigation_patterns (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id      TEXT    NOT NULL DEFAULT 'default',
+    service         TEXT    NOT NULL,   -- service bị lỗi (root cause)
+    error_pattern   TEXT    NOT NULL,   -- error_type keyword chính (vd "TimeoutException")
+    tool_sequence   TEXT    NOT NULL,   -- JSON array: chuỗi tool dẫn đến verdict HIGH
+    root_cause_type TEXT    NOT NULL,   -- vd "deploy_bug" | "provider_down" | "pool_exhaustion"
+    avg_steps       REAL    NOT NULL DEFAULT 0,
+    count           INTEGER NOT NULL DEFAULT 1,
+    updated_at      TEXT    NOT NULL,
+    UNIQUE(project_id, service, error_pattern)
+);

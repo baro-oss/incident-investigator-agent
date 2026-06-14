@@ -16,6 +16,7 @@ from agent.engine.loop import InvestigationEngine
 from agent.engine.state import InvestigationState
 from agent.intake.normalizer import InvestigationRequest
 from agent.llm.factory import create_llm_client
+from agent.memory.patterns import get_warm_start_hint, save_pattern
 from agent.output.router import push_verdict
 from agent.tools.mcp_client import MCPClient
 from agent.tools.registry import build_tool_registry, get_mcp_urls_from_env
@@ -128,7 +129,34 @@ async def run_investigation_background(
         # Xây tool registry: local + MCP
         tools = await build_tool_registry(mcp_clients if mcp_clients else None)
 
-        llm = create_llm_client()
+        # Resolve LLM: project DB config → global env vars
+        llm_cfg = None
+        try:
+            from agent.intake.project_registry import get_project_llm
+            llm_cfg = get_project_llm(project_id)
+        except Exception as e:
+            logger.warning("Không đọc được project LLM config: %s", e)
+
+        if llm_cfg:
+            llm = create_llm_client(
+                provider=llm_cfg.get("provider"),
+                model=llm_cfg.get("model"),
+                extra_config=llm_cfg.get("config"),
+            )
+            logger.info("[%s] Dùng LLM từ project config: provider=%s model=%s",
+                        project_id, llm_cfg.get("provider"), llm_cfg.get("model"))
+        else:
+            llm = create_llm_client()
+
+        # Long-term memory: warm-start hint
+        warm_hint = get_warm_start_hint(
+            project_id=project_id,
+            service=req.service,
+            error_keywords=None,
+        )
+        if warm_hint:
+            logger.info("[%s] Warm-start hint: %s", project_id, warm_hint[:80])
+
         engine = InvestigationEngine(llm=llm, tools=tools, step_budget=step_budget)
 
         state = await asyncio.wait_for(
@@ -139,6 +167,7 @@ async def run_investigation_background(
                 date=req.date,
                 project_id=project_id,
                 available_services=available_services or None,
+                warm_start_hint=warm_hint,
             ),
             timeout=300.0,
         )
@@ -154,6 +183,13 @@ async def run_investigation_background(
     finally:
         _active_investigations.discard(key)
         await _close_mcp_clients(mcp_clients)
+
+    # Long-term memory: lưu pattern nếu verdict HIGH
+    if state and state.verdict and state.verdict.confidence == "high":
+        try:
+            save_pattern(state)
+        except Exception as e:
+            logger.warning("Không lưu được memory pattern: %s", e)
 
     # Push tất cả kênh output — luôn luôn, không chết im lặng
     await push_verdict(state)

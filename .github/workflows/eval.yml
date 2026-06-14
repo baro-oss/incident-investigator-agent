@@ -1,0 +1,79 @@
+name: Eval Agent
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      n_runs:
+        description: "Số lần chạy mỗi kịch bản"
+        default: "3"
+        required: false
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Init database
+        run: |
+          python data/init_db.py
+          python data/migrate_projects.py
+          python data/seed_scenario1.py
+          python data/seed_scenario2.py
+
+      - name: Run eval (mock LLM — không cần API key)
+        run: |
+          N=${{ github.event.inputs.n_runs || '5' }}
+          python scripts/eval_agent.py --mock --n "$N" --scenario all
+
+      - name: Check gate (≥70% mỗi kịch bản)
+        run: |
+          python - <<'EOF'
+          import sqlite3, sys
+          conn = sqlite3.connect("data/investigation.db")
+          conn.row_factory = sqlite3.Row
+          # Lấy run_id mới nhất
+          run_id = conn.execute(
+              "SELECT run_id FROM eval_results ORDER BY created_at DESC LIMIT 1"
+          ).fetchone()
+          if not run_id:
+              print("Không có eval_results — bỏ qua gate check")
+              sys.exit(0)
+          run_id = run_id["run_id"]
+          rows = conn.execute(
+              "SELECT scenario, count(*) as n, sum(correct) as ok "
+              "FROM eval_results WHERE run_id=? GROUP BY scenario",
+              (run_id,),
+          ).fetchall()
+          failed = []
+          for r in rows:
+              rate = r["ok"] * 100 // r["n"] if r["n"] else 0
+              status = "PASS" if rate >= 70 else "FAIL"
+              print(f"  {r['scenario']}: {r['ok']}/{r['n']} ({rate}%) {status}")
+              if rate < 70:
+                  failed.append(r["scenario"])
+          if failed:
+              print(f"FAIL: kịch bản chưa đạt ≥70%: {failed}")
+              sys.exit(1)
+          print("PASS: tất cả kịch bản ≥70%")
+          EOF

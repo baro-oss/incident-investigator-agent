@@ -83,6 +83,54 @@ def migrate(db_path: str) -> None:
         VALUES ('default', 'Default Project', 'Dự án mặc định — backward compat', ?, ?)
     """, (now, now))
 
+    # 7. Per-project LLM config (thêm cột vào projects)
+    existing_proj_cols = _existing_columns(conn, "projects")
+    for col, typedef in [
+        ("llm_provider", "TEXT"),
+        ("llm_model",    "TEXT"),
+        ("llm_config",   "TEXT NOT NULL DEFAULT '{}'"),
+    ]:
+        if col not in existing_proj_cols:
+            conn.execute(f"ALTER TABLE projects ADD COLUMN {col} {typedef}")
+            print(f"  ALTER TABLE projects ADD COLUMN {col}")
+
+    # 8. Bảng eval_results
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS eval_results (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id       TEXT    NOT NULL,
+            scenario     TEXT    NOT NULL,
+            run_number   INTEGER NOT NULL,
+            correct      INTEGER NOT NULL,
+            confidence   TEXT,
+            recall_at_1  INTEGER,
+            steps_taken  INTEGER,
+            hallucination INTEGER NOT NULL DEFAULT 0,
+            token_total  INTEGER NOT NULL DEFAULT 0,
+            elapsed_s    REAL,
+            created_at   TEXT NOT NULL
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_eval_results ON eval_results (run_id, scenario)"
+    )
+
+    # 9. Bảng investigation_patterns (long-term memory)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS investigation_patterns (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id      TEXT    NOT NULL DEFAULT 'default',
+            service         TEXT    NOT NULL,
+            error_pattern   TEXT    NOT NULL,
+            tool_sequence   TEXT    NOT NULL,
+            root_cause_type TEXT    NOT NULL,
+            avg_steps       REAL    NOT NULL DEFAULT 0,
+            count           INTEGER NOT NULL DEFAULT 1,
+            updated_at      TEXT    NOT NULL,
+            UNIQUE(project_id, service, error_pattern)
+        )
+    """)
+
     conn.commit()
     conn.close()
     print(f"Migration OK: {db_path}")

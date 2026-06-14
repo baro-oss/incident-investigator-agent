@@ -292,6 +292,7 @@ class InvestigationEngine:
         date: str = "2024-01-15",
         project_id: str = "default",
         available_services: Optional[List[str]] = None,
+        warm_start_hint: Optional[str] = None,
     ) -> InvestigationState:
         investigation_id = str(uuid.uuid4())[:12]
         state = InvestigationState(
@@ -303,6 +304,7 @@ class InvestigationEngine:
             step_budget=self.step_budget,
             project_id=project_id,
             available_services=available_services or [],
+            warm_start_hint=warm_start_hint,
         )
 
         logger.info("[%s] [%s] Bắt đầu điều tra: %s", investigation_id, project_id, symptom)
@@ -366,6 +368,13 @@ class InvestigationEngine:
                     "Bằng chứng: N/A\nLan truyền: N/A\nGiả thuyết cạnh tranh: N/A"
                 )
                 break
+
+            # Accumulate tokens
+            if llm_resp and llm_resp.usage:
+                state.total_tokens += (
+                    llm_resp.usage.get("input_tokens", 0)
+                    + llm_resp.usage.get("output_tokens", 0)
+                )
 
             # Ghi LLM call lên Langfuse
             output_desc = (f"tool:{tool_call.name}" if tool_call
