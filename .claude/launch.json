@@ -5,7 +5,8 @@
       "name": "investigation-agent",
       "runtimeExecutable": ".venv/bin/python3",
       "runtimeArgs": ["scripts/start_server.py", "--port", "8000"],
-      "port": 8000
+      "port": 8000,
+      "autoPort": false
     }
   ]
 }
