@@ -76,7 +76,7 @@ Phase 4 (Ngày 18–20) : Product Polish        — Fintech domain, eval N=10, d
 | Ngày | Nội dung | Trạng thái |
 |------|----------|-----------|
 | 11 | Langfuse integration, token usage, span hierarchy | ✅ |
-| 12 | Eval CI (recall@1, hallucination, token_efficiency) + Long-term memory | ☐ |
+| 12 | Eval CI + Long-term memory + Per-project LLM config + Gemini adapter | ☐ |
 | 13 | Dashboard v1: investigation list, trace viewer, alert trigger builder | ☐ |
 | 14 | Dashboard v2: SSE real-time, Chat UI, eval chart + Cổng Phase 2 | ☐ |
 
@@ -298,7 +298,51 @@ Body: {"channel": "teams", "config": {"webhook_url": "https://..."}, "enabled": 
 - Warm-start: service+error_type đã thấy → inject `hint_tool` vào `InvestigationState` (LLM thấy nhưng không bắt buộc dùng)
 - Baseline tự cập nhật: metric bình thường → cập nhật `baseline_latency_p99` trong catalog sau 7 ngày không có incident
 
-**Cổng:** CI eval xanh + lần điều tra thứ 2 cùng service có warm-start hint.
+**C. Per-project LLM Config + Multi-provider:**
+
+Mục tiêu: mỗi project chọn được LLM riêng — một project dùng Claude, project khác dùng Gemini hoặc GPT-4o. Engine không đổi, chỉ factory thay đổi.
+
+*Schema:*
+- Thêm 3 cột vào bảng `projects` (migration idempotent):
+  ```sql
+  ALTER TABLE projects ADD COLUMN llm_provider TEXT;      -- "anthropic"|"gemini"|"openai"|"groq"|...
+  ALTER TABLE projects ADD COLUMN llm_model    TEXT;      -- vd "gemini-2.0-flash", "gpt-4o-mini"
+  ALTER TABLE projects ADD COLUMN llm_config   TEXT DEFAULT '{}';  -- JSON: api_key, base_url, ...
+  ```
+- Priority khi resolve LLM: DB project config → env var global → default anthropic
+
+*API:*
+- `GET  /projects/{pid}/llm` — trả provider, model, config (ẩn api_key)
+- `PATCH /projects/{pid}/llm` — body: `{provider, model, config}` — upsert
+
+*Gemini adapter:*
+- `pip install google-genai`
+- `src/agent/llm/gemini.py` — `GeminiClient` implement `LLMClient` Protocol:
+  - Tool calling qua Gemini function calling API
+  - `usage` populate từ `response.usage_metadata`
+  - Map `ToolSpec` → Gemini `FunctionDeclaration`
+
+*Factory mở rộng:*
+```python
+# src/agent/llm/factory.py
+def create_llm_client(provider=None, model=None, extra_config=None) -> LLMClient:
+    # provider: "anthropic" | "gemini" | "openai" | "groq" | "mistral" | "ollama" | ...
+    if provider == "anthropic": return AnthropicClient(model=model)
+    if provider == "gemini":    return GeminiClient(model=model, **extra_config)
+    return OpenAICompatibleClient(model=model, **extra_config)  # mọi OpenAI-compat
+```
+
+*Runner integration:*
+- `runner.py` — trước khi tạo engine, gọi `get_project_llm(project_id)` → tạo LLM client phù hợp
+- Fallback: nếu project chưa config → đọc `LLM_PROVIDER` + `LLM_MODEL` env var
+
+*`.env.example`:*
+```bash
+# Gemini (nếu dùng provider gemini)
+GEMINI_API_KEY=
+```
+
+**Cổng:** CI eval xanh + warm-start hint + project A dùng Claude / project B dùng Gemini chạy investigation đúng.
 
 ---
 
