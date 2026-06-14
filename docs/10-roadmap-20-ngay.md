@@ -65,11 +65,20 @@
 ## Tổng quan 4 phase
 
 ```
-Phase 1 (Ngày 6–10)  : Platform Extension   — webhook, adapter, MCP đầy đủ, 4 kịch bản  ✅ HOÀN TẤT
-Phase 2 (Ngày 11–14) : Observability         — Langfuse, CI eval, memory xuyên phiên
-Phase 3 (Ngày 15–17) : Architecture Upgrade  — LangGraph, multi-agent, resilience + CLI
-Phase 4 (Ngày 18–20) : Product Polish        — Dashboard, domain mới, platform demo
+Phase 1 (Ngày 6–10)  : Platform Extension   — webhook, adapter, MCP, 4 kịch bản, output đa kênh  ✅ HOÀN TẤT
+Phase 2 (Ngày 11–14) : Observability + UI v1 — Langfuse, eval CI, long-term memory, Dashboard + Chat UI
+Phase 3 (Ngày 15–17) : Architecture Upgrade  — LangGraph, multi-agent, resilience, full platform UI
+Phase 4 (Ngày 18–20) : Product Polish        — Fintech domain, eval N=10, demo hoàn chỉnh
 ```
+
+### Tiến độ Phase 2
+
+| Ngày | Nội dung | Trạng thái |
+|------|----------|-----------|
+| 11 | Langfuse integration, token usage, span hierarchy | ✅ |
+| 12 | Eval CI (recall@1, hallucination, token_efficiency) + Long-term memory | ☐ |
+| 13 | Dashboard v1: investigation list, trace viewer, alert trigger builder | ☐ |
+| 14 | Dashboard v2: SSE real-time, Chat UI, eval chart + Cổng Phase 2 | ☐ |
 
 ### Tiến độ Phase 1
 
@@ -252,94 +261,121 @@ Body: {"channel": "teams", "config": {"webhook_url": "https://..."}, "enabled": 
 
 ## Phase 2 — Observability & Quality (Ngày 11–14)
 
-**Mục tiêu:** Biết agent đúng *vì lý do đúng*, không phải may. Có vòng phản hồi tự động.
+**Mục tiêu:** Biết agent đúng *vì lý do đúng*, không phải may. Có vòng phản hồi tự động. Dashboard bắt đầu xuất hiện.
 
-### Ngày 11 — Langfuse Integration
+### Ngày 11 — Langfuse Integration ✅
 
-**Làm:**
-- `pip install langfuse`
-- `src/agent/observability/langfuse_tracer.py` — wrapper emit trace event → Langfuse span
-- Span hierarchy: `investigation` → `step_{n}` → `tool_call` / `llm_call`
-- Token usage tracking từ LLMResponse (thêm field `usage` vào LLMResponse)
-- Wrap `_emit_trace()` trong `loop.py` để song song gửi Langfuse
+**Đã làm:**
+- `src/agent/observability/langfuse_tracer.py` — tracer stateful, opt-in qua `LANGFUSE_PUBLIC_KEY`
+- Span hierarchy: `investigation` → `step_{n}` → `llm_decision` / `tool_call`
+- `LLMResponse.usage` — token tracking từ Anthropic + OpenAI-compat
+- Timing: `time.monotonic()` đo latency LLM + tool riêng biệt
+- `decide_next_action` trả 3-tuple; SQLite trace không đổi — Langfuse additive
+- Langfuse SDK v3 (API khác v2 — đã fix: `start_span`, `usage_details`, nested spans)
 
-**Không phá vỡ:** trace SQLite vẫn chạy — Langfuse là renderer thêm, không thay thế.
-
-**Cổng:** Langfuse dashboard có trace đẹp từng bước điều tra, thấy latency từng tool call.
+**Cổng ✅ PASS:** Langfuse dashboard có trace đẹp từng bước + latency + token usage.
 
 ---
 
-### Ngày 12 — Eval CI Framework
+### Ngày 12 — Eval Framework + Long-term Memory
 
-**Làm:**
-- Mở rộng `eval_agent.py`: thêm metrics
-  - `recall@1`: root cause đúng ở hypothesis #1 không
-  - `steps_to_correct`: đi bao nhiêu bước trước khi có đủ bằng chứng
-  - `hallucination_check`: verdict có claim nào không có bằng chứng đỡ không
-- `.github/workflows/eval.yml` — chạy eval N=5 khi merge vào main
+**A. Eval CI Framework:**
+- Mở rộng `eval_agent.py` thêm metrics chi tiết:
+  - `recall@1` — root cause đúng ở hypothesis #1 không
+  - `steps_to_correct` — bao nhiêu bước trước khi có đủ bằng chứng
+  - `hallucination_check` — verdict có claim nào không có evidence đỡ không
+  - `token_efficiency` — tổng token / số bước (từ `LLMResponse.usage`)
+- `.github/workflows/eval.yml` — chạy eval N=5 khi push/merge vào main
 - Fail CI nếu `correct_rate < 0.7` ở bất kỳ kịch bản nào
-- Lưu kết quả eval vào bảng `eval_results` (SQLite) để vẽ trend
+- Bảng `eval_results` (SQLite): `(run_id, scenario, correct_rate, recall_at_1, steps_to_correct, token_total, run_at)`
 
-**Cổng:** GitHub Actions green + eval trend chart từ SQLite data.
-
----
-
-### Ngày 13 — Long-term Memory
-
-**Làm:**
+**B. Long-term Memory:**
 - Bảng `investigation_patterns` trong SQLite:
   ```sql
-  (service, error_pattern, successful_tool_sequence, root_cause_type, count)
+  (service, error_pattern, successful_tool_sequence, root_cause_type, avg_steps, count)
   ```
-- Sau mỗi verdict `high` confidence: ghi pattern vào bảng
-- Warm-start: nếu service+error_type đã điều tra thành công trước → đề xuất tool đầu tiên trong state (không bắt buộc LLM dùng)
-- Baseline tự cập nhật: metric "bình thường" hôm nay → cập nhật `baseline_latency_p99` trong catalog sau 7 ngày không có incident
+- Sau mỗi verdict `high` confidence → ghi pattern
+- Warm-start: service+error_type đã thấy → inject `hint_tool` vào `InvestigationState` (LLM thấy nhưng không bắt buộc dùng)
+- Baseline tự cập nhật: metric bình thường → cập nhật `baseline_latency_p99` trong catalog sau 7 ngày không có incident
 
-**Cổng:** 2nd investigation trên cùng service nhanh hơn (warm-start gợi đúng tool bước 1).
+**Cổng:** CI eval xanh + lần điều tra thứ 2 cùng service có warm-start hint.
 
 ---
 
-### Ngày 14 — OpenTelemetry + Cổng Phase 2
+### Ngày 13 — Dashboard UI v1 + Alert Trigger Builder
 
-**Làm:**
-- `pip install opentelemetry-sdk opentelemetry-exporter-otlp`
-- Trace từ HTTP request vào webhook → investigation → từng tool call → output
-- Export tới Jaeger local (`docker run jaegertracing/all-in-one`) hoặc Grafana Tempo
-- Span attributes: `tool.name`, `step.number`, `verdict.confidence`, `llm.tokens`
+**Stack:** FastAPI + Jinja2 (mount vào `server.py` hiện tại, không cần Node.js build step).
 
-**Cổng Phase 2:** Langfuse dashboard đẹp + CI eval tự động xanh + OTel trace xem được ở Jaeger.
+**A. Core Dashboard:**
+- `src/agent/dashboard/` — APIRouter mount vào server.py: `app.mount("/dashboard", ...)`
+- `GET /dashboard` — trang chủ: danh sách investigations (từ `trace_events` group by `investigation_id`)
+  - Cột: investigation_id, project, service, scenario, verdict confidence, steps, thời gian
+  - Filter: project_id, confidence, date range
+- `GET /dashboard/investigations/{inv_id}` — trace viewer:
+  - Timeline từng bước: tool → observation summary → hypothesis update
+  - Verdict card: root cause, confidence, evidence summary
+  - Langfuse link (nếu có `LANGFUSE_PUBLIC_KEY`)
+- Static files: `src/agent/dashboard/static/` (CSS + minimal JS, không framework)
+
+**B. Alert Trigger Builder:**
+- `GET /dashboard/trigger` — form UI thay thế curl:
+  - Dropdown: project, service (từ `project_services`), scenario, time window
+  - Submit → POST `/projects/{pid}/trigger` → hiển thị investigation_id + link trace
+- `GET /dashboard/projects` — danh sách projects + services overview
+
+**Cổng:** Mở browser thấy investigation history, click detail trace, trigger investigation từ form.
+
+---
+
+### Ngày 14 — Dashboard v2: Real-time + Chat UI + Cổng Phase 2
+
+**A. Real-time SSE:**
+- `GET /dashboard/stream/{inv_id}` — SSE endpoint stream trace events khi investigation đang chạy
+- Dashboard detail page tự động subscribe SSE khi `stop_reason` chưa có
+- Mỗi `_emit_trace` event → push SSE → browser append step vào timeline live
+
+**B. Chat UI (wow moment):**
+- `GET /dashboard/chat` — trang chat interface:
+  - Input: gõ tự nhiên "Điều tra payment-gateway từ 14:00" hoặc chọn từ dropdown
+  - Submit → POST `/projects/{pid}/trigger` → investigation chạy background
+  - SSE auto-connect → stream từng bước điều tra trực tiếp vào browser
+  - Verdict hiện cuối cùng với confidence badge
+- Câu chuyện pitch: "Không cần curl, không cần terminal — chat thẳng với agent."
+
+**C. Eval Trend + Token Cost:**
+- `GET /dashboard/eval` — chart eval trend từ `eval_results` table (Chart.js CDN)
+  - correct_rate theo ngày/run, token_efficiency, steps_to_correct per scenario
+- `GET /dashboard/cost` — token usage summary từ trace + Langfuse (nếu available)
+
+**Cổng Phase 2:** Langfuse live + CI eval xanh + Dashboard SSE + Chat UI hoạt động.
 
 ---
 
 ## Phase 3 — Architecture Upgrade (Ngày 15–17)
 
-**Mục tiêu:** Chứng minh kiến trúc scale được — không rewrite, chỉ nâng cấp.
+**Mục tiêu:** Chứng minh kiến trúc scale được — không rewrite, chỉ nâng cấp. Dashboard mở rộng theo.
 
-### Ngày 15 — LangGraph Migration
+### Ngày 15 — LangGraph Migration + Multi-agent
 
-**Tại sao dễ:** `decide_next_action`, `run_tool`, `update_state` đã là hàm pure → wrap thành node, không viết lại.
+**A. LangGraph Migration:**
 
-**Làm:**
+Tại sao dễ: `decide_next_action`, `run_tool`, `update_state` đã là hàm pure → wrap thành node, không viết lại logic.
+
 - `pip install langgraph`
-- `src/agent/engine/graph.py` — StateGraph thay InvestigationEngine class
+- `src/agent/engine/graph.py` — StateGraph thay InvestigationEngine class:
   ```python
   graph = StateGraph(InvestigationState)
-  graph.add_node("decide", decide_next_action)
-  graph.add_node("run_tool", run_tool)
-  graph.add_node("update", update_state)
-  graph.add_conditional_edges("decide", route_fn)  # tool_call | verdict | budget
+  graph.add_node("decide", decide_next_action_node)
+  graph.add_node("run_tool", run_tool_node)
+  graph.add_node("update", update_state_node)
+  graph.add_conditional_edges("decide", route_fn)  # tool_call | verdict | budget | loop
   ```
-- `InvestigationEngine.run()` vẫn là interface — bên trong dùng graph compile
-- Parallel tool execution: khi LLM suggest 2 tool độc lập → chạy song song (reduce steps)
+- `InvestigationEngine.run()` vẫn là public interface — bên trong compile graph
+- Parallel tool execution: khi LLM suggest 2 tool độc lập → `asyncio.gather` → giảm bước
 
-**Cổng:** KB1 + KB2 pass qua LangGraph, cùng kết quả, bước có thể ít hơn (parallel).
+**B. Multi-agent:**
 
----
-
-### Ngày 16 — Multi-agent
-
-**Kiến trúc:** Orchestrator phân công → Specialist agents chạy song song → Merge evidence.
-
+Kiến trúc:
 ```
 OrchestratorAgent
 ├── LogAnalystAgent    (get_error_breakdown, trace_request)
@@ -348,120 +384,184 @@ OrchestratorAgent
      VerdictAgent
 ```
 
-**Làm:**
-- `src/agent/engine/multi_agent.py` — orchestrator + specialist agents
-- Mỗi specialist là InvestigationEngine với tool set giới hạn
-- Evidence merger: combine Observation từ nhiều agent trước khi gọi VerdictAgent
-- Dedup evidence: tránh 2 agent gọi cùng tool
+- `src/agent/engine/multi_agent.py` — orchestrator + 2 specialist + verdict agent
+- Mỗi specialist: InvestigationEngine với tool set giới hạn + step budget riêng
+- Evidence merger: combine + dedup Observation trước khi VerdictAgent kết luận
 
-**Demo:** KB2 — 2 agent chạy song song, kết quả trong ít thời gian hơn.
+**C. Dashboard: Agent Graph Visualization:**
+- `GET /dashboard/investigations/{inv_id}/graph` — visualize agent graph
+  - Node: step, tool, LLM decision
+  - Edge: thứ tự thực thi
+  - Parallel nodes hiện song song
 
-**Cổng:** Multi-agent KB1+KB2 đúng, thời gian ≤ single-agent.
+**Demo:** KB2 — 2 specialist agent chạy song song → VerdictAgent merge → kết quả nhanh hơn.
+
+**Cổng:** KB1+KB2 pass qua LangGraph, multi-agent đúng + nhanh hơn, graph hiện trên dashboard.
 
 ---
 
-### Ngày 17 — Resilience + Interactive CLI
+### Ngày 16 — Resilience + CLI + System Health Dashboard
 
-**A. Resilience (nửa ngày):**
-- Retry với exponential backoff khi LLM lỗi tạm thời (429, 503)
-- Concurrent investigation cap: max N phiên cùng lúc, queue phần còn lại
-- Circuit breaker: nếu LLM fail liên tiếp 3 lần → pause 60s → alert Telegram
-- Graceful shutdown: SIGTERM → finish phiên đang chạy → push verdict partial
+**A. Resilience:**
+- `src/agent/engine/resilience.py`:
+  - `with_retry(coro, max_attempts=3, base_delay=2.0)` — exponential backoff khi LLM 429/503
+  - `ConcurrencyLimiter(max_concurrent=3)` — queue investigation khi vượt giới hạn
+  - Circuit breaker: LLM fail 3 lần liên tiếp → pause 60s → alert Telegram
+  - Graceful shutdown: SIGTERM → finish phiên đang chạy → push verdict partial
 
-```python
-# src/agent/engine/resilience.py
-async def with_retry(coro, max_attempts=3, base_delay=2.0): ...
-class ConcurrencyLimiter:
-    def __init__(self, max_concurrent: int = 3): ...
-```
+**B. Interactive CLI:**
+- `scripts/chat.py` — REPL nhận câu hỏi tự nhiên:
+  ```bash
+  python scripts/chat.py
+  > Điều tra payment-gateway từ 14:00 đến 15:00 hôm nay
+  [agent chạy] → Root cause: Deploy v2.3.1... (HIGH confidence)
+  > Còn auth-service thì sao?
+  [agent chạy] → auth-service bình thường trong window đó
+  ```
+- Parse câu tự nhiên → `InvestigationRequest` → chạy engine trực tiếp (không qua HTTP)
 
-**B. Interactive CLI Mode (nửa ngày) — pull mode:**
-- `scripts/chat.py` — REPL nhận câu hỏi tự nhiên → engine điều tra → in kết quả
-- Không cần Telegram, không cần webhook — dùng trực tiếp trong terminal
-
-```bash
-python scripts/chat.py
-> Điều tra payment-gateway từ 14:00 đến 15:00 hôm nay
-[agent chạy] → Root cause: Deploy v2.3.1... (HIGH confidence)
-> Còn auth-service thì sao?
-[agent chạy] → auth-service bình thường trong window đó
-```
+**C. Dashboard: System Health + Queue:**
+- `GET /dashboard/health` — system health page:
+  - LLM provider status (ping test)
+  - Investigation queue: đang chạy / đang chờ / giới hạn concurrent
+  - Circuit breaker state: closed / open / half-open
+  - MCP servers status (ping từng server)
+- `GET /dashboard/metrics-live` — **Live Metrics Widget**:
+  - Panel hiện baseline vs current cho mỗi service từ SQLite metrics table
+  - Auto-refresh mỗi 30s (simple polling)
+  - Màu: xanh = trong baseline, cam = ±50%, đỏ = >2x
+- `GET /dashboard/channels` — **Alert Channel Config UI**:
+  - Per-project: enable/disable Telegram/Teams/Email
+  - Form test-send (gửi message thử ngay trên UI)
 
 **Câu chuyện pitch:** "Hai cửa vào, một engine — push khi có alert, pull khi muốn hỏi."
 
-**Cổng Phase 3:** 3 phiên concurrent không conflict + CLI hỏi-đáp hoạt động + retry tự phục hồi.
+**Cổng Phase 3:** 3 phiên concurrent không conflict + CLI hỏi-đáp + health page live + circuit breaker.
+
+---
+
+### Ngày 17 — Dashboard v3: Full Platform Management UI
+
+Mục tiêu: Mọi thứ đã build được quản lý từ browser — không cần curl, không cần CLI.
+
+**A. MCP Registry UI:**
+- `GET /dashboard/mcp` — danh sách MCP servers:
+  - Columns: name, URL, project, status (ping), tools count
+  - Ping button → gọi `/mcp-servers/{id}/ping` → hiển thị latency + tools list
+  - Register form: name, URL, project dropdown
+  - Delete với confirm
+
+**B. Project Management UI:**
+- `GET /dashboard/projects/{pid}` — project detail:
+  - Services list + thêm/xóa service
+  - MCP servers gắn với project
+  - Alert channels: toggle enable/disable, edit config (webhook URL, chat_id, email)
+  - Recent investigations của project
+
+**C. Investigation Replay (tính năng mới):**
+- `POST /dashboard/investigations/{inv_id}/replay` — chạy lại investigation:
+  - Dùng cùng `symptom`, `scenario`, `time_window` từ investigation gốc
+  - Kết quả mới hiện song song với kết quả cũ để so sánh
+  - Useful cho eval ("agent có ra cùng kết luận không?") + demo
+
+**D. Demo Mode:**
+- `GET /dashboard/demo` — full-screen demo view:
+  - Ẩn cài đặt, chỉ hiện trigger + chat + live stream + verdict
+  - Dark mode, font lớn, animations nhẹ
+
+**Cổng:** Toàn bộ platform (projects, MCP, channels, trigger, replay) quản lý từ browser.
 
 ---
 
 ## Phase 4 — Product Polish (Ngày 18–20)
 
-**Mục tiêu:** Nhìn thấy được, pitch được, 2 domain live.
+**Mục tiêu:** Nhìn thấy được, pitch được, 2 domain live, demo hoàn chỉnh.
 
-### Ngày 18 — Dashboard UI
-
-**Stack:** FastAPI + Jinja2 (lightweight, không cần Node.js build step).
-
-**Làm:**
-- `src/agent/dashboard/` — FastAPI router mount vào server.py
-- Trang chủ: danh sách investigations (từ `trace_events` SQLite, group by `investigation_id`)
-- Detail page: trace viewer — từng bước với tool, observation rút gọn, hypothesis
-- SSE endpoint: stream trace events real-time khi investigation đang chạy (demo wow moment)
-- Service registry: list service + baseline + dependency (đọc từ `service_catalog`)
-
-**Cổng:** Mở browser, thấy investigation history, click vào xem trace từng bước.
-
----
-
-### Ngày 19 — Domain Mới: Fintech Anomaly
+### Ngày 18 — Domain Mới: Fintech + Domain Switcher UI
 
 **Chứng minh domain-agnostic:** Engine không đổi một dòng. Chỉ thêm tool pack mới.
 
-**Tool pack fintech:**
-- `get_revenue_breakdown(time_window)` — doanh thu theo channel, so baseline
-- `get_transaction_anomaly(service, time_window)` — tỷ lệ hoàn tiền, thất bại
-- `get_merchant_status(merchant_id)` — merchant có bị block/lỗi không
-- `get_settlement_lag(time_window)` — độ trễ đối soát so thông thường
+**A. Tool pack fintech:**
+- `src/agent/tools/fintech/get_revenue_breakdown.py` — doanh thu theo channel, so baseline
+- `src/agent/tools/fintech/get_transaction_anomaly.py` — tỷ lệ hoàn tiền, thất bại theo merchant
+- `src/agent/tools/fintech/get_merchant_status.py` — merchant có bị block/lỗi không
+- `src/agent/tools/fintech/get_settlement_lag.py` — độ trễ đối soát so thông thường
+- `src/agent/tools/registry_fintech.py` — tool registry fintech domain
 
-**Kịch bản fintech:**
+**B. Kịch bản fintech:**
 - KB-F1: Doanh thu sụt 40% từ 10:00 → nguyên nhân: payment processor X timeout
-- KB-F2: Tỷ lệ hoàn tiền tăng 8x → nguyên nhân: merchant Y có bug giá sản phẩm
+- KB-F2: Tỷ lệ hoàn tiền tăng 8x → nguyên nhân: merchant Y bug giá sản phẩm
+- `data/seed_fintech.py` — synthetic fintech data (transactions, revenue, settlements)
 
-**Làm:**
-- `data/seed_fintech.py` — synthetic fintech data
-- `src/agent/tools/fintech/` — 4 tool mới theo hợp đồng Tool/Observation
-- `src/agent/tools/registry_fintech.py` — tool registry cho fintech domain
-- Trigger fintech: `python scripts/trigger.py --domain fintech --scenario kb-f1`
+**C. Dashboard: Domain Switcher + Tool Registry Viewer:**
+- Domain selector trong navbar: `Microservice Ops` | `Fintech Anomaly`
+- Khi switch domain: tool list thay, scenario list thay, trigger form thay
+- `GET /dashboard/tools` — **Tool Registry Viewer**:
+  - Danh sách tất cả tools (local + MCP) với description, input schema
+  - Test tool trực tiếp: nhập args → chạy → xem Observation output
+- Trigger fintech từ UI: dropdown domain → scenario KB-F1/KB-F2
 
-**Cổng:** Agent giải đúng 2 kịch bản fintech, engine code không thay đổi.
-
----
-
-### Ngày 20 — Platform Demo + Cổng Phase 4
-
-**Chuẩn bị:**
-- Chạy eval N=10 tất cả kịch bản (4 incident + 2 fintech) — lấy số liệu thật
-- Test MCP: add tool mới vào MCP server không restart engine
-- Dashboard mở sẵn, Telegram + Slack mở sẵn trên điện thoại
-
-**Mạch demo 5 phút:**
-1. `trigger.py --scenario scenario1` → stream trace terminal → Telegram ping → Dashboard trace
-2. `trigger.py --scenario scenario2` → đường điều tra khác → Slack ping
-3. Cắm tool mới qua MCP live không restart
-4. `trigger.py --domain fintech --scenario kb-f1` → same engine, different domain → verdict
-5. Mở Langfuse: "đây là trace chi tiết + cost từng run"
-6. Đọc số liệu: "6 kịch bản, N=10, correct rate X%, avg M bước"
-
-**Cổng Phase 4:** 2 domain live + MCP hot-plug demo + eval numbers thật + dashboard.
+**Cổng:** 2 kịch bản fintech đúng, engine code không đổi, domain switch hoạt động trên dashboard.
 
 ---
 
-## Thứ tự cắt nếu hụt giờ (cắt từ trên xuống)
+### Ngày 19 — Eval N=10 + Dashboard Polish + Demo Prep
 
-1. **OTel (Ngày 14)** — Langfuse đã đủ cho observability demo
-2. **Multi-agent (Ngày 16)** — thay bằng kể-bằng-lời + kiến trúc đã sẵn sàng
-3. **Email adapter (Ngày 10)** — Slack đủ rồi
-4. **KB4 traffic surge (Ngày 9)** — 3 kịch bản đã đủ chống hardcode
-5. **Dashboard SSE real-time (Ngày 18)** — static page vẫn demo được
+**A. Eval toàn diện:**
+- Chạy eval N=10 cho tất cả 6 kịch bản (scenario1-4 + KB-F1 + KB-F2)
+- Lưu kết quả vào `eval_results` table
+- Dashboard `/dashboard/eval` hiện số liệu thật:
+  - Correct rate per scenario + average
+  - Steps to correct distribution
+  - Token cost per scenario
+  - Trend chart so sánh runs
+
+**B. Dashboard Polish:**
+- Responsive layout (mobile-friendly cho demo trên điện thoại)
+- Loading states, error states cho mọi API call
+- Toast notifications khi investigation complete
+- Keyboard shortcuts: `Ctrl+K` mở chat, `R` refresh, `T` trigger
+
+**C. Demo Prep:**
+- Kiểm tra toàn bộ flow demo 5 phút (script bên dưới)
+- Seed data sạch cho demo
+- Chạy thử demo 2 lần — ghi lại điểm kẹt
+- Sửa điểm kẹt
+
+**Cổng:** 6 kịch bản eval xong + số liệu thật + dashboard hoàn chỉnh + demo chạy smooth.
+
+---
+
+### Ngày 20 — Platform Demo Full + Cổng Phase 4
+
+**Mạch demo 7 phút:**
+1. Mở `/dashboard/demo` → giới thiệu platform
+2. Chat UI: gõ "Điều tra payment-gateway 14:00-15:00" → stream live → verdict HIGH
+3. Mở investigation detail: trace timeline từng bước, hypothesis evolution
+4. Langfuse: "đây là trace chi tiết + token cost"
+5. Trigger KB2 (provider sập) → multi-agent chạy song song → nhanh hơn
+6. MCP hot-plug: thêm tool mới vào MCP server, không restart engine → tool xuất hiện ngay
+7. Switch domain fintech → trigger KB-F1 → engine code không đổi
+8. Đọc số liệu: "6 kịch bản, N=10, correct rate X%, avg M bước, avg $Y/investigation"
+
+**Chuẩn bị kỹ thuật:**
+- Chạy `python data/init_db.py && python data/migrate_projects.py` fresh
+- Seed tất cả 6 kịch bản
+- Server + MCP server + dashboard đang chạy
+- Telegram + Teams mở sẵn trên điện thoại
+
+**Cổng Phase 4 / Kết thúc 20 ngày:**
+2 domain live + MCP hot-plug demo + eval numbers thật + full dashboard + Chat UI + multi-agent.
+
+---
+
+## Thứ tự cắt nếu hụt giờ (cắt từ dưới lên)
+
+1. **Investigation Replay (Ngày 17C)** — demo vẫn ổn không có
+2. **Multi-agent (Ngày 15B)** — kể bằng lời + kiến trúc đã sẵn sàng; single-agent đã đủ
+3. **Live Metrics Widget (Ngày 16C)** — health page không có widget vẫn pass
+4. **Fintech domain (Ngày 18)** — 4 kịch bản microservice đã chứng minh đủ
+5. **Circuit breaker (Ngày 16A)** — retry + concurrent cap đủ cho demo
 
 ## Quy trình làm việc qua session
 
