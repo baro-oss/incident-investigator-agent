@@ -41,6 +41,7 @@ class LLMResponse:
     """
     text: Optional[str] = None
     tool_calls: List[ToolCall] = field(default_factory=list)
+    usage: Optional[Dict[str, int]] = None  # {"input_tokens": N, "output_tokens": M}
 
     @property
     def has_tool_calls(self) -> bool:

@@ -10,12 +10,14 @@ import asyncio
 import inspect
 import json
 import logging
+import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from agent.engine.state import Evidence, Hypothesis, InvestigationState, Verdict
-from agent.llm.base import LLMClient, Message, ToolCall, ToolSpec
+from agent.llm.base import LLMClient, LLMResponse, Message, ToolCall, ToolSpec
+from agent.observability.langfuse_tracer import LangfuseTracer
 from agent.storage.db import open_db
 from agent.tools.contracts import Observation, Tool, render_for_llm
 
@@ -83,10 +85,10 @@ async def decide_next_action(
     llm: LLMClient,
     tools: List[Tool],
     last_obs: Optional[Observation] = None,
-) -> tuple[Optional[ToolCall], Optional[str]]:
-    """Pure: nhận state → hỏi LLM → trả (tool_call, verdict_text).
+) -> Tuple[Optional[ToolCall], Optional[str], Optional[LLMResponse]]:
+    """Pure: nhận state → hỏi LLM → trả (tool_call, verdict_text, llm_response).
 
-    Một trong hai sẽ là None.
+    Đúng một trong tool_call/verdict_text sẽ có giá trị; llm_response luôn có (trừ exception).
     """
     user_msg = _build_user_message(state, last_obs)
     response = await llm.complete(
@@ -96,16 +98,16 @@ async def decide_next_action(
     )
 
     if response.has_tool_calls:
-        return response.tool_calls[0], None
+        return response.tool_calls[0], None, response
 
     # Text response — kiểm tra có phải verdict không
     text = response.text or ""
     if "VERDICT" in text.upper():
-        return None, text
+        return None, text, response
 
     # LLM trả text nhưng không phải verdict → prompt lại (tránh vòng lặp vô hạn)
     logger.warning("LLM trả text không phải verdict, không phải tool_call: %s", text[:100])
-    return None, f"VERDICT:\nChưa đủ bằng chứng.\nLLM response: {text}"
+    return None, f"VERDICT:\nChưa đủ bằng chứng.\nLLM response: {text}", response
 
 
 async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
@@ -309,6 +311,13 @@ class InvestigationEngine:
             "project_id": project_id, "available_services": available_services or [],
         }, project_id=project_id)
 
+        tracer = LangfuseTracer(
+            investigation_id=investigation_id,
+            symptom=symptom,
+            scenario=scenario,
+            project_id=project_id,
+        )
+
         last_obs: Optional[Observation] = None
         verdict_text: Optional[str] = None
 
@@ -336,11 +345,19 @@ class InvestigationEngine:
                 )
                 break
 
+            current_step = state.steps_taken
+            tracer.start_step(current_step)
+
             # --- Quyết định hành động ---
             try:
-                tool_call, vtext = await decide_next_action(state, self.llm, self.tools, last_obs)
+                t_llm = time.monotonic()
+                tool_call, vtext, llm_resp = await decide_next_action(
+                    state, self.llm, self.tools, last_obs
+                )
+                llm_ms = (time.monotonic() - t_llm) * 1000
             except Exception as e:
-                logger.error("[%s] LLM error tại bước %d: %s", investigation_id, state.steps_taken, e)
+                logger.error("[%s] LLM error tại bước %d: %s", investigation_id, current_step, e)
+                tracer.end_step()
                 state.stop_reason = "llm_error"
                 state.finished = True
                 verdict_text = (
@@ -350,28 +367,41 @@ class InvestigationEngine:
                 )
                 break
 
+            # Ghi LLM call lên Langfuse
+            output_desc = (f"tool:{tool_call.name}" if tool_call
+                           else ("verdict" if vtext else "no_action"))
+            tracer.record_llm_call(
+                input_summary=state.symptom[:200],
+                output_summary=output_desc,
+                usage=llm_resp.usage if llm_resp else None,
+                latency_ms=llm_ms,
+            )
+
             if vtext:
-                # LLM đã kết luận
                 verdict_text = vtext
                 state.stop_reason = "verdict"
                 state.finished = True
+                tracer.end_step()
                 break
 
             if tool_call is None:
                 logger.warning("[%s] Không có tool_call lẫn verdict", investigation_id)
+                tracer.end_step()
                 break
 
             # --- Ghi trace: chọn tool ---
-            _emit_trace(investigation_id, state.steps_taken, "tool_call", {
+            _emit_trace(investigation_id, current_step, "tool_call", {
                 "tool": tool_call.name, "args": tool_call.arguments,
             })
             logger.info("[%s] Bước %d → %s(%s)",
-                        investigation_id, state.steps_taken + 1,
+                        investigation_id, current_step + 1,
                         tool_call.name, tool_call.arguments)
 
             # --- Chạy tool ---
             try:
+                t_tool = time.monotonic()
                 obs = await run_tool(tool_call, self.tools)
+                tool_ms = (time.monotonic() - t_tool) * 1000
             except Exception as e:
                 logger.error("[%s] Tool error: %s", investigation_id, e)
                 from agent.tools.contracts import Observation as Obs
@@ -380,13 +410,21 @@ class InvestigationEngine:
                     aggregates={}, samples=[], total_count=0, truncated=False,
                     metadata={"tool_name": tool_call.name, "error": str(e)},
                 )
+                tool_ms = (time.monotonic() - t_tool) * 1000
 
-            _emit_trace(investigation_id, state.steps_taken, "tool_result", {
+            _emit_trace(investigation_id, current_step, "tool_result", {
                 "tool": tool_call.name, "summary": obs.summary,
             })
+            tracer.record_tool_call(
+                tool_name=tool_call.name,
+                args=tool_call.arguments,
+                result_summary=obs.summary,
+                latency_ms=tool_ms,
+            )
 
             # --- Cập nhật state ---
             state = update_state(state, tool_call, obs)
+            tracer.end_step()
             last_obs = obs
 
         # --- Xây verdict ---
@@ -398,6 +436,8 @@ class InvestigationEngine:
             "root_cause": state.verdict.root_cause if state.verdict else "N/A",
             "confidence": state.verdict.confidence if state.verdict else "N/A",
         })
+        tracer.record_verdict(state.stop_reason, state.verdict)
+        tracer.flush()
 
         logger.info("[%s] Kết thúc. Stop: %s | Root cause: %s",
                     investigation_id, state.stop_reason,

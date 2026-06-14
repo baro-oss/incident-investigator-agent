@@ -70,9 +70,16 @@ class OpenAICompatibleClient:
                     )
                 )
 
+        usage = None
+        if response.usage:
+            usage = {
+                "input_tokens": response.usage.prompt_tokens,
+                "output_tokens": response.usage.completion_tokens,
+            }
         return LLMResponse(
             text=message.content,
             tool_calls=tool_calls,
+            usage=usage,
         )
 
     @staticmethod

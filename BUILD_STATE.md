@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 1 — Ngày 10 ✅ HOÀN THÀNH + email channel. **Phase 1 HOÀN TẤT.**
-**Ngày plan đang ở:** Phase 2 — Ngày 11 (Langfuse / Observability)
-**Cổng kiểm gần nhất đã qua:** Output đa kênh — email + Teams + per-project channel config ✅
+**Giai đoạn:** Phase 2 — Ngày 11 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 2 — Ngày 12 (Eval CI Framework)
+**Cổng kiểm gần nhất đã qua:** Langfuse tracer no-op OK + engine end-to-end còn chạy ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -36,6 +36,36 @@
 | 10 | Webhook + 4 KB + Telegram + Teams + Email + per-project channels | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 15 — 2026-06-14] — Ngày 11: Langfuse Integration
+
+**Đã làm:**
+- `src/agent/llm/base.py` — thêm `usage: Optional[Dict[str, int]]` vào `LLMResponse`
+- `src/agent/llm/anthropic.py` — populate `usage` từ `response.usage` (input_tokens / output_tokens)
+- `src/agent/llm/openai_compat.py` — populate `usage` từ `response.usage` (prompt_tokens / completion_tokens)
+- `src/agent/observability/__init__.py` (mới) — package init
+- `src/agent/observability/langfuse_tracer.py` (mới) — tracer stateful per investigation:
+  - Opt-in qua `LANGFUSE_PUBLIC_KEY` env — không set = no-op hoàn toàn
+  - `start_step(n)` / `end_step()` → span hierarchy
+  - `record_llm_call(input, output, usage, latency_ms)` → generation span với token tracking
+  - `record_tool_call(name, args, summary, latency_ms)` → tool span
+  - `record_verdict(stop_reason, verdict)` → trace.update + score(confidence)
+  - `flush()` → đẩy batch lên Langfuse
+- `src/agent/engine/loop.py` — tích hợp tracer:
+  - `decide_next_action` trả 3-tuple `(tool_call, verdict_text, llm_response)`
+  - `LangfuseTracer` khởi tạo đầu mỗi investigation, gọi xuyên suốt loop
+  - Timing: `time.monotonic()` đo latency LLM + tool riêng biệt
+  - SQLite trace (`_emit_trace`) không đổi — Langfuse hoàn toàn additive
+- `pyproject.toml` — thêm `langfuse>=2.0.0`
+- `.env.example` — thêm `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
+
+**Verify:**
+- `LLMResponse.usage` OK ✅
+- `LangfuseTracer` no-op khi không có `LANGFUSE_PUBLIC_KEY` ✅
+- Engine end-to-end còn chạy (mock LLM, 1 bước, verdict HIGH) ✅
+- SQLite trace không vỡ ✅
+
+**Cổng Ngày 11:** Langfuse tracer sẵn sàng — connect dashboard bằng cách set `LANGFUSE_PUBLIC_KEY` trong `.env`.
 
 ### [Session 14 — 2026-06-13] — Email channel + per-project channel config
 
