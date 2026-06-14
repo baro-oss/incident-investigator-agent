@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from agent.dashboard.queries import (
+    get_eval_calibration,
     get_eval_summary,
     get_investigation_detail,
     get_projects_overview,
@@ -570,6 +571,8 @@ async def dashboard_eval(request: Request):
     eval_steps  = [round(r["avg_steps"], 1) for r in eval_rows]
     eval_recall = [round((r["recall"] or 0) * 100, 0) for r in eval_rows]
 
+    eval_calibration = get_eval_calibration()
+
     return templates.TemplateResponse("eval.html", {
         "request": request,
         "active": "eval",
@@ -581,4 +584,5 @@ async def dashboard_eval(request: Request):
         "eval_rates": eval_rates,
         "eval_steps": eval_steps,
         "eval_recall": eval_recall,
+        "eval_calibration": eval_calibration,
     })

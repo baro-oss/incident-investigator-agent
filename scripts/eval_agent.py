@@ -14,7 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import sqlite3
+import os
 import sys
 import time
 import uuid
@@ -245,33 +245,38 @@ def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
     }
 
 
-def _save_eval_results_to_db(run_id: str, scenario_id: str, results: List[Dict]) -> None:
-    """Lưu kết quả eval vào bảng eval_results trong SQLite."""
-    db_path = Path(__file__).parent.parent / "data" / "investigation.db"
-    if not db_path.exists():
+def _save_eval_results_to_db(
+    run_id: str, scenario_id: str, results: List[Dict],
+    provider: str = "mock", model: str = "",
+) -> None:
+    """Lưu kết quả eval vào bảng eval_results — qua storage seam (DB-agnostic)."""
+    from agent.storage import get_database, get_db_path
+
+    if not os.path.exists(get_db_path()):
         return
     now = datetime.now(timezone.utc).isoformat()
     try:
-        conn = sqlite3.connect(str(db_path))
-        for i, r in enumerate(results):
-            conn.execute("""
-                INSERT INTO eval_results
-                    (run_id, scenario, run_number, correct, confidence, recall_at_1,
-                     steps_taken, hallucination, token_total, elapsed_s, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                run_id, scenario_id, i + 1,
-                int(r.get("correct", False)),
-                r.get("confidence", "none"),
-                r.get("recall_at_1", 0),
-                r.get("steps", 0),
-                r.get("hallucination", 0),
-                r.get("token_total", 0),
-                r.get("elapsed_s"),
-                now,
-            ))
-        conn.commit()
-        conn.close()
+        db = get_database()
+        with db.connection() as conn:
+            for i, r in enumerate(results):
+                conn.execute("""
+                    INSERT INTO eval_results
+                        (run_id, scenario, run_number, correct, confidence, recall_at_1,
+                         steps_taken, hallucination, token_total, elapsed_s,
+                         provider, model, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    run_id, scenario_id, i + 1,
+                    int(r.get("correct", False)),
+                    r.get("confidence", "none"),
+                    r.get("recall_at_1", 0),
+                    r.get("steps", 0),
+                    r.get("hallucination", 0),
+                    r.get("token_total", 0),
+                    r.get("elapsed_s"),
+                    provider, model,
+                    now,
+                ))
     except Exception as e:
         print(f"[warn] Không lưu được eval_results: {e}")
 
@@ -283,6 +288,8 @@ async def run_scenario_n_times(
     n: int,
     use_mock: bool,
     budget: int,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> List[Dict]:
     cfg = SCENARIOS[scenario_id]
     tools = get_tool_registry()
@@ -293,7 +300,7 @@ async def run_scenario_n_times(
             llm = _MOCK_CLASSES[scenario_id]()
         else:
             from agent.llm.factory import create_llm_client
-            llm = create_llm_client()
+            llm = create_llm_client(provider=provider, model=model)
 
         engine = InvestigationEngine(llm=llm, tools=tools, step_budget=budget)
         t0 = time.time()
@@ -348,6 +355,8 @@ async def main() -> None:
     parser.add_argument("--n", type=int, default=3, help="Số lần chạy mỗi kịch bản")
     parser.add_argument("--budget", type=int, default=10)
     parser.add_argument("--mock", action="store_true", help="Dùng mock LLM (không cần API key)")
+    parser.add_argument("--provider", default=None, help="Override LLM provider (mặc định: env LLM_PROVIDER)")
+    parser.add_argument("--model", default=None, help="Override LLM model (mặc định: env LLM_MODEL)")
     args = parser.parse_args()
 
     scenarios_to_run = (
@@ -355,7 +364,12 @@ async def main() -> None:
         else [args.scenario]
     )
 
-    mode = "MOCK LLM" if args.mock else "REAL LLM"
+    if args.mock:
+        provider_label, model_label = "mock", "mock"
+    else:
+        provider_label = args.provider or os.environ.get("LLM_PROVIDER", "anthropic")
+        model_label = args.model or os.environ.get("LLM_MODEL", "") or "(default)"
+    mode = "MOCK LLM" if args.mock else f"REAL LLM [{provider_label}/{model_label}]"
     print(f"\n{'='*58}")
     print(f"  Eval agent — {mode} — {args.n} runs/scenario — budget={args.budget}")
     print(f"  Kịch bản: {scenarios_to_run}")
@@ -365,10 +379,13 @@ async def main() -> None:
     all_results = {}
     for sc in scenarios_to_run:
         print(f"\n--- {sc}: {SCENARIOS[sc]['description']} ---")
-        results = await run_scenario_n_times(sc, args.n, args.mock, args.budget)
+        results = await run_scenario_n_times(
+            sc, args.n, args.mock, args.budget,
+            provider=args.provider, model=args.model,
+        )
         all_results[sc] = results
         print_summary(sc, results)
-        _save_eval_results_to_db(run_id, sc, results)
+        _save_eval_results_to_db(run_id, sc, results, provider=provider_label, model=model_label)
 
     if len(scenarios_to_run) > 1:
         total_runs = sum(len(r) for r in all_results.values())

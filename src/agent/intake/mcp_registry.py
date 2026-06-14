@@ -6,11 +6,10 @@ Backward compat: project_id='default' cho các server cũ.
 """
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from agent.storage.db import open_db
+from agent.storage.db import IntegrityError, open_db
 
 
 def _now() -> str:
@@ -61,7 +60,7 @@ def add_server(
             "SELECT * FROM mcp_servers WHERE id=?", (cursor.lastrowid,)
         ).fetchone()
         return dict(row)
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise ValueError(f"URL '{url}' đã tồn tại trong registry")
     finally:
         conn.close()
@@ -128,7 +127,7 @@ def update_server(
             f"SELECT * FROM mcp_servers WHERE {where}", where_vals
         ).fetchone()
         return dict(row) if row else None
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise ValueError(f"URL '{updates.get('url')}' đã tồn tại trong registry")
     finally:
         conn.close()

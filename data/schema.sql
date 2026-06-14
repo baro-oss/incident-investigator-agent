@@ -120,6 +120,8 @@ CREATE TABLE IF NOT EXISTS eval_results (
     hallucination INTEGER NOT NULL DEFAULT 0,  -- 1 = verdict claim gì không có evidence đỡ
     token_total  INTEGER NOT NULL DEFAULT 0,
     elapsed_s    REAL,
+    provider     TEXT,               -- LLM provider chạy eval (anthropic/gemini/mock) — Phase 5 D21
+    model        TEXT,               -- LLM model (vd claude-sonnet-4-6)
     created_at   TEXT NOT NULL
 );
 

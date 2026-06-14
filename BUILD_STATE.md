@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Đang lên kế hoạch **Phase 5 — Hardening & Trust (Ngày 21–25)**. Tiếp theo: **Ngày 21**.
-**Cổng kiểm gần nhất đã qua:** Phase 4 Gate — 2 domain live + 6/6 eval PASS + full dashboard ✅
+**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 21 ✅** (storage seam + real-LLM eval smoke + recursion bugfix). Tiếp theo: **Ngày 22 (Auth & RBAC)**.
+**Cổng kiểm gần nhất đã qua:** Ngày 21 — real-LLM eval 6/6 KB correct + calibration dashboard + storage seam DB-swappable + recursion bug fixed ✅
 **Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
 
 ## Cái lõi (không được vỡ) — tình trạng
@@ -55,17 +55,47 @@
 | 19 | Eval N=10 + Dashboard Polish (theme/toast/shortcuts) | ✅ |
 | 20 | Platform Demo Full + Cổng Phase 4 | ✅ |
 
-## Tiến độ Phase 5 (docs/11-roadmap-phase-5.md) — KẾ HOẠCH
+## Tiến độ Phase 5 (docs/11-roadmap-phase-5.md) — ĐANG LÀM
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
-| 21 | Engine & Quality + Storage seam | Real-LLM eval N=10 + calibration · Tier-1 storage seam | ☐ |
+| 21 | Engine & Quality + Storage seam | Tier-1 storage seam (DB-swappable) · real-LLM eval smoke 6/6 · calibration · recursion bugfix | ✅ |
 | 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ☐ |
 | 23 | Observability | Cost dashboard + verdict feedback loop + trace retention | ☐ |
 | 24 | Integrations | Webhook signature + Slack + real MCP pack | ☐ |
 | 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 26 — 2026-06-14] — Ngày 21: Storage seam Tier-1 + Real-LLM eval (smoke) + Recursion bugfix
+
+**A. Storage seam Tier-1 (DB-swappable; runtime VẪN SQLite):**
+- `src/agent/storage/base.py` (mới) — `StorageBackend` Protocol + facade `Database` (query/query_one/execute/connection/now) + hợp đồng connection.
+- `src/agent/storage/sqlite_backend.py` (mới) — backend SQLite, MODULE DUY NHẤT import sqlite3; `IntegrityError=sqlite3.IntegrityError`.
+- `src/agent/storage/postgres_backend.py` (mới) — stub Tier-2 (connect raise NotImplementedError) → chứng minh seam.
+- `src/agent/storage/db.py` — rewrite thành dispatcher theo `DB_BACKEND` env; giữ API `open_db()`/`get_db_path()`; re-export `IntegrityError`+`BACKEND_NAME`.
+- `__init__.py` — export + `get_database()` singleton.
+- `mcp_registry.py`, `project_registry.py` — bỏ `import sqlite3`, dùng `IntegrityError` trung lập.
+- Verify: chỉ `sqlite_backend.py` còn sqlite3 trong src/agent; `DB_BACKEND=postgres` dispatch sang stub OK; mock eval 4/4 PASS (lõi không vỡ).
+
+**B. Eval scaffolding + calibration:**
+- `data/migrate_eval_provider.py` (mới) + `schema.sql` — cột `provider`/`model` cho `eval_results`.
+- `eval_agent.py` + `eval_fintech.py` — `--provider`/`--model`, capture provider/model vào save (qua facade), bỏ `import sqlite3`.
+- `queries.py` — `get_eval_calibration()` + provider/model trong `get_eval_summary`.
+- `router.py` + `eval.html` — cột LLM + card Calibration trên `/dashboard/eval`.
+
+**C. Recursion bugfix (BUG PRODUCTION, phát hiện qua smoke real-LLM):**
+- Triệu chứng: real-LLM đi >8 bước → `GraphRecursionError: limit 25` (mock che vì kịch bản mock 3-5 bước). Mỗi bước = 3 super-step ⇒ step_budget=10 → ~30 > 25.
+- Fix `loop.py _run_with_graph`: `recursion_limit=step_budget*3+6` (engine tự dừng bằng budget; LangGraph chỉ là trần an toàn) + catch `GraphRecursionError` → verdict partial (không chết im lặng).
+
+**Real-LLM eval (SMOKE — người dùng chọn dừng ở smoke, KHÔNG chạy full N=10):**
+- 6/6 KB correct, 0 crash. scenario1-4 conf high/medium; **fintech1-2 conf=insufficient nhưng vẫn correct → agent under-confident trên fintech** (insight real-LLM, mock báo HIGH).
+- ~32K tokens & ~56s/investigation (~$0.17/run → full N=10 ≈ ~$10, cao hơn quote $5-6 ban đầu).
+- Verify dashboard `/dashboard/eval`: 6 KB anthropic/claude-sonnet-4-6, calibration high 3/3·medium 1/1·insufficient 2/2, 100% PASS.
+
+**Cổng Ngày 21 ✅ (scope smoke):** real-LLM eval 6/6 KB lưu DB + calibration render + không còn import sqlite3 ngoài backend + lõi không vỡ.
+
+**Quyết định lệch:** (1) Không chạy full N=10 — người dùng chọn "dừng ở smoke" sau 6/6 PASS (tiết kiệm ~$10). (2) Storage seam chỉ Tier-1; Tier-2 (Postgres chạy thật) ở Future. (3) `.env` có `LLM_PROVIDER` trùng 2 dòng — chưa dọn (vô hại).
 
 ### [Session 25 — 2026-06-14] — Lập kế hoạch Phase 5 (Ngày 21–25)
 

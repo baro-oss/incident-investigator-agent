@@ -355,7 +355,9 @@ def get_eval_summary() -> List[Dict[str, Any]]:
                AVG(e.steps_taken) as avg_steps,
                AVG(e.recall_at_1) as recall,
                SUM(e.hallucination) as hall,
-               AVG(e.token_total) as avg_tokens
+               AVG(e.token_total) as avg_tokens,
+               MAX(e.provider) as provider,
+               MAX(e.model) as model
         FROM eval_results e
         INNER JOIN (
             SELECT scenario, MAX(created_at) AS latest_at
@@ -367,3 +369,34 @@ def get_eval_summary() -> List[Dict[str, Any]]:
     """).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_eval_calibration() -> List[Dict[str, Any]]:
+    """Calibration — theo từng mức confidence, agent đúng bao nhiêu %.
+
+    Dùng run mới nhất per scenario (đồng bộ get_eval_summary). Agent calibrated
+    tốt: HIGH → rate cao, LOW → rate thấp. Mock thường 100% high → ít ý nghĩa;
+    có giá trị khi chạy real-LLM.
+    """
+    conn = open_db()
+    rows = conn.execute("""
+        SELECT e.confidence AS confidence,
+               COUNT(*) AS n,
+               SUM(e.correct) AS ok
+        FROM eval_results e
+        INNER JOIN (
+            SELECT scenario, MAX(created_at) AS latest_at
+            FROM eval_results
+            GROUP BY scenario
+        ) latest ON e.scenario = latest.scenario AND e.created_at = latest.latest_at
+        GROUP BY e.confidence
+    """).fetchall()
+    conn.close()
+    order = {"high": 0, "medium": 1, "low": 2, "insufficient": 3, "none": 4}
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["rate"] = round((d["ok"] / d["n"]) * 100) if d["n"] else 0
+        out.append(d)
+    out.sort(key=lambda x: order.get(x["confidence"], 9))
+    return out

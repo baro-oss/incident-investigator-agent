@@ -58,6 +58,7 @@
           <th>Hallucination</th>
           <th>Avg Steps</th>
           <th>Avg Tokens</th>
+          <th>LLM</th>
         </tr>
       </thead>
       <tbody>
@@ -87,11 +88,43 @@
           </td>
           <td style="text-align:center">{{ "%.1f"|format(r.avg_steps) }}</td>
           <td style="text-align:center">{{ "%.0f"|format(r.avg_tokens) }}</td>
+          <td style="text-align:center" title="{{ r.model or '' }}">
+            <span class="tag">{{ r.provider or '—' }}</span>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3 style="margin-bottom:12px">Calibration — độ tin có khớp độ đúng?</h3>
+  {% if eval_calibration %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Confidence</th><th>Runs</th><th>Correct</th><th>Rate</th></tr></thead>
+      <tbody>
+        {% for c in eval_calibration %}
+        <tr>
+          <td><span class="tag">{{ c.confidence }}</span></td>
+          <td style="text-align:center">{{ c.n }}</td>
+          <td style="text-align:center">{{ c.ok }}</td>
+          <td style="text-align:center">
+            <span class="eval-rate {{ 'pass' if c.rate >= 70 else 'fail' }}">{{ c.rate }}%</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="meta" style="margin-top:8px">
+    Calibrated tốt: <b>HIGH</b> → rate cao, <b>LOW</b> → rate thấp.
+    (Mock ~100% high → ít ý nghĩa; có giá trị khi chạy real-LLM.)
+  </div>
+  {% else %}
+  <div class="meta">Chưa có dữ liệu calibration.</div>
+  {% endif %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

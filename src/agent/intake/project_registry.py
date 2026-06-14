@@ -9,11 +9,10 @@ Mỗi project có:
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from agent.storage.db import open_db
+from agent.storage.db import IntegrityError, open_db
 
 
 def _now() -> str:
@@ -55,7 +54,7 @@ def create_project(project_id: str, name: str, description: str = "") -> Dict[st
         conn.commit()
         row = conn.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
         return dict(row)
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         raise ValueError(f"Project id '{project_id}' đã tồn tại")
     finally:
         conn.close()
@@ -117,7 +116,7 @@ def add_project_service(project_id: str, service: str) -> bool:
         )
         conn.commit()
         return True
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return False  # đã tồn tại — OK, không phải lỗi
     finally:
         conn.close()

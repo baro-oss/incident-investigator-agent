@@ -383,8 +383,32 @@ class InvestigationEngine:
             "tools": self.tools,
             "tracer": tracer,
         }
-        result = await self._graph.ainvoke(initial)
-        return result["inv"], result.get("verdict_text")
+        # recursion_limit phải ≥ step_budget × 3 (mỗi bước = decide+run_tool+update)
+        # + đệm cho node decide kết thúc. Engine tự dừng bằng step_budget; đây chỉ là
+        # trần an toàn của LangGraph, KHÔNG được thấp hơn budget engine. Mặc định LG=25
+        # gây GraphRecursionError với real-LLM đi sâu (>8 bước) — bug bị mock che.
+        from langgraph.errors import GraphRecursionError
+
+        recursion_limit = self.step_budget * 3 + 6
+        try:
+            result = await self._graph.ainvoke(
+                initial, config={"recursion_limit": recursion_limit}
+            )
+            return result["inv"], result.get("verdict_text")
+        except GraphRecursionError:
+            logger.warning(
+                "[%s] Chạm recursion_limit=%d của LangGraph — kết luận partial (không chết im lặng).",
+                state.investigation_id, recursion_limit,
+            )
+            state.stop_reason = "recursion_limit"
+            state.finished = True
+            verdict_text = (
+                "VERDICT:\nRoot cause: Chưa xác định — chạm trần đệ quy graph.\n"
+                "Độ tin: CHƯA ĐỦ BẰNG CHỨNG\n"
+                f"Bằng chứng: Đã đi {state.steps_taken} bước, chưa kết luận.\n"
+                "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
+            )
+            return state, verdict_text
 
     # -----------------------------------------------------------------------
     # Private: fallback while-loop path (original logic)
