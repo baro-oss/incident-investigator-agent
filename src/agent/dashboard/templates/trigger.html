@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}Trigger Investigation{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>▶ Trigger Investigation</h1>
+  <div class="meta">Tạo điều tra mới — không cần curl</div>
+</div>
+
+{% if result %}
+<div class="alert-{{ 'success' if result.status == 'accepted' else 'error' }} alert-box">
+  {% if result.status == 'accepted' %}
+  ✓ Investigation đã bắt đầu · ID: <code>{{ result.investigation_id }}</code> ·
+  <a href="/dashboard/investigations/{{ result.investigation_id }}" style="color:inherit">Xem trace →</a>
+  {% elif result.status == 'duplicate' %}
+  ⚠ Investigation đang chạy với key tương tự · ID: <code>{{ result.investigation_id }}</code>
+  {% else %}
+  ✗ Lỗi: {{ result }}
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="trigger-layout">
+  <div class="card">
+    <h3 style="margin-bottom:16px">Cấu hình điều tra</h3>
+    <form method="post" action="/dashboard/trigger">
+
+      <div class="form-group">
+        <label>Project</label>
+        <select name="project_id" id="project_id" onchange="updateServices()">
+          {% for p in projects %}
+          <option value="{{ p.id }}" {{ 'selected' if p.id == selected_project }}>
+            {{ p.name }} ({{ p.id }})
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Service</label>
+        <select name="service" id="service_sel">
+          {% for svc in services %}
+          <option value="{{ svc }}" {{ 'selected' if svc == selected_service }}>{{ svc }}</option>
+          {% endfor %}
+          {% if not services %}
+          <option value="payment-gateway">payment-gateway</option>
+          <option value="auth-service">auth-service</option>
+          <option value="api-gateway">api-gateway</option>
+          <option value="order-service">order-service</option>
+          <option value="third-party-provider">third-party-provider</option>
+          {% endif %}
+        </select>
+        <div class="form-hint">Services của project được chọn</div>
+      </div>
+
+      <div class="form-group">
+        <label>Scenario (dữ liệu seed)</label>
+        <select name="scenario">
+          <option value="scenario1" {{ 'selected' if selected_scenario == 'scenario1' }}>
+            scenario1 — Deploy bug (payment-gateway timeout cascade)
+          </option>
+          <option value="scenario2" {{ 'selected' if selected_scenario == 'scenario2' }}>
+            scenario2 — Provider sập (third-party-provider down)
+          </option>
+          <option value="scenario3" {{ 'selected' if selected_scenario == 'scenario3' }}>
+            scenario3 — DB pool exhaustion (auth-service)
+          </option>
+          <option value="scenario4" {{ 'selected' if selected_scenario == 'scenario4' }}>
+            scenario4 — Traffic surge (api-gateway rate limit)
+          </option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Time Window</label>
+        <select name="time_window">
+          <option value="14:00-15:00">14:00 – 15:00 (scenario1)</option>
+          <option value="15:00-16:00">15:00 – 16:00 (scenario2)</option>
+          <option value="08:00-09:00">08:00 – 09:00 (scenario3)</option>
+          <option value="10:00-11:00">10:00 – 11:00 (scenario4)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Symptom (tùy chọn — để trống = dùng mô tả mặc định)</label>
+        <textarea name="symptom" rows="3" placeholder="vd: payment-gateway: tỷ lệ lỗi tăng đột biến từ 14:05, 87% TimeoutException"></textarea>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+        ▶ Bắt đầu điều tra
+      </button>
+    </form>
+  </div>
+
+  <div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">Hướng dẫn nhanh</h3>
+      <div style="font-size:12px;color:var(--muted);line-height:1.8">
+        <p>1. Chọn <strong style="color:var(--text)">project</strong> — scopes tool gọi theo services</p>
+        <p>2. Chọn <strong style="color:var(--text)">service</strong> triệu chứng xuất hiện</p>
+        <p>3. Chọn <strong style="color:var(--text)">scenario</strong> để agent điều tra đúng bộ data</p>
+        <p>4. <strong style="color:var(--text)">Time window</strong> phải khớp với scenario</p>
+        <p style="margin-top:10px">Agent điều tra nền, kết quả push <strong style="color:var(--text)">Telegram</strong> khi xong.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:0">
+      <h3 style="margin-bottom:12px">Curl tương đương</h3>
+      <pre style="font-size:11px;color:var(--accent);overflow-x:auto;line-height:1.6">curl -X POST localhost:8000/projects/{pid}/trigger \
+  -H "Content-Type: application/json" \
+  -d '{
+    "service": "payment-gateway",
+    "scenario": "scenario1",
+    "time_window": "14:00-15:00"
+  }'</pre>
+    </div>
+
+    {% if recent %}
+    <div class="card" style="margin-top:0">
+      <h3 style="margin-bottom:12px">Điều tra gần đây</h3>
+      {% for inv in recent %}
+      <div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <a href="/dashboard/investigations/{{ inv.investigation_id }}"
+           style="color:var(--accent);font-family:monospace">{{ inv.investigation_id }}</a>
+        <span class="badge badge-{{ inv.confidence }}" style="margin-left:6px">{{ inv.confidence }}</span>
+        <div style="color:var(--muted);margin-top:2px">{{ inv.service }} · {{ inv.scenario }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+const projectServices = {{ project_services_json | safe }};
+function updateServices() {
+  const pid = document.getElementById('project_id').value;
+  const sel = document.getElementById('service_sel');
+  const svcs = projectServices[pid] || [];
+  sel.innerHTML = svcs.length
+    ? svcs.map(s => `<option value="${s}">${s}</option>`).join('')
+    : ['payment-gateway','auth-service','api-gateway','order-service','third-party-provider']
+        .map(s => `<option value="${s}">${s}</option>`).join('');
+}
+</script>
+{% endblock %}

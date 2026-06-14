@@ -36,6 +36,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from agent.intake.adapters import list_sources, route_adapter
 from agent.intake.mcp_registry import (
@@ -113,7 +114,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Investigation Agent", version="0.4.0", docs_url="/docs", lifespan=lifespan)
+app = FastAPI(title="Investigation Agent", version="0.5.0", docs_url="/docs", lifespan=lifespan)
+
+# ── Dashboard UI ──────────────────────────────────────────────────────────────
+from pathlib import Path as _Path
+from agent.dashboard.router import router as _dash_router
+
+_STATIC = _Path(__file__).parent.parent / "dashboard" / "static"
+app.mount("/dashboard/static", StaticFiles(directory=str(_STATIC)), name="dashboard-static")
+app.include_router(_dash_router, prefix="/dashboard")
 
 
 # ── Backward compat: global trigger → default project ─────────────────────────

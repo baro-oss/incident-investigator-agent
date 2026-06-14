@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Projects — Agent Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Projects</h1>
+  <div class="meta">{{ projects | length }} project · quản lý qua API hoặc xem tại đây</div>
+</div>
+
+<div class="project-grid">
+  {% for p in projects %}
+  <div class="project-card">
+    <h4>{{ p.name }}</h4>
+    <div class="pid">{{ p.id }}</div>
+    {% if p.description %}
+    <div class="desc">{{ p.description }}</div>
+    {% endif %}
+
+    <div style="margin-bottom:10px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">SERVICES</div>
+      <div class="tags">
+        {% for svc in p.services %}
+        <span class="tag">{{ svc }}</span>
+        {% else %}
+        <span style="font-size:11px;color:var(--muted)">(chưa có service)</span>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">LLM</div>
+      <span class="tag tag-llm">{{ p.llm_provider }}</span>
+      {% if p.llm_model %}
+      <span class="tag" style="margin-left:4px">{{ p.llm_model }}</span>
+      {% endif %}
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:12px;color:var(--muted)">
+        {{ p.investigation_count }} investigation{% if p.investigation_count != 1 %}s{% endif %}
+      </span>
+      <a href="/dashboard?project_id={{ p.id }}"
+         style="font-size:12px;color:var(--accent);text-decoration:none">
+        Xem history →
+      </a>
+    </div>
+  </div>
+  {% else %}
+  <div class="card empty">
+    <div class="ei">◈</div>
+    <div>Chưa có project nào.<br>
+      <code style="font-size:12px;color:var(--accent)">POST /projects</code> để tạo.
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card" style="margin-top:24px">
+  <h3 style="margin-bottom:12px">Quản lý qua API</h3>
+  <pre style="font-size:12px;color:var(--muted);line-height:1.8"># Tạo project mới
+curl -X POST localhost:8000/projects \
+  -H "Content-Type: application/json" \
+  -d '{"id":"my-project","name":"My Project","description":"..."}'
+
+# Thêm service
+curl -X POST localhost:8000/projects/my-project/services \
+  -H "Content-Type: application/json" \
+  -d '{"service":"payment-gateway"}'
+
+# Chọn LLM riêng cho project
+curl -X PATCH localhost:8000/projects/my-project/llm \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"gemini","model":"gemini-2.0-flash"}'</pre>
+</div>
+{% endblock %}

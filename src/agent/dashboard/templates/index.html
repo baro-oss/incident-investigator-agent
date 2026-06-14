@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}Investigations — Agent Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Investigations</h1>
+  <div class="meta">Lịch sử điều tra — {{ total }} bản ghi</div>
+</div>
+
+<div class="filter-bar">
+  <form method="get" style="display:contents">
+    <select name="project_id" onchange="this.form.submit()">
+      <option value="">Tất cả project</option>
+      {% for p in projects %}
+      <option value="{{ p }}" {{ 'selected' if p == filter_project }}>{{ p }}</option>
+      {% endfor %}
+    </select>
+    <select name="confidence" onchange="this.form.submit()">
+      <option value="">Tất cả confidence</option>
+      <option value="high"         {{ 'selected' if filter_confidence == 'high' }}>HIGH</option>
+      <option value="medium"       {{ 'selected' if filter_confidence == 'medium' }}>MEDIUM</option>
+      <option value="low"          {{ 'selected' if filter_confidence == 'low' }}>LOW</option>
+      <option value="insufficient" {{ 'selected' if filter_confidence == 'insufficient' }}>INSUFFICIENT</option>
+    </select>
+    <a href="/dashboard" class="btn btn-ghost">Xóa filter</a>
+    <a href="/dashboard/trigger" class="btn btn-primary" style="margin-left:auto">▶ Trigger mới</a>
+  </form>
+</div>
+
+{% if investigations %}
+<div class="card" style="padding:0">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Project</th>
+          <th>Service</th>
+          <th>Scenario</th>
+          <th>Confidence</th>
+          <th>Steps</th>
+          <th>Stop</th>
+          <th>Thời gian</th>
+          <th>Root Cause</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in investigations %}
+        <tr>
+          <td><a href="/dashboard/investigations/{{ inv.investigation_id }}">{{ inv.investigation_id }}</a></td>
+          <td><span class="tag">{{ inv.project_id }}</span></td>
+          <td><code style="font-size:11px;color:#a5b4fc">{{ inv.service or '—' }}</code></td>
+          <td><span class="tag">{{ inv.scenario }}</span></td>
+          <td>
+            {% if inv.confidence %}
+            <span class="badge badge-{{ inv.confidence }}">{{ inv.confidence }}</span>
+            {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+          </td>
+          <td style="text-align:center">{{ inv.steps }}</td>
+          <td>
+            {% if inv.stop_reason == 'verdict' %}
+            <span class="badge badge-verdict">verdict</span>
+            {% elif inv.stop_reason == 'budget' %}
+            <span class="badge badge-budget">budget</span>
+            {% elif inv.stop_reason %}
+            <span class="badge badge-error">{{ inv.stop_reason }}</span>
+            {% endif %}
+          </td>
+          <td style="color:var(--muted);font-size:12px;white-space:nowrap">
+            {{ inv.started_at }}<br>
+            {% if inv.elapsed_s %}<span>{{ inv.elapsed_s }}s</span>{% endif %}
+          </td>
+          <td style="font-size:12px;max-width:280px">{{ (inv.root_cause or '')[:90] }}{% if inv.root_cause|length > 90 %}…{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card empty">
+  <div class="ei">⚡</div>
+  <div>Chưa có investigation nào.<br>
+    <a href="/dashboard/trigger" style="color:var(--accent)">Trigger điều tra đầu tiên →</a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

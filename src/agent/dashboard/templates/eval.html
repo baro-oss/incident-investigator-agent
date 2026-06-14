@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Eval Results — Agent Dashboard{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>Eval Results</h1>
+  <div class="meta">Kết quả đánh giá gần nhất từ <code>eval_agent.py</code></div>
+</div>
+
+{% if eval_rows %}
+<div class="stats-row">
+  <div class="stat-box">
+    <div class="sv">{{ total_runs }}</div>
+    <div class="sl">Tổng runs</div>
+  </div>
+  <div class="stat-box">
+    <div class="sv" style="color:var(--high)">{{ total_correct }}</div>
+    <div class="sl">Đúng root cause</div>
+  </div>
+  <div class="stat-box">
+    <div class="sv" style="color:{{ 'var(--high)' if overall_rate >= 70 else 'var(--low)' }}">
+      {{ overall_rate }}%
+    </div>
+    <div class="sl">Overall rate</div>
+  </div>
+  <div class="stat-box">
+    <div class="sv" style="color:{{ 'var(--high)' if overall_rate >= 70 else 'var(--low)' }}">
+      {{ '✓ PASS' if overall_rate >= 70 else '✗ FAIL' }}
+    </div>
+    <div class="sl">Cổng ≥70%</div>
+  </div>
+</div>
+
+<div class="card" style="padding:0">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Scenario</th>
+          <th>Runs</th>
+          <th>Correct</th>
+          <th>Rate</th>
+          <th>Gate</th>
+          <th>Recall@1</th>
+          <th>Hallucination</th>
+          <th>Avg Steps</th>
+          <th>Avg Tokens</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in eval_rows %}
+        {% set rate = (r.ok * 100 // r.n) if r.n else 0 %}
+        <tr>
+          <td><span class="tag">{{ r.scenario }}</span></td>
+          <td style="text-align:center">{{ r.n }}</td>
+          <td style="text-align:center">{{ r.ok }}</td>
+          <td style="text-align:center">
+            <span class="eval-rate {{ 'pass' if rate >= 70 else 'fail' }}">{{ rate }}%</span>
+          </td>
+          <td style="text-align:center">
+            {% if rate >= 70 %}
+            <span class="badge badge-high">PASS</span>
+            {% else %}
+            <span class="badge badge-low">FAIL</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center">{{ "%.0f%%"|format(r.recall * 100) }}</td>
+          <td style="text-align:center">
+            {% if r.hall > 0 %}
+            <span style="color:var(--medium)">{{ r.hall }}</span>
+            {% else %}
+            <span style="color:var(--high)">0</span>
+            {% endif %}
+          </td>
+          <td style="text-align:center">{{ "%.1f"|format(r.avg_steps) }}</td>
+          <td style="text-align:center">{{ "%.0f"|format(r.avg_tokens) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <h3 style="margin-bottom:12px">Chạy eval mới</h3>
+  <pre style="font-size:12px;color:var(--muted);line-height:1.8"># Mock LLM (không cần API key, nhanh)
+python scripts/eval_agent.py --mock --n 5 --scenario all
+
+# Real LLM
+python scripts/eval_agent.py --n 3 --scenario all
+
+# Một kịch bản cụ thể
+python scripts/eval_agent.py --mock --n 10 --scenario scenario1</pre>
+</div>
+
+{% else %}
+<div class="card empty">
+  <div class="ei">📊</div>
+  <div>Chưa có kết quả eval.<br>
+    <code style="font-size:12px;color:var(--accent)">python scripts/eval_agent.py --mock --n 3</code>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

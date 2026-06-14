@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}{{ inv.investigation_id }} — Trace Viewer{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+    <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px">← Investigations</a>
+    <span style="color:var(--border)">·</span>
+    <code style="font-size:13px;color:var(--accent)">{{ inv.investigation_id }}</code>
+    {% if inv.get('project_id') %}
+    <span class="tag">{{ inv.project_id }}</span>
+    {% endif %}
+  </div>
+  <h1 style="font-size:15px;font-weight:400;color:var(--muted)">{{ inv.get('symptom','') }}</h1>
+  <div class="meta">
+    {{ inv.get('scenario','') }}
+    · {{ inv.get('started_at','') }}
+    {% if inv.get('finished_at') %} → {{ inv.get('finished_at','') }}{% endif %}
+  </div>
+</div>
+
+{% set conf = inv.get('confidence','') %}
+{% if inv.get('root_cause') %}
+<div class="verdict-card {{ conf }}">
+  <div class="vc-title">Verdict · {{ inv.get('stop_reason','') }}</div>
+  <div class="vc-root">
+    <span class="badge badge-{{ conf }}">{{ conf }}</span>
+    &nbsp;{{ inv.get('root_cause','') }}
+  </div>
+  {% set last_ev = inv.raw_events | selectattr('event_type','equalto','verdict') | list %}
+  {% if last_ev %}
+  {% set vp = last_ev[-1].payload %}
+  <div class="vc-meta">
+    {% if vp.get('root_cause') %}
+    <div class="vc-field">
+      <div class="lbl">Root Cause</div>
+      {{ vp.root_cause }}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div style="display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start">
+
+  <!-- Timeline -->
+  <div>
+    <h3 style="margin-bottom:16px">Timeline điều tra</h3>
+    <div class="timeline">
+
+      <!-- Start event -->
+      <div class="tl-item">
+        <div class="tl-dot start"></div>
+        <div class="tl-label">{{ inv.get('started_at','') }}</div>
+        <div class="tl-content">
+          <div class="tl-tool">🔍 Bắt đầu điều tra</div>
+          <div class="tl-summary">{{ inv.get('symptom','') }}</div>
+        </div>
+      </div>
+
+      {% for step in inv.steps %}
+      {% if step.tool_call %}
+      <div class="tl-item">
+        <div class="tl-dot tool"></div>
+        <div class="tl-label">Bước {{ step.step }} · {{ step.get('timestamp','') }}</div>
+        <div class="tl-content">
+          <div class="tl-tool">⚙ {{ step.tool_call.get('tool','') }}
+            {% set args = step.tool_call.get('args', {}) %}
+            {% if args %}
+            <span style="color:var(--muted);font-size:11px">(
+              {%- for k,v in args.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor -%}
+            )</span>
+            {% endif %}
+          </div>
+          {% if step.tool_result %}
+          <div class="tl-summary">{{ step.tool_result.get('summary','') }}</div>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+
+      {% if inv.get('root_cause') %}
+      <div class="tl-item">
+        <div class="tl-dot verdict"></div>
+        <div class="tl-label">{{ inv.get('finished_at','') }}</div>
+        <div class="tl-content">
+          <div class="tl-tool" style="color:var(--high)">✓ Verdict</div>
+          <div class="tl-summary">{{ inv.get('root_cause','') }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div>
+    <div class="card">
+      <h3 style="margin-bottom:12px">Thông tin</h3>
+      <table style="width:100%;font-size:12px">
+        <tr><td style="color:var(--muted);padding:4px 0">Project</td>
+            <td><code>{{ inv.get('project_id','default') }}</code></td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Scenario</td>
+            <td><span class="tag">{{ inv.get('scenario','') }}</span></td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Steps</td>
+            <td>{{ inv.steps | length }}</td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Stop reason</td>
+            <td><span class="badge badge-{{ inv.get('stop_reason','default') }}">{{ inv.get('stop_reason','') }}</span></td></tr>
+        <tr><td style="color:var(--muted);padding:4px 0">Confidence</td>
+            <td><span class="badge badge-{{ conf }}">{{ conf }}</span></td></tr>
+      </table>
+    </div>
+
+    {% if langfuse_url %}
+    <div class="card" style="margin-top:0">
+      <h3 style="margin-bottom:10px">Langfuse</h3>
+      <a href="{{ langfuse_url }}" target="_blank" class="btn btn-ghost" style="width:100%;justify-content:center">
+        Xem trace chi tiết ↗
+      </a>
+    </div>
+    {% endif %}
+
+    <div class="card" style="margin-top:0">
+      <h3 style="margin-bottom:10px">Actions</h3>
+      <a href="/dashboard/trigger?scenario={{ inv.get('scenario','') }}"
+         class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px">
+        ▶ Trigger lại
+      </a>
+      <a href="/dashboard" class="btn btn-ghost" style="width:100%;justify-content:center">
+        ← Danh sách
+      </a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
