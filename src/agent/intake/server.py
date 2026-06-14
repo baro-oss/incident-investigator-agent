@@ -232,11 +232,8 @@ app.include_router(_dash_router, prefix="/dashboard")
 # ── Backward compat: global trigger → default project ─────────────────────────
 
 @app.post("/trigger", status_code=202)
-async def trigger_global(
-    payload: Dict[str, Any],
-    x_alert_source: Optional[str] = Header(default=None),
-) -> JSONResponse:
-    return await _do_trigger("default", payload, x_alert_source)
+async def trigger_global(request: Request) -> JSONResponse:
+    return await _handle_trigger_request(request, "default")
 
 
 # ── Backward compat: global MCP server management ─────────────────────────────
@@ -349,13 +346,9 @@ def del_project(project_id: str) -> Dict[str, Any]:
 
 
 @project_router.post("/{project_id}/trigger", status_code=202)
-async def trigger_project(
-    project_id: str,
-    payload: Dict[str, Any],
-    x_alert_source: Optional[str] = Header(default=None),
-) -> JSONResponse:
+async def trigger_project(project_id: str, request: Request) -> JSONResponse:
     _project_or_404(project_id)
-    return await _do_trigger(project_id, payload, x_alert_source)
+    return await _handle_trigger_request(request, project_id)
 
 
 @project_router.get("/{project_id}/services")
@@ -494,6 +487,34 @@ app.include_router(project_router)
 
 
 # ── Shared implementation ─────────────────────────────────────────────────────
+
+async def _handle_trigger_request(request: Request, project_id: str) -> JSONResponse:
+    """Đọc raw body → verify webhook signature → parse JSON → dispatch."""
+    import json as _json
+    from agent.intake.adapters._shared import verify_webhook_signature
+
+    raw_body = await request.body()
+    source = request.headers.get("x-alert-source")
+
+    # Verify chữ ký nếu source header được cung cấp
+    if source:
+        headers_lower = {k.lower(): v for k, v in request.headers.items()}
+        if not verify_webhook_signature(source, raw_body, headers_lower):
+            raise HTTPException(
+                status_code=401,
+                detail=(
+                    f"Webhook signature không hợp lệ cho source '{source}'. "
+                    "Kiểm tra HMAC-SHA256 header và env secret."
+                ),
+            )
+
+    try:
+        payload = _json.loads(raw_body) if raw_body else {}
+    except _json.JSONDecodeError:
+        raise HTTPException(status_code=422, detail="Payload không phải JSON hợp lệ")
+
+    return await _do_trigger(project_id, payload, source)
+
 
 async def _do_trigger(
     project_id: str,

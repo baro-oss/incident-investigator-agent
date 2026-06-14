@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 23 ✅** (Cost dashboard + feedback loop + Project CRUD UI). Tiếp theo: **Ngày 24 (Integrations)**.
-**Cổng kiểm gần nhất đã qua:** Ngày 23 — cost page $/inv thật ✅ · 👍/👎 ghi DB ✅ · tạo/sửa/xóa project từ UI ✅
+**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 24 ✅** (Webhook signature + Slack adapter + Real MCP pack). Tiếp theo: **Ngày 25 (UI/UX + close)**.
+**Cổng kiểm gần nhất đã qua:** Ngày 24 — webhook không chữ ký → 401 ✅ · Slack adapter gửi được ✅ · Real MCP infra server 4 tools hot-plug ✅
 **Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
 
 ## Cái lõi (không được vỡ) — tình trạng
@@ -62,10 +62,59 @@
 | 21 | Engine & Quality + Storage seam | Tier-1 storage seam (DB-swappable) · real-LLM eval smoke 6/6 · calibration · recursion bugfix | ✅ |
 | 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ✅ |
 | 23 | Observability + Project CRUD UI | Cost dashboard + verdict feedback loop + Project CRUD UI | ✅ |
-| 24 | Integrations | Webhook signature + Slack + real MCP pack | ☐ |
+| 24 | Integrations | Webhook signature + Slack + real MCP pack | ✅ |
 | 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 29 — 2026-06-14] — Ngày 24: Integrations (Webhook Signature + Slack + Real MCP Pack)
+
+**A. Webhook Signature Verify (must):**
+- `src/agent/intake/adapters/_shared.py` — thêm `verify_webhook_signature(source, raw_body, headers)`:
+  - Prometheus/Grafana/alertmanager: env `{SOURCE}_WEBHOOK_SECRET` + header `X-Webhook-Secret` = HMAC-SHA256(body, secret) hex
+  - Sentry: env `SENTRY_WEBHOOK_SECRET` + header `sentry-hook-signature` = `sha256=<hex>` hoặc bare hex
+  - Nếu env không set → pass-through (backward compat)
+  - Dùng `hmac.compare_digest` chống timing attack
+- `src/agent/intake/server.py` — thêm `_handle_trigger_request(request, project_id)` async helper:
+  - Đọc raw body bytes (không dùng FastAPI JSON parsing để giữ raw body cho HMAC)
+  - Verify signature khi `X-Alert-Source` header có mặt
+  - Raise 401 nếu verify fail
+  - Parse JSON thủ công rồi gọi `_do_trigger`
+  - Đổi `trigger_global` và `trigger_project` → dùng `Request` trực tiếp
+
+**B. Slack Output Adapter (must):**
+- `src/agent/output/slack.py` (mới):
+  - `_render_slack_payload(state)` → Block Kit với attachment `color` theo severity
+  - Sympom header + fields: root_cause / steps+tokens / evidence_summary / stop_reason warning
+  - `push_verdict_to_slack(state, config)` — `SLACK_WEBHOOK_URL` env + `config["webhook_url"]` override
+  - Graceful: no URL → warning; HTTP error → log warning; exception → log error (không crash)
+- `src/agent/output/router.py` — thêm `elif channel == "slack": push_verdict_to_slack`
+- `src/agent/intake/project_registry.py` — thêm `"slack"` vào `SUPPORTED_CHANNELS`
+
+**C. Real MCP Infra Pack (spill-OK → done):**
+- `mcp_server/server_infra.py` (mới) — MCP server với 4 real tools (không dùng synthetic data):
+  - `fetch_url`: HTTP GET URL thật (stdlib urllib), cắt > 4000 ký tự
+  - `list_files`: list files/dirs trong path (pathlib), sort theo type
+  - `get_system_info`: OS, CPU, memory (/proc/meminfo best-effort), disk (os.statvfs)
+  - `check_port`: TCP socket connect test → is_open + latency_ms
+- `scripts/start_infra_mcp_server.py` (mới) — launch server port 9001
+- Verify hot-plug: MCPClient → initialize + tools/list → discover 4 tools → tools/call get_system_info → Observation đúng ✅
+
+**Verify end-to-end:**
+- Webhook: no X-Webhook-Secret → HTTP 401 ✅; correct HMAC-SHA256 → HTTP 202 ✅
+- Slack render: Block Kit payload đúng (color=#DC143C HIGH, sections, fields) ✅
+- Slack dispatch: no URL → graceful warning; bad URL → error logged, no crash ✅
+- Infra MCP health: `{"status":"ok","tools":["fetch_url","list_files","get_system_info","check_port"]}` ✅
+- MCPClient hot-plug: discover 4 tools, call get_system_info → summary đúng ✅
+- Mock eval 4/4 PASS (lõi không vỡ) ✅
+
+**Cổng Ngày 24 ✅ PASS:** webhook không chữ ký → 401 · Slack adapter gửi được · Real MCP server hot-plug.
+
+**Ghi chú:**
+- Không thêm dependency mới (chỉ stdlib: hmac, hashlib, urllib, socket, pathlib)
+- `stop_reason` nằm trên `InvestigationState`, không phải `Verdict` — Slack adapter dùng đúng
+- Infra MCP server port 9001 (không đụng 9000 của demo server)
+- `SLACK_WEBHOOK_URL` env cần thêm vào `.env.example`
 
 ### [Session 28 — 2026-06-14] — Ngày 23: Observability + Project CRUD UI
 

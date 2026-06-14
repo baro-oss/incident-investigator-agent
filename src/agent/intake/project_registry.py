@@ -135,7 +135,7 @@ def remove_project_service(project_id: str, service: str) -> bool:
 
 # ── Project alert channels ────────────────────────────────────────────────────
 
-SUPPORTED_CHANNELS = {"telegram", "teams", "email"}
+SUPPORTED_CHANNELS = {"telegram", "teams", "email", "slack"}
 
 
 def list_project_channels(project_id: str) -> List[Dict[str, Any]]:

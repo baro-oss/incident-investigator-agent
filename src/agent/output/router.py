@@ -32,6 +32,9 @@ async def _dispatch(channel: str, state: InvestigationState, config: Dict[str, A
         elif channel == "email":
             from agent.output.email import push_verdict_to_email
             await push_verdict_to_email(state, config=config)
+        elif channel == "slack":
+            from agent.output.slack import push_verdict_to_slack
+            await push_verdict_to_slack(state, config=config)
         else:
             logger.warning("Output channel không hỗ trợ: '%s' (bỏ qua)", channel)
     except Exception as e:
