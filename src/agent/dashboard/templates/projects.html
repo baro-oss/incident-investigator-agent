@@ -4,16 +4,73 @@
 
 <div class="page-header">
   <h1>Projects</h1>
-  <div class="meta">{{ projects | length }} project · quản lý qua API hoặc xem tại đây</div>
+  <div class="meta">{{ projects | length }} project</div>
 </div>
+
+{% if create_error %}
+<div class="alert alert-error" style="margin-bottom:1rem">{{ create_error }}</div>
+{% endif %}
+
+<!-- Tạo project mới — chỉ hiện khi có quyền project.manage -->
+{% if can_manage %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">Tạo project mới</div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/projects" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label class="form-label">ID (slug)</label>
+        <input class="form-input" type="text" name="project_id" required placeholder="vd: payment-platform"
+               pattern="[a-z0-9\-]+" title="Chỉ dùng chữ thường, số, dấu -">
+      </div>
+      <div>
+        <label class="form-label">Tên hiển thị</label>
+        <input class="form-input" type="text" name="name" required placeholder="Payment Platform">
+      </div>
+      <div>
+        <label class="form-label">Mô tả</label>
+        <input class="form-input" type="text" name="description" placeholder="Tuỳ chọn">
+      </div>
+      <button type="submit" class="btn btn-primary">Tạo project</button>
+    </form>
+  </div>
+</div>
+{% endif %}
 
 <div class="project-grid">
   {% for p in projects %}
-  <div class="project-card">
-    <h4>{{ p.name }}</h4>
+  <div class="project-card" style="position:relative">
+    <!-- Edit/Delete controls -->
+    {% if can_manage and p.id != 'default' %}
+    <div style="position:absolute;top:.6rem;right:.6rem;display:flex;gap:.3rem">
+      <button onclick="toggleEdit('edit-{{ p.id }}')"
+              style="background:none;border:1px solid var(--border);border-radius:4px;padding:.2rem .5rem;cursor:pointer;font-size:.75rem;color:var(--text-muted)">✏ Sửa</button>
+      <form method="post" action="/dashboard/projects/{{ p.id }}/delete"
+            onsubmit="return confirm('Xóa project {{ p.name }}? Hành động này không thể hoàn tác.')">
+        <button type="submit"
+                style="background:none;border:1px solid var(--border);border-radius:4px;padding:.2rem .5rem;cursor:pointer;font-size:.75rem;color:#f66">✕ Xóa</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <h4 style="padding-right:{% if can_manage and p.id != 'default' %}5rem{% else %}0{% endif %}">{{ p.name }}</h4>
     <div class="pid">{{ p.id }}</div>
     {% if p.description %}
     <div class="desc">{{ p.description }}</div>
+    {% endif %}
+
+    <!-- Inline edit form (hidden by default) -->
+    {% if can_manage and p.id != 'default' %}
+    <div id="edit-{{ p.id }}" style="display:none;margin:.7rem 0;padding:.7rem;background:var(--surface-alt, rgba(255,255,255,.03));border:1px solid var(--border);border-radius:6px">
+      <form method="post" action="/dashboard/projects/{{ p.id }}/edit" style="display:flex;flex-direction:column;gap:.5rem">
+        <input class="form-input" type="text" name="name" value="{{ p.name }}" placeholder="Tên" required style="font-size:.85rem">
+        <input class="form-input" type="text" name="description" value="{{ p.description }}" placeholder="Mô tả" style="font-size:.85rem">
+        <div style="display:flex;gap:.4rem">
+          <button type="submit" class="btn btn-primary" style="padding:.3rem .7rem;font-size:.8rem">Lưu</button>
+          <button type="button" onclick="toggleEdit('edit-{{ p.id }}')"
+                  style="background:none;border:1px solid var(--border);border-radius:4px;padding:.3rem .7rem;font-size:.8rem;cursor:pointer;color:var(--text-muted)">Huỷ</button>
+        </div>
+      </form>
+    </div>
     {% endif %}
 
     <div style="margin-bottom:10px">
@@ -54,28 +111,15 @@
   {% else %}
   <div class="card empty">
     <div class="ei">◈</div>
-    <div>Chưa có project nào.<br>
-      <code style="font-size:12px;color:var(--accent)">POST /projects</code> để tạo.
-    </div>
+    <div>Chưa có project nào.{% if can_manage %}<br>Dùng form bên trên để tạo.{% endif %}</div>
   </div>
   {% endfor %}
 </div>
 
-<div class="card" style="margin-top:24px">
-  <h3 style="margin-bottom:12px">Quản lý qua API</h3>
-  <pre style="font-size:12px;color:var(--muted);line-height:1.8"># Tạo project mới
-curl -X POST localhost:8000/projects \
-  -H "Content-Type: application/json" \
-  -d '{"id":"my-project","name":"My Project","description":"..."}'
-
-# Thêm service
-curl -X POST localhost:8000/projects/my-project/services \
-  -H "Content-Type: application/json" \
-  -d '{"service":"payment-gateway"}'
-
-# Chọn LLM riêng cho project
-curl -X PATCH localhost:8000/projects/my-project/llm \
-  -H "Content-Type: application/json" \
-  -d '{"provider":"gemini","model":"gemini-2.0-flash"}'</pre>
-</div>
+<script>
+function toggleEdit(id) {
+  var el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 {% endblock %}

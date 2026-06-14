@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 22 ✅** (Auth & RBAC động đầy đủ). Tiếp theo: **Ngày 23 (Observability — Cost dashboard)**.
-**Cổng kiểm gần nhất đã qua:** Ngày 22 — root login ✅ · guard chặn đúng quyền ✅ · tạo user + tạo role động + gán scope (project/default) ✅
+**Giai đoạn:** Phase 5 — Hardening & Trust. **Ngày 23 ✅** (Cost dashboard + feedback loop + Project CRUD UI). Tiếp theo: **Ngày 24 (Integrations)**.
+**Cổng kiểm gần nhất đã qua:** Ngày 23 — cost page $/inv thật ✅ · 👍/👎 ghi DB ✅ · tạo/sửa/xóa project từ UI ✅
 **Kế hoạch Phase 5:** `docs/11-roadmap-phase-5.md`.
 
 ## Cái lõi (không được vỡ) — tình trạng
@@ -61,11 +61,36 @@
 |------|-------|----------|------------|
 | 21 | Engine & Quality + Storage seam | Tier-1 storage seam (DB-swappable) · real-LLM eval smoke 6/6 · calibration · recursion bugfix | ✅ |
 | 22 | Auth & RBAC | RBAC động (root/role động/project groups/scoped) — ngày nặng | ✅ |
-| 23 | Observability | Cost dashboard + verdict feedback loop + trace retention | ☐ |
+| 23 | Observability + Project CRUD UI | Cost dashboard + verdict feedback loop + Project CRUD UI | ✅ |
 | 24 | Integrations | Webhook signature + Slack + real MCP pack | ☐ |
 | 25 | UI/UX + close | Replay diff + tool test-run + search + Cổng Phase 5 | ☐ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 28 — 2026-06-14] — Ngày 23: Observability + Project CRUD UI
+
+**A. Cost Dashboard `/dashboard/cost` (P0):**
+- `src/agent/dashboard/queries.py` — `_PRICING` dict (anthropic/openai/gemini/groq/mock với tiers per model prefix) + `_cost_usd(tokens, provider, model)` (60% input / 40% output split) + `get_cost_data()` query eval_results (per-scenario avg/total tokens + cost) + live investigations (verdict payload `$.total_tokens`).
+- `src/agent/engine/loop.py` — thêm `"total_tokens": state.total_tokens` vào verdict trace event payload → live investigations có cost data từ đây về sau.
+- `src/agent/dashboard/templates/cost.html` (mới) — 3 summary cards (total tokens / eval cost / live inv) + bảng per-scenario (provider, avg/total tokens, $/run, total cost) + pricing reference table.
+- `src/agent/dashboard/templates/base.html` — thêm `💰 Cost` nav link.
+- Verify: 53,948 tokens từ fintech1+fintech2 (real-LLM D21) → $0.4208 ước tính đúng ✅
+
+**B. Verdict Feedback Loop (👍/👎):**
+- `data/migrate_day23.py` (mới) — `investigation_feedback(investigation_id PK, score INT, created_at, updated_at)`.
+- `src/agent/dashboard/queries.py` — `get_investigation_feedback(inv_id)` + `set_investigation_feedback(inv_id, score)` (UPSERT) + optional Langfuse score push nếu LANGFUSE_PUBLIC_KEY set.
+- `src/agent/dashboard/router.py` — `GET /investigations/{id}` pass `feedback=get_investigation_feedback(id)` vào template; `POST /investigations/{id}/feedback` nhận `score` form field → set_investigation_feedback → redirect.
+- `src/agent/dashboard/templates/detail.html` — 👍/👎 buttons inline trong verdict card header; button active styling (green/red border) khi feedback đã có.
+- Verify: click 👍 → redirect về detail → 👍 button highlighted green ✅
+
+**C. Project CRUD UI:**
+- `src/agent/dashboard/router.py` — `POST /projects` (create → require_perm("project.manage")); `POST /projects/{pid}/edit` (update); `POST /projects/{pid}/delete` (guard không xóa 'default'); `GET /projects` pass `can_manage` vào template.
+- `src/agent/dashboard/templates/projects.html` — form tạo project (id slug + name + description + validation pattern); per-card ✏ Sửa + ✕ Xóa (hidden nếu `default` hoặc không có quyền); inline edit form toggle bằng JS `toggleEdit()`.
+- Verify: tạo "test-project" → 2 project ✅; Sửa toggle mở edit form ✅; guard không hiện Xóa cho `default` ✅
+
+**Cổng Ngày 23 ✅ PASS:** cost page $/inv thật · 👍/👎 ghi DB · tạo/sửa project từ UI · regression 4/4 PASS.
+
+**Spill / chưa làm:** Trace retention (purge cũ) — không critical, đẩy sang D24/D25.
 
 ### [Session 27 — 2026-06-14] — Ngày 22: Auth & RBAC động đầy đủ
 

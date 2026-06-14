@@ -138,15 +138,20 @@ def user_can(user, perm_key, project_id=None) -> bool:
 
 ---
 
-## Ngày 23 — Observability *(+ hứng spill Day 22)*
+## Ngày 23 — Observability + Project CRUD UI *(+ hứng spill Day 22)*
 
-**Mục tiêu:** giờ đã có token thật từ Day 21 → ra "$/investigation".
+**Mục tiêu:** giờ đã có token thật từ Day 21 → ra "$/investigation"; đồng thời hoàn thiện quản lý project từ browser.
 
 - **Cost dashboard `/dashboard/cost` (P0):** token + $/investigation per scenario/project (roadmap Day14C chưa ship); giá theo bảng provider.
 - **Verdict feedback loop:** nút 👍/👎 trên trang detail → ghi `investigation_patterns` + Langfuse score → vòng phản hồi thật.
+- **Project CRUD UI (thêm D23):** tạo/sửa/xóa project trực tiếp từ `/dashboard/projects` thay vì phải dùng API. Gồm:
+  - Form tạo project (id slug, name, description) ngay trên trang list
+  - Nút Edit inline trên project card (sửa name + description)
+  - Nút Delete với confirm (guard: không xóa project `default`)
+  - Guard route bằng `require_perm("project.manage")`
 - **Trace retention:** policy purge/archive `trace_events` cũ (chống SQLite phình).
 
-**Cổng Ngày 23:** cost page hiện $/inv thật · 👎 ghi DB + Langfuse score · cleanup chạy được trên DB lớn.
+**Cổng Ngày 23:** cost page hiện $/inv thật · 👎 ghi DB + Langfuse score · tạo/xóa project từ UI không cần curl.
 
 ---
 

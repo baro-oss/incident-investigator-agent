@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Cost Dashboard — Investigation Agent{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Cost Dashboard</h2>
+  <div style="color:var(--text-muted);font-size:.85rem">Ước tính dựa trên token thật từ eval (60% input / 40% output split)</div>
+</div>
+
+<!-- Summary cards -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
+  <div class="card">
+    <div class="card-body" style="text-align:center">
+      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total Eval Tokens</div>
+      <div style="font-size:1.8rem;font-weight:700;color:var(--accent);margin:.3rem 0">{{ "{:,}".format(grand_total_tokens) }}</div>
+      <div style="font-size:.8rem;color:var(--text-muted)">từ {{ scenarios|length }} scenario × run mới nhất</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body" style="text-align:center">
+      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Eval Cost (ước tính)</div>
+      <div style="font-size:1.8rem;font-weight:700;color:var(--severity-high);margin:.3rem 0">${{ grand_total_cost }}</div>
+      <div style="font-size:.8rem;color:var(--text-muted)">tổng tất cả run trong eval set</div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-body" style="text-align:center">
+      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Live Investigations</div>
+      <div style="font-size:1.8rem;font-weight:700;color:var(--text);margin:.3rem 0">{{ live_n_inv }}</div>
+      <div style="font-size:.8rem;color:var(--text-muted)">
+        {% if live_total_tokens > 0 %}{{ "{:,}".format(live_total_tokens) }} tokens · ${{ live_total_cost }}{% else %}chưa có token data{% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Per-scenario table -->
+{% if scenarios %}
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">Chi phí theo Scenario (run mới nhất)</div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>SCENARIO</th>
+        <th>PROVIDER / MODEL</th>
+        <th style="text-align:right">RUNS</th>
+        <th style="text-align:right">AVG TOKENS</th>
+        <th style="text-align:right">TOTAL TOKENS</th>
+        <th style="text-align:right">$/RUN</th>
+        <th style="text-align:right">TOTAL COST</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in scenarios %}
+      <tr>
+        <td><code style="font-size:.8rem">{{ r.scenario }}</code></td>
+        <td>
+          <span class="badge badge-info" style="font-size:.72rem">{{ r.provider or '—' }}</span>
+          {% if r.model %}<span style="color:var(--text-muted);font-size:.75rem;margin-left:.3rem">{{ r.model }}</span>{% endif %}
+        </td>
+        <td style="text-align:right">{{ r.n }}</td>
+        <td style="text-align:right">{{ "{:,}".format(r.avg_tokens) }}</td>
+        <td style="text-align:right">{{ "{:,}".format(r.total_tokens) }}</td>
+        <td style="text-align:right"><strong>${{ "%.5f"|format(r.cost_per_run) }}</strong></td>
+        <td style="text-align:right">${{ "%.4f"|format(r.total_cost) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="font-weight:600;border-top:2px solid var(--border)">
+        <td colspan="4">Tổng cộng</td>
+        <td style="text-align:right">{{ "{:,}".format(grand_total_tokens) }}</td>
+        <td></td>
+        <td style="text-align:right;color:var(--severity-high)">${{ grand_total_cost }}</td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="card"><div class="card-body" style="color:var(--text-muted)">
+  Chưa có dữ liệu token thật. Chạy <code>python scripts/eval_agent.py --n 1</code> (real LLM) để có số thật.
+</div></div>
+{% endif %}
+
+<!-- Pricing reference -->
+<div class="card">
+  <div class="card-header">Bảng giá tham chiếu (USD / 1M tokens)</div>
+  <div class="card-body">
+    <table class="table" style="font-size:.82rem">
+      <thead>
+        <tr><th>PROVIDER</th><th>MODEL</th><th style="text-align:right">INPUT</th><th style="text-align:right">OUTPUT</th><th style="text-align:right">EST. AVG*</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Anthropic</td><td>claude-sonnet-4-6</td><td style="text-align:right">$3.00</td><td style="text-align:right">$15.00</td><td style="text-align:right">$7.80</td></tr>
+        <tr><td>Anthropic</td><td>claude-haiku-4-5</td><td style="text-align:right">$0.25</td><td style="text-align:right">$1.25</td><td style="text-align:right">$0.65</td></tr>
+        <tr><td>Anthropic</td><td>claude-opus-4-8</td><td style="text-align:right">$15.00</td><td style="text-align:right">$75.00</td><td style="text-align:right">$39.00</td></tr>
+        <tr><td>OpenAI</td><td>gpt-4o-mini</td><td style="text-align:right">$0.15</td><td style="text-align:right">$0.60</td><td style="text-align:right">$0.33</td></tr>
+        <tr><td>OpenAI</td><td>gpt-4o</td><td style="text-align:right">$5.00</td><td style="text-align:right">$15.00</td><td style="text-align:right">$9.00</td></tr>
+        <tr><td>Gemini</td><td>flash</td><td style="text-align:right">$0.35</td><td style="text-align:right">$1.05</td><td style="text-align:right">$0.63</td></tr>
+        <tr><td>Groq</td><td>llama-3.x</td><td style="text-align:right">$0.05</td><td style="text-align:right">$0.10</td><td style="text-align:right">$0.07</td></tr>
+      </tbody>
+    </table>
+    <div style="font-size:.73rem;color:var(--text-muted);margin-top:.5rem">* Ước tính với 60% input / 40% output — điển hình cho agent nhiều tool call</div>
+  </div>
+</div>
+{% endblock %}

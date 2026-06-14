@@ -355,6 +355,7 @@ class InvestigationEngine:
             "stop_reason": state.stop_reason,
             "root_cause": state.verdict.root_cause if state.verdict else "N/A",
             "confidence": state.verdict.confidence if state.verdict else "N/A",
+            "total_tokens": state.total_tokens,
         }, project_id=project_id)
         tracer.record_verdict(state.stop_reason, state.verdict)
         tracer.flush()

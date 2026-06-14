@@ -15,9 +15,12 @@ from fastapi.templating import Jinja2Templates
 
 from agent.auth.deps import NotAuthorized, require_login, require_perm, get_current_user
 from agent.dashboard.queries import (
+    get_cost_data,
     get_eval_calibration,
     get_eval_summary,
     get_investigation_detail,
+    get_investigation_feedback,
+    set_investigation_feedback,
     get_projects_overview,
     list_investigations,
     get_metrics_live,
@@ -94,10 +97,12 @@ async def dashboard_detail(
         host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
         langfuse_url = f"{host}/traces"
 
+    feedback = get_investigation_feedback(investigation_id)
     return templates.TemplateResponse("detail.html", _ctx(request, user,
         active="home",
         inv=inv,
         langfuse_url=langfuse_url,
+        feedback=feedback,
     ))
 
 
@@ -249,10 +254,67 @@ async def dashboard_projects(
     user: dict = Depends(require_login),
 ):
     projects = get_projects_overview()
+    can_manage = user.get("is_root") or __import__("agent.auth.rbac", fromlist=["user_can"]).user_can(user["id"], "project.manage")
     return templates.TemplateResponse("projects.html", _ctx(request, user,
         active="projects",
         projects=projects,
+        can_manage=can_manage,
     ))
+
+
+@router.post("/projects", response_class=HTMLResponse)
+async def dashboard_project_create(
+    request: Request,
+    project_id: str = Form(...),
+    name: str = Form(...),
+    description: str = Form(""),
+    user: dict = Depends(require_perm("project.manage")),
+):
+    from agent.intake.project_registry import create_project
+    error = None
+    try:
+        create_project(project_id.strip().lower(), name.strip(), description.strip())
+    except ValueError as e:
+        error = str(e)
+
+    if error:
+        projects = get_projects_overview()
+        can_manage = True
+        return templates.TemplateResponse("projects.html", _ctx(request, user,
+            active="projects",
+            projects=projects,
+            can_manage=can_manage,
+            create_error=error,
+        ))
+    return RedirectResponse("/dashboard/projects", status_code=303)
+
+
+@router.post("/projects/{project_id}/edit", response_class=HTMLResponse)
+async def dashboard_project_edit(
+    request: Request, project_id: str,
+    name: str = Form(...),
+    description: str = Form(""),
+    user: dict = Depends(require_perm("project.manage")),
+):
+    from agent.intake.project_registry import update_project
+    try:
+        update_project(project_id, name=name.strip(), description=description.strip())
+    except Exception:
+        pass
+    return RedirectResponse("/dashboard/projects", status_code=303)
+
+
+@router.post("/projects/{project_id}/delete", response_class=HTMLResponse)
+async def dashboard_project_delete(
+    request: Request, project_id: str,
+    user: dict = Depends(require_perm("project.manage")),
+):
+    from agent.intake.project_registry import delete_project
+    try:
+        delete_project(project_id)
+    except ValueError:
+        pass
+    return RedirectResponse("/dashboard/projects", status_code=303)
 
 
 @router.get("/health", response_class=HTMLResponse)
@@ -535,6 +597,29 @@ async def dashboard_investigation_replay(
         return HTMLResponse(f"<h3>Replay failed: {e}</h3>", status_code=500)
 
     return RedirectResponse("/dashboard", status_code=303)
+
+
+@router.get("/cost", response_class=HTMLResponse)
+async def dashboard_cost(
+    request: Request,
+    user: dict = Depends(require_perm("observability.view")),
+):
+    data = get_cost_data()
+    return templates.TemplateResponse("cost.html", _ctx(request, user,
+        active="cost",
+        **data,
+    ))
+
+
+@router.post("/investigations/{investigation_id}/feedback", response_class=HTMLResponse)
+async def investigation_feedback(
+    request: Request,
+    investigation_id: str,
+    score: int = Form(...),
+    user: dict = Depends(require_login),
+):
+    set_investigation_feedback(investigation_id, score)
+    return RedirectResponse(f"/dashboard/investigations/{investigation_id}", status_code=303)
 
 
 @router.get("/demo", response_class=HTMLResponse)

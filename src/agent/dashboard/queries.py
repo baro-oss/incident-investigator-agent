@@ -2,9 +2,154 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agent.storage.db import open_db
+
+# ── Cost estimation ───────────────────────────────────────────────────────────
+
+_PRICING: Dict[str, Dict[str, tuple]] = {
+    "anthropic": {
+        "claude-opus":   (15.00, 75.00),
+        "claude-sonnet": (3.00,  15.00),
+        "claude-haiku":  (0.25,  1.25),
+        "":              (3.00,  15.00),
+    },
+    "openai": {
+        "gpt-4o-mini": (0.15, 0.60),
+        "gpt-4o":      (5.00, 15.00),
+        "":            (3.00, 15.00),
+    },
+    "gemini": {"": (0.35, 1.05)},
+    "groq":   {"": (0.05, 0.10)},
+    "mock":   {"": (0.00, 0.00)},
+}
+
+
+def _get_pricing(provider: str, model: str):
+    provider = (provider or "mock").lower()
+    model = (model or "").lower()
+    tiers = _PRICING.get(provider, {"": (0.0, 0.0)})
+    for prefix, prices in tiers.items():
+        if prefix and model.startswith(prefix):
+            return prices
+    return tiers.get("", (0.0, 0.0))
+
+
+def _cost_usd(tokens: int, provider: str, model: str) -> float:
+    """Ước tính cost USD — giả định 60% input / 40% output."""
+    if not tokens:
+        return 0.0
+    in_p, out_p = _get_pricing(provider, model)
+    return (tokens * 0.60 * in_p + tokens * 0.40 * out_p) / 1_000_000
+
+
+def get_cost_data() -> Dict[str, Any]:
+    """Cost breakdown từ eval_results (token thật từ D21) + live investigations."""
+    conn = open_db()
+
+    # Per-scenario cost từ eval
+    rows = conn.execute("""
+        SELECT e.scenario,
+               COUNT(*) as n,
+               AVG(e.token_total) as avg_tokens,
+               SUM(e.token_total) as total_tokens,
+               MAX(e.provider) as provider,
+               MAX(e.model) as model
+        FROM eval_results e
+        INNER JOIN (
+            SELECT scenario, MAX(created_at) AS latest_at
+            FROM eval_results GROUP BY scenario
+        ) latest ON e.scenario=latest.scenario AND e.created_at=latest.latest_at
+        WHERE e.token_total > 0
+        GROUP BY e.scenario
+        ORDER BY e.scenario
+    """).fetchall()
+
+    # Live investigations với total_tokens trong verdict payload
+    live = conn.execute("""
+        SELECT COUNT(DISTINCT investigation_id) AS n_inv,
+               SUM(CAST(json_extract(payload,'$.total_tokens') AS INTEGER)) AS total_tokens
+        FROM trace_events
+        WHERE event_type='verdict'
+          AND json_extract(payload,'$.total_tokens') > 0
+    """).fetchone()
+
+    conn.close()
+
+    scenarios = []
+    grand_tokens = 0
+    grand_cost   = 0.0
+    for r in rows:
+        d = dict(r)
+        avg_tok  = int(d["avg_tokens"] or 0)
+        tot_tok  = int(d["total_tokens"] or 0)
+        prov     = d["provider"] or "mock"
+        mod      = d["model"] or ""
+        cost_run = _cost_usd(avg_tok, prov, mod)
+        cost_tot = _cost_usd(tot_tok, prov, mod)
+        d.update({
+            "avg_tokens": avg_tok,
+            "total_tokens": tot_tok,
+            "cost_per_run": round(cost_run, 5),
+            "total_cost":   round(cost_tot, 4),
+        })
+        grand_tokens += tot_tok
+        grand_cost   += cost_tot
+        scenarios.append(d)
+
+    live_d = dict(live) if live else {}
+    live_tokens = int(live_d.get("total_tokens") or 0)
+    return {
+        "scenarios": scenarios,
+        "grand_total_tokens": grand_tokens,
+        "grand_total_cost":   round(grand_cost, 4),
+        "live_n_inv":         int(live_d.get("n_inv") or 0),
+        "live_total_tokens":  live_tokens,
+        "live_total_cost":    round(_cost_usd(live_tokens, "anthropic", "claude-sonnet"), 4),
+    }
+
+
+# ── Investigation Feedback ────────────────────────────────────────────────────
+
+def get_investigation_feedback(investigation_id: str) -> Optional[int]:
+    """Returns 1 (👍), -1 (👎), hoặc None nếu chưa có."""
+    conn = open_db()
+    row = conn.execute(
+        "SELECT score FROM investigation_feedback WHERE investigation_id=?",
+        (investigation_id,)
+    ).fetchone()
+    conn.close()
+    return int(row["score"]) if row else None
+
+
+def set_investigation_feedback(investigation_id: str, score: int) -> None:
+    """Upsert feedback (1 or -1). Optionally push Langfuse score nếu configured."""
+    now = datetime.now(timezone.utc).isoformat()
+    conn = open_db()
+    conn.execute("""
+        INSERT INTO investigation_feedback (investigation_id, score, created_at, updated_at)
+        VALUES (?,?,?,?)
+        ON CONFLICT(investigation_id) DO UPDATE SET score=excluded.score, updated_at=excluded.updated_at
+    """, (investigation_id, score, now, now))
+    conn.commit()
+    conn.close()
+
+    # Langfuse score (opt-in — chỉ khi LANGFUSE_PUBLIC_KEY set)
+    try:
+        import os
+        if os.getenv("LANGFUSE_PUBLIC_KEY"):
+            from langfuse import Langfuse
+            lf = Langfuse()
+            lf.score(
+                trace_id=investigation_id,
+                name="human_feedback",
+                value=float(score),
+                comment="thumbs_up" if score > 0 else "thumbs_down",
+            )
+    except Exception:
+        pass
 
 
 def list_investigations(
