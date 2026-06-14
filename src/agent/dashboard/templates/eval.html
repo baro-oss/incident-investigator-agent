@@ -31,6 +31,19 @@
   </div>
 </div>
 
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+  <!-- Correct rate chart -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Correct Rate per Scenario</h3>
+    <canvas id="rateChart" height="160"></canvas>
+  </div>
+  <!-- Steps chart -->
+  <div class="card">
+    <h3 style="margin-bottom:12px">Avg Steps & Recall@1</h3>
+    <canvas id="stepsChart" height="160"></canvas>
+  </div>
+</div>
+
 <div class="card" style="padding:0">
   <div class="table-wrap">
     <table>
@@ -81,16 +94,96 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const labels = {{ eval_labels | tojson }};
+const rates  = {{ eval_rates  | tojson }};
+const steps  = {{ eval_steps  | tojson }};
+const recall = {{ eval_recall | tojson }};
+
+const COLORS = {
+  high:   '#22c55e',
+  medium: '#f59e0b',
+  low:    '#ef4444',
+  accent: '#5b6af0',
+  muted:  '#7b82a8',
+};
+
+const chartDefaults = {
+  plugins: { legend: { labels: { color: '#e2e4f0', font: { size: 11 } } } },
+  scales: {
+    x: { ticks: { color: '#7b82a8' }, grid: { color: '#2e3250' } },
+    y: { ticks: { color: '#7b82a8' }, grid: { color: '#2e3250' } },
+  },
+};
+
+// Correct rate bar chart
+new Chart(document.getElementById('rateChart'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [{
+      label: 'Correct Rate (%)',
+      data: rates,
+      backgroundColor: rates.map(r => r >= 70 ? '#14532d' : '#450a0a'),
+      borderColor: rates.map(r => r >= 70 ? COLORS.high : COLORS.low),
+      borderWidth: 1,
+    }],
+  },
+  options: {
+    ...chartDefaults,
+    plugins: { ...chartDefaults.plugins },
+    scales: {
+      ...chartDefaults.scales,
+      y: { ...chartDefaults.scales.y, min: 0, max: 100 },
+    },
+  },
+});
+
+// Steps & recall chart
+new Chart(document.getElementById('stepsChart'), {
+  type: 'bar',
+  data: {
+    labels,
+    datasets: [
+      {
+        label: 'Avg Steps',
+        data: steps,
+        backgroundColor: '#1d1e3e',
+        borderColor: COLORS.accent,
+        borderWidth: 1,
+        yAxisID: 'y',
+      },
+      {
+        label: 'Recall@1 (%)',
+        data: recall,
+        type: 'line',
+        borderColor: COLORS.high,
+        backgroundColor: 'transparent',
+        pointBackgroundColor: COLORS.high,
+        yAxisID: 'y2',
+        tension: 0.3,
+      },
+    ],
+  },
+  options: {
+    ...chartDefaults,
+    scales: {
+      x: chartDefaults.scales.x,
+      y:  { ...chartDefaults.scales.y, position: 'left',  title: { display: true, text: 'Steps', color: '#7b82a8' } },
+      y2: { ...chartDefaults.scales.y, position: 'right', title: { display: true, text: 'Recall %', color: '#7b82a8' }, min: 0, max: 100, grid: { drawOnChartArea: false } },
+    },
+  },
+});
+</script>
+
 <div class="card" style="margin-top:16px">
   <h3 style="margin-bottom:12px">Chạy eval mới</h3>
   <pre style="font-size:12px;color:var(--muted);line-height:1.8"># Mock LLM (không cần API key, nhanh)
 python scripts/eval_agent.py --mock --n 5 --scenario all
 
 # Real LLM
-python scripts/eval_agent.py --n 3 --scenario all
-
-# Một kịch bản cụ thể
-python scripts/eval_agent.py --mock --n 10 --scenario scenario1</pre>
+python scripts/eval_agent.py --n 3 --scenario all</pre>
 </div>
 
 {% else %}

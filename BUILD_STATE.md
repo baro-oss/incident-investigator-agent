@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 2 — Ngày 13 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 2 — Ngày 14 (Dashboard v2 SSE + Chat UI + Cổng Phase 2)
-**Cổng kiểm gần nhất đã qua:** Dashboard browser: 38 investigations, trace viewer, trigger form, eval stats ✅
+**Giai đoạn:** Phase 2 — Ngày 14 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 2 hoàn tất — sẵn sàng Phase 3
+**Cổng kiểm gần nhất đã qua:** SSE real-time streaming + Chat UI + Eval Chart.js ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -42,9 +42,49 @@
 | 11 | Langfuse observability (span hierarchy, token tracking, latency) | ✅ |
 | 12 | Eval CI + Long-term memory + Per-project LLM config (Gemini) | ✅ |
 | 13 | Dashboard v1 + Alert Trigger Builder | ✅ |
-| 14 | Dashboard v2 SSE + Chat UI + Cổng Phase 2 | ☐ |
+| 14 | Dashboard v2 SSE + Chat UI + Cổng Phase 2 | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 18 — 2026-06-14] — Ngày 14: Dashboard SSE + Chat UI + Eval Charts
+
+**Đã làm:**
+- `src/agent/dashboard/sse.py` (mới) — SSE broker in-memory:
+  - `publish_sync(inv_id, event_type, payload)` — gọi từ sync context qua `call_soon_threadsafe`
+  - `_do_publish()` — đẩy event vào tất cả asyncio.Queue subscriber (skip nếu QueueFull)
+  - `stream(inv_id)` — async generator: subscribe → yield SSE format, heartbeat 20s, close khi `type=verdict/done`
+- `src/agent/engine/loop.py` — 2 thay đổi:
+  - `run()` nhận thêm `investigation_id: Optional[str] = None` → dùng trực tiếp thay vì generate UUID ngẫu nhiên
+  - `_emit_trace()` gọi `publish_sync()` sau khi ghi SQLite — SSE publish additive, không vỡ nếu lỗi
+- `src/agent/intake/runner.py` — pass `investigation_id=key` (dedup_key) vào `engine.run()` → trigger response ID khớp SSE stream ID
+- `src/agent/dashboard/router.py` — hoàn thiện (viết lại đầy đủ):
+  - `GET /stream/{investigation_id}` — `StreamingResponse` với `sse_stream()` async generator
+  - `GET /chat` — render chat.html với quick_scenarios + projects
+  - `GET /eval` — pass `eval_labels/rates/steps/recall` cho Chart.js
+  - Tất cả route cũ giữ nguyên
+- `src/agent/dashboard/templates/chat.html` (mới) — Chat UI:
+  - Quick scenario buttons (4 kịch bản, auto-fill + auto-submit)
+  - Form manual: project/service/scenario/time_window/symptom
+  - SSE live timeline: tool_call → tl-item animated, tool_result → update summary, verdict → hiện verdict card + link trace
+- `src/agent/dashboard/templates/eval.html` — Chart.js:
+  - Canvas `rateChart` (bar, màu PASS/FAIL theo ngưỡng 70%)
+  - Canvas `stepsChart` (bar avg_steps + line combo Recall@1)
+  - Chart.js CDN v4.4.0, dark theme colors
+- `src/agent/dashboard/templates/detail.html` — SSE auto-connect khi investigation còn running:
+  - EventSource subscribe → append tl-item real-time → reload link khi verdict
+- `src/agent/dashboard/templates/base.html` — Chat nav link thêm vào
+
+**Bug fix quan trọng:**
+- `investigation_id` mismatch: engine tự generate UUID → không khớp với `dedup_key` trả về từ trigger
+- Fix: `engine.run()` nhận `investigation_id` param; runner pass `key` (dedup_key) vào → SSE match đúng
+
+**Verify:**
+- `/dashboard/` load OK ✅ | `/dashboard/chat` load OK ✅ | `/dashboard/eval` load OK với Chart.js ✅
+- Trigger → SSE stream → tool_call events flow real-time ✅
+- SSE verdict event received end-to-end (scenario2 high confidence) ✅
+- `investigation_id` match: trigger returns same ID as SSE stream URL ✅
+
+**Cổng Ngày 14 ✅ PASS:** Trigger từ Chat UI → SSE stream real-time tool_call/verdict → Eval charts render.
 
 ### [Session 17 — 2026-06-14] — Ngày 13: Dashboard UI v1
 

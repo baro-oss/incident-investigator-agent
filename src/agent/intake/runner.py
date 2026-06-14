@@ -168,6 +168,7 @@ async def run_investigation_background(
                 project_id=project_id,
                 available_services=available_services or None,
                 warm_start_hint=warm_hint,
+                investigation_id=key,
             ),
             timeout=300.0,
         )

@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}Chat — Investigation Agent{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <h1>💬 Chat với Agent</h1>
+  <div class="meta">Gõ triệu chứng — agent điều tra real-time ngay trên trình duyệt</div>
+</div>
+
+<div style="display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start">
+
+  <!-- Input panel -->
+  <div>
+    <div class="card">
+      <h3 style="margin-bottom:14px">Kịch bản nhanh</h3>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        {% for sc in quick_scenarios %}
+        <button class="btn btn-ghost quick-btn"
+          style="justify-content:flex-start;text-align:left;font-size:12px;padding:8px 12px"
+          data-service="{{ sc.service }}"
+          data-scenario="{{ sc.scenario }}"
+          data-window="{{ sc.time_window }}"
+          data-symptom="{{ sc.symptom }}">
+          <span style="color:var(--accent);margin-right:6px">●</span>
+          {{ sc.label }}
+        </button>
+        {% endfor %}
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <h3 style="margin-bottom:12px">Hoặc nhập thủ công</h3>
+        <form id="chat-form">
+          <div class="form-group">
+            <label>Project</label>
+            <select id="chat-project" name="project_id">
+              {% for p in projects %}
+              <option value="{{ p.id }}">{{ p.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Service</label>
+            <input type="text" id="chat-service" name="service" placeholder="payment-gateway">
+          </div>
+          <div class="form-group">
+            <label>Scenario</label>
+            <select id="chat-scenario" name="scenario">
+              <option value="scenario1">scenario1 — Deploy bug</option>
+              <option value="scenario2">scenario2 — Provider sập</option>
+              <option value="scenario3">scenario3 — DB pool</option>
+              <option value="scenario4">scenario4 — Traffic surge</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Time Window</label>
+            <select id="chat-window" name="time_window">
+              <option value="14:00-15:00">14:00 – 15:00</option>
+              <option value="15:00-16:00">15:00 – 16:00</option>
+              <option value="08:00-09:00">08:00 – 09:00</option>
+              <option value="10:00-11:00">10:00 – 11:00</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Symptom (tùy chọn)</label>
+            <textarea id="chat-symptom" name="symptom" rows="2" placeholder="Để trống = dùng mô tả mặc định"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center" id="submit-btn">
+            ▶ Điều tra
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live stream panel -->
+  <div>
+    <div id="stream-panel" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <div id="status-dot" style="width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 1.5s infinite"></div>
+        <span id="status-text" style="font-size:13px;color:var(--muted)">Đang kết nối...</span>
+        <code id="inv-id-display" style="font-size:11px;color:var(--accent);margin-left:auto"></code>
+      </div>
+
+      <!-- Verdict card (ẩn cho đến khi có verdict) -->
+      <div id="verdict-area" style="display:none;margin-bottom:16px"></div>
+
+      <!-- Live timeline -->
+      <div class="timeline" id="live-timeline"></div>
+    </div>
+
+    <div id="empty-panel" class="card empty">
+      <div class="ei">⚡</div>
+      <div>Chọn kịch bản hoặc nhập triệu chứng để bắt đầu điều tra real-time.</div>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.step-entering {
+  animation: slideIn 0.3s ease-out;
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+</style>
+
+<script>
+const quickBtns = document.querySelectorAll('.quick-btn');
+quickBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('chat-service').value  = btn.dataset.service;
+    document.getElementById('chat-scenario').value = btn.dataset.scenario;
+    document.getElementById('chat-window').value   = btn.dataset.window;
+    document.getElementById('chat-symptom').value  = btn.dataset.symptom;
+    // Submit ngay
+    document.getElementById('chat-form').dispatchEvent(new Event('submit'));
+  });
+});
+
+let currentES = null;
+
+document.getElementById('chat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+
+  // Đóng SSE cũ
+  if (currentES) { currentES.close(); currentES = null; }
+
+  const pid      = document.getElementById('chat-project').value;
+  const service  = document.getElementById('chat-service').value.trim() || 'payment-gateway';
+  const scenario = document.getElementById('chat-scenario').value;
+  const window_  = document.getElementById('chat-window').value;
+  const symptom  = document.getElementById('chat-symptom').value.trim();
+
+  // Reset UI
+  document.getElementById('empty-panel').style.display = 'none';
+  document.getElementById('stream-panel').style.display = 'block';
+  document.getElementById('verdict-area').style.display = 'none';
+  document.getElementById('verdict-area').innerHTML = '';
+  document.getElementById('live-timeline').innerHTML = '';
+  document.getElementById('status-dot').style.background = 'var(--accent)';
+  document.getElementById('status-text').textContent = 'Đang tạo investigation...';
+  document.getElementById('inv-id-display').textContent = '';
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('submit-btn').textContent = '⏳ Đang điều tra...';
+
+  // Trigger investigation
+  const body = { service, scenario, time_window: window_ };
+  if (symptom) body.symptom = symptom;
+
+  let invId;
+  try {
+    const resp = await fetch(`/projects/${pid}/trigger`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    invId = data.investigation_id;
+    document.getElementById('inv-id-display').textContent = invId;
+    document.getElementById('status-text').textContent = 'Agent đang điều tra...';
+
+    // Thêm start event vào timeline
+    appendStep('start', {
+      label: '🔍 Bắt đầu điều tra',
+      summary: symptom || `${service} — ${scenario}`,
+    });
+
+  } catch (err) {
+    document.getElementById('status-text').textContent = '✗ Lỗi: ' + err.message;
+    document.getElementById('submit-btn').disabled = false;
+    document.getElementById('submit-btn').textContent = '▶ Điều tra';
+    return;
+  }
+
+  // SSE subscribe
+  currentES = new EventSource(`/dashboard/stream/${invId}`);
+  let stepCount = 0;
+
+  currentES.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleSSEEvent(msg, invId);
+    } catch (_) {}
+  };
+
+  currentES.onerror = () => {
+    document.getElementById('status-text').textContent = 'Kết nối SSE đứt — investigation có thể đang chạy nền.';
+    document.getElementById('status-dot').style.background = 'var(--medium)';
+    document.getElementById('status-dot').style.animation = 'none';
+    resetSubmitBtn();
+  };
+});
+
+function handleSSEEvent(msg, invId) {
+  const type    = msg.type;
+  const payload = msg.payload || {};
+
+  if (type === 'tool_call') {
+    const args = payload.args || {};
+    const argsStr = Object.entries(args).map(([k,v])=>`${k}=${v}`).join(', ');
+    appendStep('tool', {
+      label: `⚙ ${payload.tool || ''}`,
+      sub: argsStr ? `(${argsStr})` : '',
+      summary: '',
+    });
+  }
+
+  if (type === 'tool_result') {
+    // Cập nhật summary vào step tool vừa thêm
+    const items = document.querySelectorAll('#live-timeline .tl-summary');
+    if (items.length > 0) {
+      const last = items[items.length - 1];
+      if (!last.textContent) last.textContent = payload.summary || '';
+    }
+  }
+
+  if (type === 'verdict' || type === 'done') {
+    const conf = payload.confidence || '';
+    const rc   = payload.root_cause  || '';
+    const confClass = { high:'badge-high', medium:'badge-medium', low:'badge-low', insufficient:'badge-insufficient' }[conf] || 'badge-default';
+
+    if (rc) {
+      const vArea = document.getElementById('verdict-area');
+      vArea.innerHTML = `
+        <div class="verdict-card ${conf}">
+          <div class="vc-title">VERDICT · ${payload.stop_reason || ''}</div>
+          <div class="vc-root">
+            <span class="badge ${confClass}">${conf.toUpperCase()}</span>
+            &nbsp;${rc}
+          </div>
+        </div>`;
+      vArea.style.display = 'block';
+    }
+
+    document.getElementById('status-dot').style.background = 'var(--high)';
+    document.getElementById('status-dot').style.animation = 'none';
+    document.getElementById('status-text').innerHTML =
+      `Hoàn thành · <a href="/dashboard/investigations/${invId}" style="color:var(--accent)">Xem trace đầy đủ →</a>`;
+
+    if (currentES) { currentES.close(); currentES = null; }
+    resetSubmitBtn();
+  }
+}
+
+function appendStep(type, {label, sub, summary}) {
+  const tl = document.getElementById('live-timeline');
+  const div = document.createElement('div');
+  div.className = 'tl-item step-entering';
+  div.innerHTML = `
+    <div class="tl-dot ${type}"></div>
+    <div class="tl-content">
+      <div class="tl-tool">${label} <span style="color:var(--muted);font-size:10px">${sub||''}</span></div>
+      <div class="tl-summary">${summary||''}</div>
+    </div>`;
+  tl.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function resetSubmitBtn() {
+  document.getElementById('submit-btn').disabled = false;
+  document.getElementById('submit-btn').textContent = '▶ Điều tra';
+}
+</script>
+{% endblock %}

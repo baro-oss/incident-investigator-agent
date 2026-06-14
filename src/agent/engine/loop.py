@@ -259,7 +259,7 @@ def _emit_trace(
     payload: Dict[str, Any],
     project_id: str = "default",
 ) -> None:
-    """Ghi một trace event vào SQLite. Fire-and-forget, không throw."""
+    """Ghi một trace event vào SQLite + push SSE. Fire-and-forget, không throw."""
     try:
         conn = open_db()
         conn.execute(
@@ -274,6 +274,13 @@ def _emit_trace(
         conn.close()
     except Exception as e:
         logger.warning("Không ghi được trace event: %s", e)
+
+    # Push SSE (no-op nếu không có subscriber)
+    try:
+        from agent.dashboard.sse import publish_sync
+        publish_sync(investigation_id, event_type, payload)
+    except Exception:
+        pass
 
 
 class InvestigationEngine:
@@ -293,8 +300,9 @@ class InvestigationEngine:
         project_id: str = "default",
         available_services: Optional[List[str]] = None,
         warm_start_hint: Optional[str] = None,
+        investigation_id: Optional[str] = None,
     ) -> InvestigationState:
-        investigation_id = str(uuid.uuid4())[:12]
+        investigation_id = investigation_id or str(uuid.uuid4())[:12]
         state = InvestigationState(
             investigation_id=investigation_id,
             symptom=symptom,
