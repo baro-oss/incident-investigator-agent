@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 2 — Ngày 12 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 2 — Ngày 13 (Dashboard v1 + Alert Trigger Builder)
-**Cổng kiểm gần nhất đã qua:** Eval CI mock 12/12 PASS (4 kịch bản × 3 runs, 100% correct) ✅
+**Giai đoạn:** Phase 2 — Ngày 13 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 2 — Ngày 14 (Dashboard v2 SSE + Chat UI + Cổng Phase 2)
+**Cổng kiểm gần nhất đã qua:** Dashboard browser: 38 investigations, trace viewer, trigger form, eval stats ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -41,10 +41,36 @@
 |------|----------|------------|
 | 11 | Langfuse observability (span hierarchy, token tracking, latency) | ✅ |
 | 12 | Eval CI + Long-term memory + Per-project LLM config (Gemini) | ✅ |
-| 13 | Dashboard v1 + Alert Trigger Builder | ☐ |
+| 13 | Dashboard v1 + Alert Trigger Builder | ✅ |
 | 14 | Dashboard v2 SSE + Chat UI + Cổng Phase 2 | ☐ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 17 — 2026-06-14] — Ngày 13: Dashboard UI v1
+
+**Đã làm:**
+- `src/agent/dashboard/` (module mới):
+  - `queries.py` — tầng đọc SQLite: `list_investigations()`, `get_investigation_detail()`, `get_projects_overview()`, `get_eval_summary()`
+  - `router.py` — FastAPI APIRouter 5 routes: GET /, GET /investigations/{id}, GET|POST /trigger, GET /projects, GET /eval
+  - `static/style.css` — dark theme, nav sidebar, table, timeline, verdict card, badge system, trigger layout, project grid
+  - `templates/base.html` — layout chung + nav
+  - `templates/index.html` — investigation list, filter dropdown, badge confidence
+  - `templates/detail.html` — trace viewer timeline, verdict card (màu theo confidence), sidebar thông tin, Langfuse link
+  - `templates/trigger.html` — form trigger (project/service/scenario/time_window/symptom), JS updateServices(), curl reference, recent list
+  - `templates/projects.html` — project grid cards (services, LLM config, investigation count, API reference)
+  - `templates/eval.html` — stats cards (total/correct/rate/gate), per-scenario table (rate/gate/recall@1/hall/steps/tokens)
+- `src/agent/intake/server.py` v0.5 — mount `/dashboard/static` StaticFiles + include dashboard router
+- `pyproject.toml` — thêm `jinja2>=3.1.0`, `python-multipart>=0.0.9`
+- `.claude/launch.json` — preview config cho server port 8000
+
+**Verify (browser):**
+- `/dashboard/` — 38 investigations, filter project/confidence ✅
+- `/dashboard/investigations/{id}` — verdict card HIGH (green border), timeline từng bước tool call ✅
+- `/dashboard/trigger` — form dropdown project/service/scenario, JS updateServices() ✅
+- `/dashboard/projects` — Default Project, LLM badge "anthropic (env)" ✅
+- `/dashboard/eval` — 12/12 runs PASS, 4 scenarios 100% rate, ✓ PASS banner ✅
+
+**Cổng Ngày 13 ✅ PASS:** Browser thấy history → click trace → trigger từ form.
 
 ### [Session 16 — 2026-06-14] — Ngày 12: Eval CI + Long-term Memory + Per-project LLM
 
