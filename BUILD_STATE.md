@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 4 — Ngày 18 ✅ HOÀN THÀNH.
-**Ngày plan đang ở:** Phase 4 — Ngày 19 (Eval N=10 + Dashboard Polish)
-**Cổng kiểm gần nhất đã qua:** Fintech 2/2 mock eval PASS (KB-F1 + KB-F2) ✅
+**Giai đoạn:** Phase 4 — Ngày 19 ✅ HOÀN THÀNH.
+**Ngày plan đang ở:** Phase 4 — Ngày 20 (Platform Demo Full + Cổng Phase 4)
+**Cổng kiểm gần nhất đã qua:** 6/6 kịch bản eval N=10 PASS + Dashboard Polish ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -52,8 +52,48 @@
 | 16 | Resilience + CLI + Health Dashboard | ✅ |
 | 17 | Dashboard v3 Full Platform UI | ✅ |
 | 18 | Fintech Domain + Domain Switcher UI | ✅ |
+| 19 | Eval N=10 + Dashboard Polish (theme/toast/shortcuts) | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 23 — 2026-06-14] — Ngày 19: Eval N=10 + Dashboard Polish
+
+**Đã làm:**
+
+**A. Eval toàn diện N=10:**
+- `python scripts/eval_agent.py --mock --n 10` — 40/40 PASS (scenario1-4, 100% correct rate)
+- `python scripts/eval_fintech.py --n 10` — 20/20 PASS (fintech1-2, 100% correct rate)
+- Kết quả lưu vào `eval_results` SQLite (2 run_id mới)
+
+**B. Dashboard Polish:**
+- `src/agent/dashboard/static/style.css`:
+  - Light theme CSS variables (body.theme-light): bg=#f0f2f8, surface=#fff, text=#1e2342, accent=#4a58e0
+  - Badge/verdict-card light overrides
+  - `.toast` + `@keyframes toastIn/Out` — slide-in từ top-right, auto-dismiss 3.5s
+  - `.theme-toggle` button style (trong nav)
+  - `.spinner` + `@keyframes spin`
+  - `kbd` style cho shortcut hints
+- `src/agent/dashboard/templates/base.html`:
+  - Version "v0.7 · Phase 4"
+  - Toast container `<div id="toast-container">`
+  - Theme toggle button trong nav (☀ Light Mode / 🌙 Dark Mode)
+  - Global JS: `_applyTheme()`, `toggleTheme()` (localStorage `ia-theme`), `showToast()`, keyboard shortcuts
+  - Shortcuts: Ctrl+K=Chat, T=Trigger, R=Reload, H=Home, ?=Help toast
+- `src/agent/dashboard/templates/trigger.html`:
+  - Submit button loading state: spinner + "Đang gửi…" khi click
+  - Toast khi result.status='accepted' → showToast('Investigation bắt đầu · ID: ...')
+  - Toast khi result.status='duplicate' → showToast info
+- `src/agent/dashboard/templates/chat.html`:
+  - Toast khi SSE verdict event → showToast('Investigation hoàn thành · HIGH — root_cause…')
+
+**Verify (browser):**
+- Dark mode: nav background #1a1d27, text #e2e4f0 ✅
+- Light mode toggle → body.theme-light, white background, nav "#f0f2f8" ✅
+- localStorage persistence: reload → theme giữ nguyên ✅
+- Toast success (green border) hiện top-right, auto-dismiss ✅
+- Trigger form: submit → spinner + "Đang gửi…" ✅
+
+**Cổng Ngày 19 ✅ PASS:** 6 kịch bản eval N=10 PASS + theme toggle + toast + keyboard shortcuts.
 
 ### [Session 22 — 2026-06-14] — Ngày 18: Fintech Domain + Domain Switcher UI
 

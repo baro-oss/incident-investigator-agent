@@ -89,7 +89,8 @@
         <textarea name="symptom" rows="3" placeholder="vd: payment-gateway: tỷ lệ lỗi tăng đột biến từ 14:05, 87% TimeoutException"></textarea>
       </div>
 
-      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center">
+      <button type="submit" id="submit-btn" class="btn btn-primary" style="width:100%;justify-content:center"
+              onclick="this.innerHTML='<span class=spinner></span> Đang gửi…';this.disabled=true">
         ▶ Bắt đầu điều tra
       </button>
     </form>
@@ -135,6 +136,16 @@
 </div>
 
 <script>
+{% if result and result.status == 'accepted' %}
+window.addEventListener('DOMContentLoaded', function() {
+  showToast('Investigation bắt đầu · ID: {{ result.investigation_id }}', 'success');
+});
+{% elif result and result.status == 'duplicate' %}
+window.addEventListener('DOMContentLoaded', function() {
+  showToast('Investigation đang chạy · ID: {{ result.investigation_id }}', 'info');
+});
+{% endif %}
+
 const projectServices = {{ project_services_json | safe }};
 
 const DOMAIN_DATA = {

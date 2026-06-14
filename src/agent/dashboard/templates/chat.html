@@ -250,6 +250,11 @@ function handleSSEEvent(msg, invId) {
     document.getElementById('status-text').innerHTML =
       `Hoàn thành · <a href="/dashboard/investigations/${invId}" style="color:var(--accent)">Xem trace đầy đủ →</a>`;
 
+    if (window.showToast) {
+      var confLabel = conf ? conf.toUpperCase() : '';
+      showToast('Investigation hoàn thành · ' + confLabel + (rc ? ' — ' + rc.slice(0,60) + (rc.length>60?'…':'') : ''), 'success', 5000);
+    }
+
     if (currentES) { currentES.close(); currentES = null; }
     resetSubmitBtn();
   }

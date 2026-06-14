@@ -5,13 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Investigation Agent{% endblock %}</title>
   <link rel="stylesheet" href="/dashboard/static/style.css">
+  <script>
+    (function(){
+      var t = localStorage.getItem('ia-theme');
+      if (t === 'light') document.documentElement.style.setProperty('--_pre','light');
+    })();
+  </script>
 </head>
 <body>
+<div id="toast-container"></div>
 <div class="layout">
   <nav>
     <div class="logo">
       Investigation Agent
-      <span>v0.6 · Phase 3</span>
+      <span>v0.7 · Phase 4</span>
     </div>
     <a href="/dashboard" class="{{ 'active' if active == 'home' }}">
       <span class="ico">⚡</span> Investigations
@@ -49,10 +56,61 @@
     <a href="/docs" target="_blank">
       <span class="ico">⊞</span> API Docs
     </a>
+    <button class="theme-toggle" id="theme-btn" onclick="toggleTheme()">
+      <span id="theme-ico">☀</span> <span id="theme-lbl">Light Mode</span>
+    </button>
   </nav>
   <main>
     {% block content %}{% endblock %}
   </main>
 </div>
+<script>
+// ── Theme ──────────────────────────────────────────────────────────────
+function _applyTheme(t) {
+  document.body.classList.toggle('theme-light', t === 'light');
+  document.getElementById('theme-ico').textContent = t === 'light' ? '🌙' : '☀';
+  document.getElementById('theme-lbl').textContent = t === 'light' ? 'Dark Mode' : 'Light Mode';
+}
+function toggleTheme() {
+  var cur = localStorage.getItem('ia-theme') || 'dark';
+  var next = cur === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('ia-theme', next);
+  _applyTheme(next);
+}
+(function(){ _applyTheme(localStorage.getItem('ia-theme') || 'dark'); })();
+
+// ── Toasts ─────────────────────────────────────────────────────────────
+function showToast(msg, type, duration) {
+  type = type || 'info'; duration = duration || 3500;
+  var c = document.getElementById('toast-container');
+  var el = document.createElement('div');
+  var ico = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+  el.className = 'toast toast-' + type;
+  el.innerHTML = '<span style="font-size:14px">' + ico + '</span><span>' + msg + '</span>';
+  c.appendChild(el);
+  setTimeout(function() {
+    el.classList.add('toast-out');
+    setTimeout(function() { el.remove(); }, 200);
+  }, duration);
+}
+window.showToast = showToast;
+
+// ── Keyboard shortcuts ─────────────────────────────────────────────────
+document.addEventListener('keydown', function(e) {
+  var tag = document.activeElement && document.activeElement.tagName;
+  var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  // Ctrl+K / Cmd+K → Chat
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    window.location.href = '/dashboard/chat';
+    return;
+  }
+  if (inInput) return;
+  if (e.key === 't' || e.key === 'T') { window.location.href = '/dashboard/trigger'; }
+  if (e.key === 'r' || e.key === 'R') { e.preventDefault(); window.location.reload(); }
+  if (e.key === 'h' || e.key === 'H') { window.location.href = '/dashboard'; }
+  if (e.key === '?' || e.key === '/') { showToast('Shortcuts: T=Trigger · R=Reload · H=Home · Ctrl+K=Chat', 'info', 5000); }
+});
+</script>
 </body>
 </html>
