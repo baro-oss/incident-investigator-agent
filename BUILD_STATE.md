@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45). **Phase 9 🔨 ĐANG CODE — Ngày 46 ✅ · Ngày 47 ✅ · Ngày 48 ✅ · Ngày 49 ✅ (E12 multi-agent + đo).**
-**Cổng kiểm gần nhất:** Ngày 49 — multi-agent downgrade mờ · dashboard specificity (eval.html) · mock eval 4/4 · 262/262 tests. Real-LLM smoke chờ top-up credit.
-**Kế hoạch kế tiếp:** Ngày 50 (Tests + CI + Cổng Phase 9 — thêm tests · CI xanh · audit · đóng pha).
+**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **314/314 tests. CI xanh.** Ngày 51 ✅ XONG.
+**Cổng kiểm gần nhất:** Ngày 51 (F1 Code seam) — 314 tests · eval 4/4 mock · distill_code_response hợp lệ P#1 · READ-ONLY guard · service_repos CRUD + UI · Telegram KHÔNG đụng.
+**Kế hoạch kế tiếp:** Ngày 52 — F2 Deploy↔code synergy: `get_recent_deploys`→đọc diff version qua MCP; catalog code-aware (E10/E11); code→E12 specificity.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -113,7 +113,66 @@
 | 47 | E10 — Tool sequencing | `_tool_sequencing_hint(state)` nối vào `_build_user_message` (parity loop↔graph free); reuse catalog `relevant_tools`; advisory only | ✅ |
 | 48 | E12 — Specificity gate (lõi) | `engine/specificity.py:compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph; `Verdict.specificity_score` | ✅ |
 | 49 | E12 — Multi-agent + đo | Downgrade/annotate trong `_synthesize_verdict` · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ✅ |
-| 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
+| 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · cập nhật BUILD_STATE/CLAUDE · đóng pha | ✅ |
+
+## Tiến độ Phase 10 (docs/15-roadmap-phase-10.md)
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 51 | F1 — Code seam over MCP | `tools/code_distill.py:distill_code_response` (raw diff/file → Observation chưng cất, P#1) · risk interpreter generic (pool/timeout/config/dep-bump) · bảng `service_repos` (mapping metadata, project-scoped) · READ-ONLY guard `is_read_only_tool` (chặn write/PR/merge/push) · UI repo config card · tests mocked MCP | ✅ |
+| 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` **giữ nguyên** → agent đọc diff/file đúng version qua MCP (map version→repo qua `service_repos`) · catalog: thêm code tool vào `relevant_tools` `deploy_bug`/`dependency` → E10 hint + E11 prior tự kích · `specificity.py` cộng điểm code evidence (file+dòng+version) · grounding nhận code Observation · ~25 tests | ☐ |
+| 53 | V1 + E13 — Eval harness + prior decay | `eval_agent.py` đo avg-steps + specificity, flag A/B `--no-prior`; dashboard before/after; chạy **mock**, real-LLM ~$2 chờ credit (lệnh sẵn) · `patterns.py:get_service_priors` time-weight count theo `updated_at` (prior decay) + refresh calibration | ☐ |
+| 54 | P2 + OPS1 — Distill tổng quát + catalog editor | `mcp_client.py:_parse_observation` distill text dài thay vì cắt 500-char + budget tuning · bảng `hypothesis_catalog` (DB override lên default) + CRUD UI (tag/keywords/relevant_tools/root_cause_type/repo-tool mapping) | ☐ |
+| 55 | T3 + Close — Coverage + Cổng P10 | Tests dashboard/server/runner + CI import/syntax lớp code + ngưỡng coverage gate nhẹ · docs/15 ✅ + README/api · audit READ-ONLY (grep không tool ghi) + degrade safe · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
+
+**Chốt Phase 10 (đã xác nhận với người dùng):** code đọc **chỉ qua external MCP** (GitHub/GitLab = extension, KHÔNG quản lý source trong hệ thống, KHÔNG local diff) · `get_recent_deploys` giữ nguyên · **READ-ONLY tuyệt đối với code** · real-LLM eval = mock + defer (chờ credit) · Tier-2/bidirectional/horizontal vẫn Future · 5 ngày (dồn khối lượng từ bản 10 ngày, không cắt scope).
+**Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
+**Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
+
+### [Session 53 — 2026-06-15] — Lập kế hoạch Phase 10 (Ngày 51–55)
+
+**Bối cảnh:** Phase 9 xong (262/262 tests). Session này **KHÔNG code** — đọc kỹ engine + tool + MCP (`loop.py`, `state.py`, `registry.py`, `contracts.py`, `mcp_client.py`, `get_recent_deploys.py`, `hypothesis_catalog.py`, `memory/patterns.py`, `schema.sql`) → tổng hợp Phase 1–9 + đánh giá gaps/tech-debt + chốt Phase 10. Người dùng yêu cầu thêm tính năng lõi: agent đọc mã nguồn (ngoài logs/metrics/deploys) qua MCP như GitHub/GitLab.
+
+**Phát hiện chính (cơ sở Phase 10):**
+- **F (tính năng mới):** agent không đọc được mã nguồn. `get_recent_deploys` biết "deploy vX" nhưng không biết vX đổi gì → root cause mờ. GitHub/GitLab hiện chỉ là *intake adapter* (webhook→trigger), không phải đọc-code.
+- **P2 (tech debt):** `mcp_client.py:_parse_observation` cắt text external cứng 500-char → vi phạm ngầm Nguyên tắc #1 với MCP trả dữ liệu giàu (diff). Rào chắn của lớp code + nợ chung.
+- **V1 (validation gap):** real-LLM eval chưa từng chạy (D38 + D49 đều SKIP vì hết credit) → E10/E11/E12 chưa kiểm chứng trên LLM thật.
+- **E13:** prior không decay (`investigation_patterns.count` tăng vô hạn). **OPS1:** catalog hardcode Python. **T3:** coverage ~29%.
+
+**Quyết định chốt (người dùng xác nhận qua nhiều vòng):**
+1. **Code đọc CHỈ qua external MCP — KHÔNG local diff.** "Source code không được quản lý bởi hệ thống này." `service_repos` chỉ là mapping metadata. GitHub/GitLab MCP = **extension**, không phải main flow. Trọng tâm kỹ thuật dịch sang **distillation wrapper** (raw diff/file → Observation chưng cất).
+2. **`get_recent_deploys` giữ nguyên** — code tool bổ sung chiều "đọc thay đổi của deploy".
+3. **Real-LLM eval = mock + defer** (chưa có credit) — D53 dựng harness, chạy mock, real-LLM ~$2 chờ top-up.
+4. **Defer→Future giữ nguyên:** Tier-2 Postgres · bidirectional · horizontal scale — không kéo vào Phase 10.
+5. **5 ngày** (dồn khối lượng từ bản 10 ngày đề xuất ban đầu, không cắt scope).
+
+**Đã làm (3 file, không động code):**
+- `docs/15-roadmap-phase-10.md` (mới) — kế hoạch Ngày 51–55, format Làm/Cổng như docs/11–14; bảng kiểm 4 nguyên tắc + READ-ONLY cho lớp code; thứ tự cắt nếu hụt giờ.
+- `CLAUDE.md` — header giai đoạn + bảng Phase 10 + roadmap pitch (thêm Phase 10) + cấu trúc file (docs/14 đã xong, thêm docs/15).
+- `BUILD_STATE.md` — header trạng thái + bảng Tiến độ Phase 10 + entry này.
+
+**Chưa làm:** chưa bắt đầu code Ngày 51 (chờ session mới khởi động).
+
+### [Session 52 — 2026-06-15] — Ngày 50: Tests + CI + Cổng Phase 9
+
+**Đã làm:**
+- Xác nhận 262/262 tests PASS (89 tests riêng cho E10/E11/E12).
+- Audit nguyên tắc #2: `grep` không tìm thấy keyword miền nào hardcode trong `src/agent/engine/`.
+- Audit degrade an toàn: service chưa có lịch sử → prior=[] · không có catalog entry → hint rỗng · verdict rỗng hoàn toàn → specificity score=0.0 (3 tín hiệu đều fail, không crash).
+- Cập nhật `.github/workflows/ci.yml`: mở rộng import check thêm 4 module Phase 9 (`agent.engine.specificity`, `agent.engine.multi_agent`, `agent.engine.graph`, `agent.memory.patterns`).
+- Mock eval 4/4: `python scripts/eval_agent.py --mock` → CỔNG EVAL ✅ PASS.
+- Commit Starlette 1.x TemplateResponse fix (26+2 calls — `dashboard/router.py` + `intake/server.py`).
+- Cập nhật `BUILD_STATE.md` + `CLAUDE.md` → Phase 9 ✅ HOÀN TẤT.
+
+**Không làm:** Real-LLM smoke ~$2 — API credit cạn kiệt từ Session 51; cần top-up trước khi chạy.
+
+**Cổng Phase 9 PASS:**
+- E11: prior pre-seed + degrade safe + 27 tests ✅
+- E10: hint sequencing + parity loop↔graph + advisory + 21 tests ✅
+- E12: gate loop/graph + downgrade multi-agent + dashboard specificity + 41 tests ✅
+- Nguyên tắc #2: zero keyword miền trong engine ✅
+- Regression: mock eval 4/4 ✅
+- 262/262 tests + CI import check mở rộng ✅
 
 ### [Session 51 — 2026-06-15] — Ngày 49: E12 multi-agent + đo
 
@@ -156,6 +215,27 @@
 **Bất biến:** 100% engine-core · giữ nguyên tắc #2 (tri thức miền trong catalog, không hardcode keyword engine) · regression gate mỗi ngày engine (46–49).
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 54 — 2026-06-15] — Ngày 51: F1 Code seam over MCP
+
+**Đã làm:**
+- `src/agent/tools/code_distill.py` (mới): `distill_code_response(raw, *, tool_name, service) -> Observation` — chưng cất raw diff/file/blame/search → Observation hợp lệ P#1 (summary tự diễn giải + ≤5 hunk + aggregates, không raw dump). `_detect_risk_signals()` generic: config-knob (khớp compound name như `max_pool`/`retry_limit`), large-delete, removed-error-handling, dep-bump. Dùng line-by-line scan thay `\b` word boundary để bắt đúng.
+- `data/migrate_day51.py` (mới): bảng `service_repos` idempotent — mapping metadata service→repo ngoài (project_id, service, provider, repo_url, default_branch, subpath). KHÔNG lưu source.
+- `src/agent/intake/project_registry.py`: thêm CRUD `service_repos` — `list_service_repos` · `get_service_repo` · `upsert_service_repo` (ON CONFLICT upsert, validate provider) · `delete_service_repo`.
+- `src/agent/tools/registry.py`: `is_read_only_tool(name) -> bool` — whitelist prefix đọc (get_/list_/read_/search_/fetch_/diff/blame/show) + blacklist write parts (split `_/-`, check từng phần để tránh false positive như `fetch_commits`). `build_tool_registry` lọc tool ghi từ MCP + `logger.warning`.
+- `src/agent/dashboard/queries.py`: `get_project_detail` thêm `service_repos` list.
+- `src/agent/dashboard/router.py`: 2 routes mới — `POST /projects/{pid}/repos/add` + `POST /projects/{pid}/repos/{service}/delete`.
+- `src/agent/dashboard/templates/project_detail.html`: card "Repo / Source" — bảng mapping + form thêm (collapsible details) + nút xóa từng repo.
+- `tests/test_code_layer.py` (mới, 52 tests): TestDistillShape (12) · TestRiskDetect (10) · TestReadOnlyGuard (21) · TestServiceReposCRUD (8). Dùng `patch("agent.intake.project_registry.open_db", side_effect=lambda: ...)` (patch đúng target, không phải `agent.storage.db.open_db`).
+
+**Cổng Ngày 51 PASS:**
+- `distill_code_response` trả Observation hợp lệ từ raw diff, ≤5 samples, không raw dump, risk signal đúng ✅
+- READ-ONLY guard loại `create_pr`/`merge_branch`, giữ `get_diff`/`list_commits`/`fetch_commits` ✅
+- `service_repos` CRUD round-trip (temp DB) ✅
+- UI card render (project_detail.html) ✅
+- Regression: 314/314 tests · eval 4/4 mock · Telegram không đụng (code tool chưa vào catalog mặc định) ✅
+
+**Không làm:** catalog/synergy (D52) · eval/decay (D53) — đúng scope.
 
 ### [Session 47 — 2026-06-15] — Lập kế hoạch Phase 9 (Ngày 46–50)
 

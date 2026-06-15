@@ -521,6 +521,16 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
     except Exception:
         llm_config_raw = None
 
+    # Service repos (Phase 10 — F1)
+    try:
+        service_repos = [dict(r) for r in conn.execute(
+            "SELECT id, service, provider, repo_url, default_branch, subpath "
+            "FROM service_repos WHERE project_id=? ORDER BY service",
+            (project_id,),
+        ).fetchall()]
+    except Exception:
+        service_repos = []
+
     conn.close()
     return {
         "id": p["id"],
@@ -533,6 +543,7 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
         "mcp_servers": mcp_servers,
         "channels": channels,
         "recent_investigations": inv_list,
+        "service_repos": service_repos,
     }
 
 

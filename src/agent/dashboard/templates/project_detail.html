@@ -193,6 +193,96 @@
   {% endif %}
 </div>
 
+<!-- Repo / Source Mapping (Phase 10 — F1) -->
+<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">Repo / Source ({{ proj.service_repos|length }})</h3>
+    <span style="font-size:11px;color:var(--muted)">READ-ONLY — chỉ đọc qua MCP</span>
+  </div>
+
+  {% if proj.service_repos %}
+  <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:14px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Service</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Provider</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Repo URL</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Branch</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Subpath</th>
+        <th style="padding:5px 6px"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for repo in proj.service_repos %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 6px"><code style="font-size:11px">{{ repo.service }}</code></td>
+        <td style="padding:7px 6px">
+          <span class="badge badge-default" style="font-size:10px">{{ repo.provider }}</span>
+        </td>
+        <td style="padding:7px 6px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+          <code style="font-size:11px">{{ repo.repo_url }}</code>
+        </td>
+        <td style="padding:7px 6px"><code style="font-size:11px">{{ repo.default_branch }}</code></td>
+        <td style="padding:7px 6px;color:var(--muted)">{{ repo.subpath or '—' }}</td>
+        <td style="padding:7px 6px">
+          <form method="post" action="/dashboard/projects/{{ proj.id }}/repos/{{ repo.service }}/delete"
+                style="display:inline" onsubmit="return confirm('Xóa mapping {{ repo.service }}?')">
+            <button type="submit"
+                    style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:12px;margin-bottom:14px">Chưa có repo mapping nào. Thêm để agent đọc diff qua MCP.</p>
+  {% endif %}
+
+  <details>
+    <summary style="font-size:12px;color:var(--accent);cursor:pointer;margin-bottom:8px">
+      + Thêm / cập nhật repo mapping
+    </summary>
+    <form method="post" action="/dashboard/projects/{{ proj.id }}/repos/add"
+          style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:12px;margin-top:8px">
+      <div>
+        <label style="color:var(--muted);display:block;margin-bottom:3px">Service *</label>
+        <input type="text" name="service" placeholder="payment-gateway" required
+               style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+      </div>
+      <div>
+        <label style="color:var(--muted);display:block;margin-bottom:3px">Repo URL *</label>
+        <input type="text" name="repo_url" placeholder="https://github.com/org/repo" required
+               style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+      </div>
+      <div>
+        <label style="color:var(--muted);display:block;margin-bottom:3px">Provider</label>
+        <select name="provider"
+                style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+          <option value="github">GitHub</option>
+          <option value="gitlab">GitLab</option>
+          <option value="bitbucket">Bitbucket</option>
+        </select>
+      </div>
+      <div>
+        <label style="color:var(--muted);display:block;margin-bottom:3px">Branch</label>
+        <input type="text" name="default_branch" value="main" placeholder="main"
+               style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+      </div>
+      <div>
+        <label style="color:var(--muted);display:block;margin-bottom:3px">Subpath <span style="font-size:10px">(mono-repo)</span></label>
+        <input type="text" name="subpath" placeholder="services/payment"
+               style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <button type="submit" class="btn btn-primary" style="font-size:12px;padding:5px 14px;width:100%">
+          💾 Lưu mapping
+        </button>
+      </div>
+    </form>
+  </details>
+</div>
+
 <!-- Recent Investigations -->
 <div class="card">
   <h3 style="margin-bottom:12px">Investigations gần đây</h3>

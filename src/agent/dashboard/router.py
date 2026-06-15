@@ -647,6 +647,44 @@ async def dashboard_project_channel_config(
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
 
 
+@router.post("/projects/{project_id}/repos/add", response_class=HTMLResponse)
+async def dashboard_project_add_repo(
+    request: Request, project_id: str,
+    service: str = Form(...),
+    repo_url: str = Form(...),
+    provider: str = Form("github"),
+    default_branch: str = Form("main"),
+    subpath: str = Form(""),
+    user: dict = Depends(require_login),
+):
+    from agent.intake.project_registry import upsert_service_repo
+    try:
+        upsert_service_repo(
+            project_id,
+            service.strip(),
+            repo_url.strip(),
+            provider=provider.strip() or "github",
+            default_branch=default_branch.strip() or "main",
+            subpath=subpath.strip(),
+        )
+    except Exception:
+        pass
+    return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/repos/{service}/delete", response_class=HTMLResponse)
+async def dashboard_project_del_repo(
+    request: Request, project_id: str, service: str,
+    user: dict = Depends(require_login),
+):
+    from agent.intake.project_registry import delete_service_repo
+    try:
+        delete_service_repo(project_id, service)
+    except Exception:
+        pass
+    return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
 @router.post("/investigations/{investigation_id}/replay")
 async def dashboard_investigation_replay(
     request: Request, investigation_id: str,

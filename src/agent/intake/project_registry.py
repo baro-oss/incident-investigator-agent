@@ -259,3 +259,78 @@ def clear_project_llm(project_id: str) -> None:
     )
     conn.commit()
     conn.close()
+
+
+# ── Service repos (Phase 10 — F1) ─────────────────────────────────────────────
+
+SUPPORTED_PROVIDERS = {"github", "gitlab", "bitbucket"}
+
+
+def list_service_repos(project_id: str) -> List[Dict[str, Any]]:
+    """Trả list repo mapping của project."""
+    conn = open_db()
+    rows = conn.execute(
+        "SELECT id, project_id, service, provider, repo_url, default_branch, subpath, created_at, updated_at "
+        "FROM service_repos WHERE project_id=? ORDER BY service",
+        (project_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_service_repo(project_id: str, service: str) -> Optional[Dict[str, Any]]:
+    """Trả repo mapping cho một service. None nếu chưa cấu hình."""
+    conn = open_db()
+    row = conn.execute(
+        "SELECT * FROM service_repos WHERE project_id=? AND service=?",
+        (project_id, service),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def upsert_service_repo(
+    project_id: str,
+    service: str,
+    repo_url: str,
+    provider: str = "github",
+    default_branch: str = "main",
+    subpath: str = "",
+) -> Dict[str, Any]:
+    """Thêm hoặc cập nhật repo mapping cho service. Raise ValueError nếu provider không hỗ trợ."""
+    if provider not in SUPPORTED_PROVIDERS:
+        raise ValueError(f"Provider '{provider}' không hỗ trợ. Hỗ trợ: {sorted(SUPPORTED_PROVIDERS)}")
+    now = _now()
+    conn = open_db()
+    conn.execute(
+        """
+        INSERT INTO service_repos (project_id, service, provider, repo_url, default_branch, subpath, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(project_id, service) DO UPDATE SET
+            provider=excluded.provider,
+            repo_url=excluded.repo_url,
+            default_branch=excluded.default_branch,
+            subpath=excluded.subpath,
+            updated_at=excluded.updated_at
+        """,
+        (project_id, service, provider, repo_url, default_branch, subpath, now, now),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT * FROM service_repos WHERE project_id=? AND service=?",
+        (project_id, service),
+    ).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def delete_service_repo(project_id: str, service: str) -> bool:
+    """Xóa repo mapping. Trả True nếu xóa được, False nếu không tìm thấy."""
+    conn = open_db()
+    cursor = conn.execute(
+        "DELETE FROM service_repos WHERE project_id=? AND service=?",
+        (project_id, service),
+    )
+    conn.commit()
+    conn.close()
+    return cursor.rowcount > 0

@@ -30,6 +30,53 @@ ALL_LOCAL_TOOLS: List[Tool] = [
     trace_request,
 ]
 
+# ── READ-ONLY guard (Phase 10 — F1) ──────────────────────────────────────────
+
+_READ_PREFIXES = (
+    "get_", "list_", "read_", "search_", "fetch_", "diff_", "show_", "blame_", "find_",
+    "diff", "blame", "show", "fetch",
+)
+
+# Từ khóa ghi — kiểm theo từng phần (split "_" / "-") để tránh false positive
+# ví dụ "fetch_commits" không bị chặn vì "commits" ≠ "commit"
+_WRITE_PARTS = frozenset({
+    "create", "update", "delete", "write", "merge", "push", "commit",
+    "comment", "approve", "reject", "close", "edit", "patch",
+    "post", "put", "add", "remove", "set", "insert", "upsert",
+})
+
+import re as _re
+_SPLIT_RE = _re.compile(r"[_\-]")
+
+
+def is_read_only_tool(name: str) -> bool:
+    """
+    Kiểm tra tool có phải READ-ONLY không.
+
+    Whitelist: tiền tố đọc (get_/list_/read_/search_/diff/blame/show/fetch/find_).
+    Blacklist cứng: từ khóa ghi (create/update/delete/write/merge/push/commit/...).
+    Kiểm theo từng phần của tên (split `_`/`-`) để tránh false positive
+    (ví dụ "fetch_commits" không bị chặn vì "commits" ≠ "commit").
+    Local tools nội bộ luôn READ-ONLY (chỉ đọc SQLite).
+
+    Returns True nếu tool an toàn để đưa vào registry.
+    """
+    n = name.lower()
+    # Luôn cho phép local tools
+    if any(n == t.name.lower() for t in ALL_LOCAL_TOOLS):
+        return True
+    # Blacklist: bất kỳ phần nào (split _/-) khớp từ khóa ghi
+    parts = _SPLIT_RE.split(n)
+    for part in parts:
+        if part in _WRITE_PARTS:
+            return False
+    # Whitelist tiền tố đọc
+    for prefix in _READ_PREFIXES:
+        if n.startswith(prefix) or n == prefix.rstrip("_"):
+            return True
+    # Mặc định: KHÔNG cho phép (fail-safe)
+    return False
+
 
 def get_tool_registry() -> List[Tool]:
     """Trả về danh sách tool nội bộ (SQLite). Sync, không cần MCP."""
@@ -42,6 +89,7 @@ async def build_tool_registry(mcp_clients: Optional[List["MCPClient"]] = None) -
 
     MCP tool override local tool cùng tên — MCP là nguồn ưu tiên khi đã cấu hình.
     Nếu MCP server không có tool X → dùng local fallback (nếu có).
+    Tool ghi từ MCP bị loại khỏi registry (READ-ONLY guard — Phase 10 F1).
     """
     # Bắt đầu với local tools
     tools_by_name: dict[str, Tool] = {t.name: t for t in ALL_LOCAL_TOOLS}
@@ -51,6 +99,9 @@ async def build_tool_registry(mcp_clients: Optional[List["MCPClient"]] = None) -
             try:
                 mcp_tools = await client.get_tools()
                 for t in mcp_tools:
+                    if not is_read_only_tool(t.name):
+                        logger.warning("READ-ONLY guard: loại tool ghi '%s' từ MCP %s", t.name, client.url)
+                        continue
                     if t.name in tools_by_name:
                         logger.info("MCP override local tool: %s", t.name)
                     tools_by_name[t.name] = t
