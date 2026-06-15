@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **384/384 tests. CI xanh.** Ngày 51–54 ✅ XONG.
-**Cổng kiểm gần nhất:** Ngày 54 (P2+OPS1) — 384 tests · external MCP distill (không còn cắt 500-char) · hypothesis_catalog DB CRUD + merge · catalog editor UI.
-**Kế hoạch kế tiếp:** Ngày 55 — T3+Close: coverage/CI + audit READ-ONLY + docs + Cổng P10.
+**Giai đoạn:** Phase 10 ✅ HOÀN TẤT (51–55). **444/444 tests. CI xanh.** Ngày 51–55 ✅ XONG. **Phase 10 ĐÓNG.**
+**Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
+**Kế hoạch kế tiếp:** Phase 11 (chưa lên kế hoạch). Future: real-LLM eval (chờ credit) · Tier-2 Postgres · bidirectional output · horizontal scale seam.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -124,11 +124,40 @@
 | 53 | V1 + E13 — Eval harness + prior decay | `eval_agent.py`: --no-prior flag (A/B) + specificity_score per run + avg specificity in summary · `patterns.py`: `_decay_weight` (half-life 30d) + sort by weighted_count · `queries.py:get_eval_comparison_data` · `eval.html`: E13 Before/After panel · `migrate_day53.py`: +2 cột eval_results · 24 tests | ✅ |
 
 | 54 | P2 + OPS1 — Distill tổng quát + catalog editor | `mcp_client.py:_parse_observation` distill text dài thay vì cắt 500-char + budget tuning · bảng `hypothesis_catalog` (DB override lên default) + CRUD UI (tag/keywords/relevant_tools/root_cause_type/repo-tool mapping) | ✅ |
-| 55 | T3 + Close — Coverage + Cổng P10 | Tests dashboard/server/runner + CI import/syntax lớp code + ngưỡng coverage gate nhẹ · docs/15 ✅ + README/api · audit READ-ONLY (grep không tool ghi) + degrade safe · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
+| 55 | T3 + Close — Coverage + Cổng P10 | Tests dashboard/server/runner + CI import/syntax lớp code + ngưỡng coverage gate nhẹ · docs/15 ✅ + README/api · audit READ-ONLY (grep không tool ghi) + degrade safe · cập nhật BUILD_STATE/CLAUDE · đóng pha | ✅ |
 
 **Chốt Phase 10 (đã xác nhận với người dùng):** code đọc **chỉ qua external MCP** (GitHub/GitLab = extension, KHÔNG quản lý source trong hệ thống, KHÔNG local diff) · `get_recent_deploys` giữ nguyên · **READ-ONLY tuyệt đối với code** · real-LLM eval = mock + defer (chờ credit) · Tier-2/bidirectional/horizontal vẫn Future · 5 ngày (dồn khối lượng từ bản 10 ngày, không cắt scope).
 **Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
 **Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
+
+### [Session 58 — 2026-06-15] — Ngày 55: T3+Close Coverage + Cổng Phase 10
+
+**Đã làm:**
+- `tests/test_server.py` (mới, 20 tests): TestHealthRoute (4) · TestAdaptersRoute (2) · TestAuthRoutes (3) · TestProjectRoutes (7) · TestTriggerRoute (5) · TestMcpServerRoutes (2). Dùng `TestClient(app, raise_server_exceptions=False)`, ALLOW_ANON_TRIGGER env patch.
+- `tests/test_runner_coverage.py` (mới, 11 tests): TestGetMcpServersForProject (3) · TestGetProjectServices (2) · TestMakeErrorState (2) · TestTriggerInvestigation (2) · TestRunInvestigationDedup (1) · TestMcpClientConnect (2).
+- `tests/test_dashboard_queries.py` (mới, 29 tests): TestGetCostData (3) · TestListInvestigations (4) · TestGetEvalSummary (2) · TestGetProjectsOverview (1) · TestGetMetricsLive (2) · TestGetSpecificityData (1) · TestGetEvalComparisonData (2) · TestGetMcpServersForDashboard (1) · TestGetAllToolsForDashboard (3) · TestPricingHelper (5).
+- `.github/workflows/ci.yml`: thêm `migrate_day53.py` + `migrate_day54.py` vào DB setup step; thêm `agent.tools.code_distill`, `agent.tools.get_code_diff`, `agent.tools.mcp_client`, `agent.intake.runner` vào import smoke.
+- `docs/15-roadmap-phase-10.md`: tất cả 5 ngày ☐→✅.
+
+**Audit READ-ONLY:** `grep engine/` — không có `get_code_diff`/`github`/`gitlab`/`repo_url` trong `loop.py`/`multi_agent.py`/`state.py`. Chỉ `hypothesis_catalog.py` có `get_code_diff` (đúng — catalog layer). `is_read_only_tool` BLOCK đủ 8 write tools, ALLOW đủ 9 read tools ✅.
+
+**Audit degrade:** no repo mapping → Observation hợp lệ (không crash) · empty MCP text → Observation hợp lệ · no catalog DB → default 5 entries trả về ✅.
+
+**Tests:** 384 + 60 = **444/444 tests**. Coverage: 44%→55%.
+
+**Cổng Phase 10 PASS:**
+- F code seam: distill+guard+service_repos+get_code_diff ✅ (D51)
+- F2 synergy: deploy↔code; E10/E11 hint; code→E12 specificity ✅ (D52)
+- V1: eval harness + avg specificity + --no-prior A/B ✅ (D53)
+- E13: prior decay half-life 30d ✅ (D53)
+- P2: external MCP distill (không còn truncate 500-char) ✅ (D54)
+- OPS1: catalog editor UI + DB merge ✅ (D54)
+- T3: coverage 55% + 60 tests mới + CI migrate ✅ (D55)
+- Nguyên tắc #2 + READ-ONLY: grep clean ✅ (D55)
+- Degrade safe: 3 nhánh kiểm tra sạch ✅ (D55)
+- Regression: eval 4/4 mock + 444 tests ✅ (D55)
+
+**Real-LLM eval ~$2:** lệnh sẵn: `python scripts/eval_agent.py --scenario scenario1 --n 3` — chờ top-up credit.
 
 ### [Session 57 — 2026-06-15] — Ngày 54: P2+OPS1 Distill tổng quát + Catalog Editor
 

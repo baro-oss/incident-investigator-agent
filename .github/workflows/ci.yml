@@ -36,8 +36,16 @@ jobs:
           import agent.engine.state
           import agent.engine.calibration
           import agent.engine.hypothesis_catalog
+          import agent.engine.specificity
+          import agent.engine.multi_agent
+          import agent.engine.graph
+          import agent.memory.patterns
           import agent.tools.registry
+          import agent.tools.code_distill
+          import agent.tools.get_code_diff
+          import agent.tools.mcp_client
           import agent.intake.server
+          import agent.intake.runner
           import agent.output.telegram
           print('Core imports OK')
           "
@@ -48,6 +56,8 @@ jobs:
           python data/init_db.py
           python data/migrate_projects.py
           python data/migrate_fintech.py
+          python data/migrate_day53.py
+          python data/migrate_day54.py
           python data/seed_scenario1.py
           python data/seed_scenario2.py
           python data/seed_scenario3.py
