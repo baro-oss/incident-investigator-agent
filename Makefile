@@ -2,7 +2,7 @@ PYTHON := .venv/bin/python3
 PORT   := 8000
 MCP_PORT := 9000
 
-.PHONY: help install setup db seed server server-reload mcp chat eval eval-fintech eval-all \
+.PHONY: help install setup db init seed server run server-reload mcp chat eval eval-fintech eval-all \
         trigger trigger-fintech test ci clean reset
 
 # ── Default ────────────────────────────────────────────────────────────────────
@@ -12,11 +12,11 @@ help:
 	@echo "  make install        Tạo venv + cài dependencies"
 	@echo "  make setup          install + db + seed (khởi động từ đầu)"
 	@echo ""
-	@echo "  make server         Khởi động server port $(PORT)"
+	@echo "  make run            Khởi động server port $(PORT)  (alias: server)"
 	@echo "  make server-reload  Khởi động server với --reload (dev)"
 	@echo "  make mcp            Khởi động MCP server port $(MCP_PORT)"
 	@echo ""
-	@echo "  make db             Init DB + chạy tất cả migration"
+	@echo "  make init           Init DB + chạy tất cả migration  (alias: db)"
 	@echo "  make seed           Seed tất cả 6 kịch bản"
 	@echo "  make reset          Xóa DB + init lại + seed lại"
 	@echo ""
@@ -41,6 +41,8 @@ setup: install db seed
 	@echo "✅ Sẵn sàng — chạy: make server"
 
 # ── Database ───────────────────────────────────────────────────────────────────
+init: db
+
 db:
 	$(PYTHON) data/init_db.py
 	$(PYTHON) data/migrate_projects.py
@@ -60,6 +62,8 @@ reset:
 	@echo "✅ DB đã reset và seed lại"
 
 # ── Servers ────────────────────────────────────────────────────────────────────
+run: server
+
 server:
 	$(PYTHON) scripts/start_server.py --port $(PORT)
 

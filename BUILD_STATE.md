@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–43.
-**Cổng kiểm gần nhất:** Ngày 43 — 173 tests · eval 4/4 · E9 structured verdict direct path · parse_degraded flag
+**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–44.
+**Cổng kiểm gần nhất:** Ngày 44 — README.md · docs/api.md · Makefile aliases (init/run) · 173 tests · eval 4/4
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -98,13 +98,27 @@
 | 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ✅ |
 | 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ✅ |
 | 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ✅ |
-| 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ☐ |
+| 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ✅ |
 | 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ☐ |
 
 **Chốt Phase 8:** Day 38 = smoke mở rộng ~$2 (KHÔNG full N=10) · horizontal scale seam vẫn Future (Redis SSE giữ stub) · Tier-2/bidirectional vẫn Future.
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 45 — 2026-06-15] — Ngày 44: DX + docs
+
+**Ngày 44 — DX + docs:**
+- `README.md` (mới, root) — what/why · sơ đồ kiến trúc 4 cạnh ASCII · quickstart 5 bước · bảng `make` targets · bảng kịch bản demo · cấu trúc file · link docs · 4 nguyên tắc kiến trúc
+- `docs/api.md` (mới) — API reference đầy đủ gộp tất cả route thật: Auth · Core (trigger/health/adapters) · Projects (CRUD/services/channels/LLM/MCP scoped) · Dashboard (investigations/operations/config/analytics/admin/scheduler) · Intake Adapters webhook guide · Webhook signature HMAC
+- `Makefile` — thêm alias `init` (→ `db`) và `run` (→ `server`); cập nhật `.PHONY` + help text
+
+**Cổng Ngày 44:**
+- `make init` ✅ (alias → db + migrations)
+- `make run --dry-run` → `python3 scripts/start_server.py --port 8000` ✅
+- `make test` → 173/173 PASS ✅
+- `make eval` → CỔNG EVAL 4/4 PASS ✅
+- README.md có ở root, docs/api.md cover toàn bộ route thật
 
 ### [Session 44 — 2026-06-15] — Ngày 43: E9 Structured verdict direct path
 
