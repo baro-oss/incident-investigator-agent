@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, List, Optional
 
@@ -17,6 +18,25 @@ if TYPE_CHECKING:
     from agent.engine.state import InvestigationState
 
 logger = logging.getLogger(__name__)
+
+# E13: Prior decay — half-life 30 ngày (pattern cũ giảm trọng số theo hàm mũ)
+_HALF_LIFE_DAYS: float = 30.0
+
+
+def _decay_weight(updated_at_iso: str) -> float:
+    """Hệ số decay theo thời gian: 1.0 khi mới, ~0.5 sau HALF_LIFE_DAYS ngày.
+
+    f(days) = exp(-days × ln2 / HALF_LIFE_DAYS)
+    Degrade an toàn: trả 1.0 nếu parse lỗi (không penalty).
+    """
+    try:
+        updated = datetime.fromisoformat(updated_at_iso.replace("Z", "+00:00"))
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        days_old = max(0.0, (datetime.now(timezone.utc) - updated).total_seconds() / 86400)
+        return math.exp(-days_old * math.log(2) / _HALF_LIFE_DAYS)
+    except Exception:
+        return 1.0
 
 
 def _now() -> str:
@@ -79,21 +99,33 @@ def get_service_priors(
     *,
     limit: int = 3,
 ) -> List[dict]:
-    """E11: Trả top-N root_cause_type đã gặp cho (project, service), sorted by count DESC.
+    """E11+E13: Top-N root_cause_type, sorted by time-weighted count DESC.
 
-    Mỗi phần tử: {"root_cause_type": str, "count": int, "avg_steps": float}
+    Mỗi phần tử: {"root_cause_type": str, "count": int, "avg_steps": float,
+                   "weighted_count": float}
     Trả [] nếu không có dữ liệu.
     """
     try:
         conn = open_db()
+        # Lấy nhiều hơn limit để đủ sau khi sort lại theo weighted_count
         rows = conn.execute("""
-            SELECT root_cause_type, count, avg_steps
+            SELECT root_cause_type, count, avg_steps, updated_at
             FROM investigation_patterns
             WHERE project_id=? AND service=? AND root_cause_type != 'unknown'
             ORDER BY count DESC LIMIT ?
-        """, (project_id, service, limit)).fetchall()
+        """, (project_id, service, limit * 3)).fetchall()
         conn.close()
-        return [dict(r) for r in rows]
+
+        out = []
+        for r in rows:
+            d = dict(r)
+            w = _decay_weight(d.get("updated_at") or "")
+            d["weighted_count"] = round(d["count"] * w, 3)
+            out.append(d)
+
+        out.sort(key=lambda x: x["weighted_count"], reverse=True)
+        return out[:limit]
+
     except Exception as exc:
         logger.debug("[memory] get_service_priors lỗi: %s", exc)
         return []

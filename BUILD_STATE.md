@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **341/341 tests. CI xanh.** Ngày 51 ✅ XONG. Ngày 52 ✅ XONG.
-**Cổng kiểm gần nhất:** Ngày 52 (F2 Deploy↔code) — 341 tests · eval 4/4 mock · build_code_diff_tool factory · catalog deploy.relevant_tools có get_code_diff · E10 hint tự kích · code→E12 specificity boost (4th signal) · Nguyên tắc #2 giữ vững.
-**Kế hoạch kế tiếp:** Ngày 53 — V1+E13: eval harness (avg-steps/specificity before-after, mock) + prior decay (time-weight investigation_patterns).
+**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **365/365 tests. CI xanh.** Ngày 51–53 ✅ XONG.
+**Cổng kiểm gần nhất:** Ngày 53 (V1+E13) — 365 tests · eval 4/4 mock · avg specificity 0.67 in output · prior decay half-life 30d · --no-prior A/B flag · eval_comparison dashboard panel.
+**Kế hoạch kế tiếp:** Ngày 54 — P2+OPS1: distill tổng quát (sửa 500-char truncate) + catalog editor UI.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -121,13 +121,40 @@
 |------|-------|----------|------------|
 | 51 | F1 — Code seam over MCP | `tools/code_distill.py:distill_code_response` (raw diff/file → Observation chưng cất, P#1) · risk interpreter generic (pool/timeout/config/dep-bump) · bảng `service_repos` (mapping metadata, project-scoped) · READ-ONLY guard `is_read_only_tool` (chặn write/PR/merge/push) · UI repo config card · tests mocked MCP | ✅ |
 | 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` **giữ nguyên** → agent đọc diff/file đúng version qua MCP (map version→repo qua `service_repos`) · catalog: thêm code tool vào `relevant_tools` `deploy_bug`/`dependency` → E10 hint + E11 prior tự kích · `specificity.py` cộng điểm code evidence (file+dòng+version) · grounding nhận code Observation · ~25 tests | ✅ |
-| 53 | V1 + E13 — Eval harness + prior decay | `eval_agent.py` đo avg-steps + specificity, flag A/B `--no-prior`; dashboard before/after; chạy **mock**, real-LLM ~$2 chờ credit (lệnh sẵn) · `patterns.py:get_service_priors` time-weight count theo `updated_at` (prior decay) + refresh calibration | ☐ |
+| 53 | V1 + E13 — Eval harness + prior decay | `eval_agent.py`: --no-prior flag (A/B) + specificity_score per run + avg specificity in summary · `patterns.py`: `_decay_weight` (half-life 30d) + sort by weighted_count · `queries.py:get_eval_comparison_data` · `eval.html`: E13 Before/After panel · `migrate_day53.py`: +2 cột eval_results · 24 tests | ✅ |
+
 | 54 | P2 + OPS1 — Distill tổng quát + catalog editor | `mcp_client.py:_parse_observation` distill text dài thay vì cắt 500-char + budget tuning · bảng `hypothesis_catalog` (DB override lên default) + CRUD UI (tag/keywords/relevant_tools/root_cause_type/repo-tool mapping) | ☐ |
 | 55 | T3 + Close — Coverage + Cổng P10 | Tests dashboard/server/runner + CI import/syntax lớp code + ngưỡng coverage gate nhẹ · docs/15 ✅ + README/api · audit READ-ONLY (grep không tool ghi) + degrade safe · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
 
 **Chốt Phase 10 (đã xác nhận với người dùng):** code đọc **chỉ qua external MCP** (GitHub/GitLab = extension, KHÔNG quản lý source trong hệ thống, KHÔNG local diff) · `get_recent_deploys` giữ nguyên · **READ-ONLY tuyệt đối với code** · real-LLM eval = mock + defer (chờ credit) · Tier-2/bidirectional/horizontal vẫn Future · 5 ngày (dồn khối lượng từ bản 10 ngày, không cắt scope).
 **Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
 **Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
+
+### [Session 56 — 2026-06-15] — Ngày 53: V1+E13 Eval harness + Prior decay
+
+**Đã làm:**
+- `data/migrate_day53.py` (mới): ADD COLUMN `specificity_score REAL` + `prior_flag INTEGER DEFAULT 0` vào `eval_results`. Idempotent (try/except OperationalError). Chạy ngay.
+- `memory/patterns.py`: thêm `_HALF_LIFE_DAYS=30.0` + `_decay_weight(iso_str) -> float` (hàm mũ `exp(-d·ln2/30)`, degrade 1.0 nếu parse lỗi). `get_service_priors` thêm `weighted_count = count × decay`, sort theo `weighted_count DESC` thay vì `count DESC`. Trả thêm key `weighted_count` trong result.
+- `engine/loop.py`: thêm `no_prior: bool = False` vào `InvestigationEngine.__init__`; guard `_preseed_hypotheses` bằng `if not self._no_prior:`.
+- `scripts/eval_agent.py`: `_get_specificity(state)` helper → `evaluate_run` luôn có key `specificity_score` (kể cả no_verdict case). `print_summary` in `Avg specificity`. `--no-prior` argparse flag → truyền xuống engine + `_save_eval_results_to_db(prior_flag=1)`. `_save_eval_results_to_db` lưu `specificity_score` + `prior_flag` (fallback schema cũ).
+- `dashboard/queries.py`: thêm `get_eval_comparison_data()` — group by `prior_flag`, tính avg_steps + avg_specificity + rate, degrade-safe.
+- `dashboard/router.py`: import + call `get_eval_comparison_data()`, pass `eval_comparison` vào template.
+- `dashboard/templates/eval.html`: thêm panel "E13 — Prior Decay A/B" với 4 stats-box (avg_steps+avg_specificity × 2 modes) + meta ghi lệnh chạy.
+- `tests/test_e13_prior_decay.py` (mới, 24 tests): TestDecayWeight (8) · TestGetServicePriorsDecay (6) · TestNoPriorFlag (2) · TestEvalHarness (3) · TestEvalComparisonData (5).
+
+**Tests:** 341 + 24 = **365/365 tests**.
+**Eval mock:** avg specificity 0.67 in output, 4/4 PASS.
+
+**Cổng Ngày 53 PASS:**
+- `_decay_weight`: 1.0 hôm nay, ~0.5 sau 30 ngày, monotone giảm, degrade "" → 1.0 ✅
+- `get_service_priors` sort theo weighted_count (pattern mới cùng count đứng trước pattern cũ) ✅
+- `no_prior=True`: `engine._no_prior=True`, không có hypothesis với prior_seen_count>0 trong state ✅
+- `evaluate_run` luôn có key `specificity_score` ✅
+- `get_eval_comparison_data` group đúng by prior_flag, degrade empty → None ✅
+- Mock eval 4/4 + avg specificity in output ✅
+- 365/365 tests ✅
+
+**Real-LLM ~$2:** lệnh sẵn: `python scripts/eval_agent.py --scenario scenario1 --n 3` — chờ top-up credit.
 
 ### [Session 55 — 2026-06-15] — Ngày 52: F2 Deploy↔code synergy
 

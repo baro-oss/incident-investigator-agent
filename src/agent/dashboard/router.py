@@ -30,6 +30,7 @@ from agent.dashboard.queries import (
     get_project_detail,
     get_all_tools_for_dashboard,
     get_specificity_data,
+    get_eval_comparison_data,
 )
 
 _HERE = Path(__file__).parent
@@ -866,6 +867,9 @@ async def dashboard_eval(
     # E12: specificity stats từ trace_events
     specificity_data = get_specificity_data()
 
+    # E13: A/B comparison with/without prior
+    eval_comparison = get_eval_comparison_data()
+
     return templates.TemplateResponse(request, "eval.html", _ctx(request, user,
         active="eval",
         eval_rows=eval_rows,
@@ -880,6 +884,7 @@ async def dashboard_eval(
         calib_feedback=calib_feedback,
         calib_adjustments=calib_adjustments,
         specificity_data=specificity_data,
+        eval_comparison=eval_comparison,
     ))
 
 

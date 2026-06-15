@@ -753,3 +753,35 @@ def get_specificity_data() -> Dict[str, Any]:
         "low_n":  sum(1 for s in scores if s < 0.40),
         "threshold": 0.40,
     }
+
+
+def get_eval_comparison_data() -> Dict[str, Any]:
+    """E13: So sánh avg_steps + avg_specificity với/không có prior (prior_flag).
+
+    Trả dict với 2 key: "with_prior" và "no_prior", mỗi key là dict hoặc None.
+    Degrade an toàn: trả {with_prior: None, no_prior: None} nếu bảng chưa có cột.
+    """
+    conn = open_db()
+    out: Dict[str, Any] = {"with_prior": None, "no_prior": None}
+    try:
+        rows = conn.execute("""
+            SELECT prior_flag,
+                   COUNT(*) AS n,
+                   AVG(steps_taken) AS avg_steps,
+                   AVG(specificity_score) AS avg_specificity,
+                   SUM(correct) AS ok
+            FROM eval_results
+            GROUP BY prior_flag
+        """).fetchall()
+        for r in rows:
+            d = dict(r)
+            d["avg_steps"] = round(d.get("avg_steps") or 0, 1)
+            d["avg_specificity"] = round(d.get("avg_specificity") or 0, 2) if d.get("avg_specificity") is not None else None
+            d["rate"] = round((d["ok"] / d["n"]) * 100) if d.get("n") else 0
+            key = "no_prior" if d.get("prior_flag") else "with_prior"
+            out[key] = d
+    except Exception:
+        pass
+    finally:
+        conn.close()
+    return out

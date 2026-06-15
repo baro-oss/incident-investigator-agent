@@ -190,6 +190,13 @@ _MOCK_CLASSES = {
 
 # ── Đánh giá một run ─────────────────────────────────────────────────────────
 
+def _get_specificity(state: InvestigationState) -> Optional[float]:
+    """Trích specificity_score từ verdict (None nếu chưa set)."""
+    if state.verdict:
+        return state.verdict.specificity_score
+    return None
+
+
 def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
     verdict = state.verdict
     if verdict is None:
@@ -197,6 +204,7 @@ def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
             "correct": False, "reason": "no_verdict", "confidence": "none",
             "steps": state.steps_taken, "recall_at_1": 0,
             "hallucination": 0, "token_total": state.total_tokens,
+            "specificity_score": None,
         }
 
     raw = (verdict.raw_text + " " + verdict.root_cause + " " + verdict.evidence_summary).lower()
@@ -242,12 +250,14 @@ def evaluate_run(state: InvestigationState, scenario_config: Dict) -> Dict:
         "recall_at_1": recall_at_1,
         "hallucination": hallucination,
         "token_total": token_total,
+        "specificity_score": _get_specificity(state),
     }
 
 
 def _save_eval_results_to_db(
     run_id: str, scenario_id: str, results: List[Dict],
     provider: str = "mock", model: str = "",
+    no_prior: bool = False,
 ) -> None:
     """Lưu kết quả eval vào bảng eval_results — qua storage seam (DB-agnostic)."""
     from agent.storage import get_database, get_db_path
@@ -255,28 +265,50 @@ def _save_eval_results_to_db(
     if not os.path.exists(get_db_path()):
         return
     now = datetime.now(timezone.utc).isoformat()
+    prior_flag = 1 if no_prior else 0
     try:
         db = get_database()
         with db.connection() as conn:
             for i, r in enumerate(results):
-                conn.execute("""
-                    INSERT INTO eval_results
-                        (run_id, scenario, run_number, correct, confidence, recall_at_1,
-                         steps_taken, hallucination, token_total, elapsed_s,
-                         provider, model, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    run_id, scenario_id, i + 1,
-                    int(r.get("correct", False)),
-                    r.get("confidence", "none"),
-                    r.get("recall_at_1", 0),
-                    r.get("steps", 0),
-                    r.get("hallucination", 0),
-                    r.get("token_total", 0),
-                    r.get("elapsed_s"),
-                    provider, model,
-                    now,
-                ))
+                try:
+                    conn.execute("""
+                        INSERT INTO eval_results
+                            (run_id, scenario, run_number, correct, confidence, recall_at_1,
+                             steps_taken, hallucination, token_total, elapsed_s,
+                             provider, model, created_at, specificity_score, prior_flag)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        run_id, scenario_id, i + 1,
+                        int(r.get("correct", False)),
+                        r.get("confidence", "none"),
+                        r.get("recall_at_1", 0),
+                        r.get("steps", 0),
+                        r.get("hallucination", 0),
+                        r.get("token_total", 0),
+                        r.get("elapsed_s"),
+                        provider, model, now,
+                        r.get("specificity_score"),
+                        prior_flag,
+                    ))
+                except Exception:
+                    # Fallback: schema cũ chưa có specificity_score/prior_flag
+                    conn.execute("""
+                        INSERT INTO eval_results
+                            (run_id, scenario, run_number, correct, confidence, recall_at_1,
+                             steps_taken, hallucination, token_total, elapsed_s,
+                             provider, model, created_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        run_id, scenario_id, i + 1,
+                        int(r.get("correct", False)),
+                        r.get("confidence", "none"),
+                        r.get("recall_at_1", 0),
+                        r.get("steps", 0),
+                        r.get("hallucination", 0),
+                        r.get("token_total", 0),
+                        r.get("elapsed_s"),
+                        provider, model, now,
+                    ))
     except Exception as e:
         print(f"[warn] Không lưu được eval_results: {e}")
 
@@ -290,6 +322,7 @@ async def run_scenario_n_times(
     budget: int,
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    no_prior: bool = False,
 ) -> List[Dict]:
     cfg = SCENARIOS[scenario_id]
     tools = get_tool_registry()
@@ -302,7 +335,8 @@ async def run_scenario_n_times(
             from agent.llm.factory import create_llm_client
             llm = create_llm_client(provider=provider, model=model)
 
-        engine = InvestigationEngine(llm=llm, tools=tools, step_budget=budget)
+        engine = InvestigationEngine(llm=llm, tools=tools, step_budget=budget,
+                                     no_prior=no_prior)
         t0 = time.time()
         state = await engine.run(
             symptom=cfg["symptom"],
@@ -318,15 +352,17 @@ async def run_scenario_n_times(
 
         mark = "✅" if result["correct"] else "❌"
         hall = "⚠️ hall" if result.get("hallucination") else ""
+        spec = result.get("specificity_score")
+        spec_str = f" spec={spec:.2f}" if spec is not None else ""
         print(f"  Run {i+1}: {mark} correct={result['correct']} conf={result['confidence']} "
               f"steps={result['steps']} recall@1={result.get('recall_at_1',0)} "
-              f"tokens={result.get('token_total',0)} {hall} ({elapsed:.1f}s)")
+              f"tokens={result.get('token_total',0)}{spec_str} {hall} ({elapsed:.1f}s)")
         print(f"         root_cause: {result['root_cause']}")
 
     return results
 
 
-def print_summary(scenario_id: str, results: List[Dict]) -> None:
+def print_summary(scenario_id: str, results: List[Dict], no_prior: bool = False) -> None:
     n = len(results)
     correct = sum(1 for r in results if r["correct"])
     conf_ok = sum(1 for r in results if r.get("conf_ok"))
@@ -334,13 +370,17 @@ def print_summary(scenario_id: str, results: List[Dict]) -> None:
     recall_rate = sum(r.get("recall_at_1", 0) for r in results) / n if n else 0
     hall_count = sum(r.get("hallucination", 0) for r in results)
     avg_tokens = sum(r.get("token_total", 0) for r in results) / n if n else 0
+    spec_list = [r["specificity_score"] for r in results if r.get("specificity_score") is not None]
+    avg_spec = sum(spec_list) / len(spec_list) if spec_list else None
 
     rate = correct * 100 // n if n else 0
     gate = "✅ PASS" if rate >= 70 else "❌ FAIL"
+    prior_label = " [no-prior]" if no_prior else ""
     print(f"\n{'='*58}")
-    print(f"  {scenario_id}: {correct}/{n} đúng root cause ({rate}%)  {gate}")
+    print(f"  {scenario_id}{prior_label}: {correct}/{n} đúng root cause ({rate}%)  {gate}")
     print(f"  Confidence OK: {conf_ok}/{n}  |  Avg steps: {avg_steps:.1f}")
-    print(f"  Recall@1: {recall_rate:.0%}  |  Hallucination: {hall_count}/{n}  |  Avg tokens: {avg_tokens:.0f}")
+    spec_str = f"  |  Avg specificity: {avg_spec:.2f}" if avg_spec is not None else ""
+    print(f"  Recall@1: {recall_rate:.0%}  |  Hallucination: {hall_count}/{n}  |  Avg tokens: {avg_tokens:.0f}{spec_str}")
     print(f"  Stop reasons: {set(r['stop_reason'] for r in results)}")
     print(f"{'='*58}")
 
@@ -357,6 +397,8 @@ async def main() -> None:
     parser.add_argument("--mock", action="store_true", help="Dùng mock LLM (không cần API key)")
     parser.add_argument("--provider", default=None, help="Override LLM provider (mặc định: env LLM_PROVIDER)")
     parser.add_argument("--model", default=None, help="Override LLM model (mặc định: env LLM_MODEL)")
+    parser.add_argument("--no-prior", action="store_true", dest="no_prior",
+                        help="E13 A/B: tắt E11 prior pre-seed để đo baseline không có prior")
     args = parser.parse_args()
 
     scenarios_to_run = (
@@ -370,9 +412,13 @@ async def main() -> None:
         provider_label = args.provider or os.environ.get("LLM_PROVIDER", "anthropic")
         model_label = args.model or os.environ.get("LLM_MODEL", "") or "(default)"
     mode = "MOCK LLM" if args.mock else f"REAL LLM [{provider_label}/{model_label}]"
+    prior_mode = "NO-PRIOR (A/B baseline)" if args.no_prior else "with-prior (E11 active)"
     print(f"\n{'='*58}")
     print(f"  Eval agent — {mode} — {args.n} runs/scenario — budget={args.budget}")
     print(f"  Kịch bản: {scenarios_to_run}")
+    print(f"  Prior: {prior_mode}")
+    if not args.no_prior:
+        print(f"  Tip: thêm --no-prior để đo baseline A/B (so sánh avg_steps + specificity)")
     print(f"{'='*58}")
 
     run_id = str(uuid.uuid4())[:12]
@@ -382,10 +428,13 @@ async def main() -> None:
         results = await run_scenario_n_times(
             sc, args.n, args.mock, args.budget,
             provider=args.provider, model=args.model,
+            no_prior=args.no_prior,
         )
         all_results[sc] = results
-        print_summary(sc, results)
-        _save_eval_results_to_db(run_id, sc, results, provider=provider_label, model=model_label)
+        print_summary(sc, results, no_prior=args.no_prior)
+        _save_eval_results_to_db(run_id, sc, results,
+                                 provider=provider_label, model=model_label,
+                                 no_prior=args.no_prior)
 
     # E8: Invalidate calibration cache so next investigation uses fresh data
     try:

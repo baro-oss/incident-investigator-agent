@@ -216,6 +216,39 @@
     {% endif %}
   </div>
 
+  <!-- E13: A/B Prior Comparison -->
+  <div class="card" style="grid-column:1/-1">
+    <h3 style="margin-bottom:12px">E13 — Prior Decay A/B (with-prior vs no-prior)</h3>
+    {% set wp = eval_comparison.with_prior %}
+    {% set np = eval_comparison.no_prior %}
+    {% if wp or np %}
+    <div class="stats-row" style="margin-bottom:12px">
+      <div class="stat-box">
+        <div class="sv" style="color:var(--high)">{{ wp.avg_steps if wp else '—' }}</div>
+        <div class="sl">Avg steps (with prior)</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--medium)">{{ np.avg_steps if np else '—' }}</div>
+        <div class="sl">Avg steps (no prior)</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--high)">{{ "%.2f"|format(wp.avg_specificity) if wp and wp.avg_specificity is not none else '—' }}</div>
+        <div class="sl">Avg specificity (with prior)</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--medium)">{{ "%.2f"|format(np.avg_specificity) if np and np.avg_specificity is not none else '—' }}</div>
+        <div class="sl">Avg specificity (no prior)</div>
+      </div>
+    </div>
+    <div class="meta">
+      Chạy <code>eval_agent.py --mock</code> (with prior) và <code>eval_agent.py --mock --no-prior</code> để có dữ liệu A/B.
+      Prior decay: half-life 30 ngày — pattern cũ trọng số thấp hơn pattern mới cùng count.
+    </div>
+    {% else %}
+    <div class="meta">Chưa có dữ liệu A/B. Chạy <code>eval_agent.py --mock</code> và <code>eval_agent.py --mock --no-prior</code> để so sánh.</div>
+    {% endif %}
+  </div>
+
   <!-- E12: Verdict Specificity Stats -->
   <div class="card" style="grid-column:1/-1">
     <h3 style="margin-bottom:12px">E12 — Verdict Specificity (từ trace_events)</h3>

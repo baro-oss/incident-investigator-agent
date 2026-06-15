@@ -777,10 +777,12 @@ class InvestigationEngine:
         tools: List[Tool],
         step_budget: int = 10,
         hypothesis_catalog=None,
+        no_prior: bool = False,  # E13: A/B eval — tắt E11 pre-seed để so sánh
     ) -> None:
         self.llm = llm
         self.tools = tools
         self.step_budget = step_budget
+        self._no_prior = no_prior
         # E6: build catalog index cho domain (default microservice)
         from agent.engine.hypothesis_catalog import (
             MICROSERVICE_CATALOG, build_catalog_index, build_rct_index,
@@ -823,13 +825,15 @@ class InvestigationEngine:
         )
 
         # E11: Pre-seed hypothesis open từ investigation_patterns của service này
+        # E13: bỏ qua nếu no_prior=True (A/B eval)
         _svc = service or (symptom.split(":")[0].strip() if ":" in symptom else "")
-        prior_hyps = _preseed_hypotheses(project_id, _svc, self._rct_index)
-        state.hypotheses.extend(prior_hyps)
-        if prior_hyps:
-            logger.info("[%s] E11 pre-seed %d hypothesis(es) cho service='%s': %s",
-                        investigation_id, len(prior_hyps), _svc,
-                        [h.id for h in prior_hyps])
+        if not self._no_prior:
+            prior_hyps = _preseed_hypotheses(project_id, _svc, self._rct_index)
+            state.hypotheses.extend(prior_hyps)
+            if prior_hyps:
+                logger.info("[%s] E11 pre-seed %d hypothesis(es) cho service='%s': %s",
+                            investigation_id, len(prior_hyps), _svc,
+                            [h.id for h in prior_hyps])
 
         logger.info("[%s] [%s] Bắt đầu điều tra (via %s): %s",
                     investigation_id, project_id,
