@@ -1167,3 +1167,56 @@ async def scheduled_delete(
     from agent.intake.scheduler import delete_trigger
     delete_trigger(trigger_id)
     return RedirectResponse("/dashboard/scheduled", status_code=303)
+
+
+# ── Investigation export (Ngày 34) ──────────────────────────────────────────
+
+@router.get("/investigations/{investigation_id}/export")
+async def investigation_export(
+    request: Request,
+    investigation_id: str,
+    format: str = "json",
+    user: dict = Depends(require_login),
+):
+    """Export một investigation ra JSON hoặc CSV."""
+    import csv
+    import io
+
+    from agent.dashboard.queries import get_investigation_detail
+
+    detail = get_investigation_detail(investigation_id)
+    if not detail:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["investigation_id", "step", "timestamp", "event_type", "tool", "summary"])
+        for ev in detail.get("raw_events", []):
+            payload = ev.get("payload", {})
+            tool = payload.get("tool", "")
+            summary = payload.get("summary", payload.get("root_cause", ""))
+            writer.writerow([
+                investigation_id,
+                ev.get("step", ""),
+                ev.get("timestamp", ""),
+                ev.get("event_type", ""),
+                tool,
+                summary,
+            ])
+        csv_bytes = output.getvalue().encode("utf-8")
+        fname = f"investigation_{investigation_id}.csv"
+        return StreamingResponse(
+            iter([csv_bytes]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
+
+    # default: JSON
+    fname = f"investigation_{investigation_id}.json"
+    payload_bytes = json.dumps(detail, ensure_ascii=False, indent=2).encode("utf-8")
+    return StreamingResponse(
+        iter([payload_bytes]),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )

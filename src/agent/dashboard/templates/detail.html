@@ -15,6 +15,10 @@
     <div style="display:flex;gap:8px">
       <a href="/dashboard/investigations/{{ inv.investigation_id }}/diff"
          class="btn btn-ghost" style="font-size:12px;text-decoration:none">⇄ Diff</a>
+      <a href="/dashboard/investigations/{{ inv.investigation_id }}/export?format=json"
+         class="btn btn-ghost" style="font-size:12px;text-decoration:none" title="Export JSON">↓ JSON</a>
+      <a href="/dashboard/investigations/{{ inv.investigation_id }}/export?format=csv"
+         class="btn btn-ghost" style="font-size:12px;text-decoration:none" title="Export CSV">↓ CSV</a>
       <form method="post" action="/dashboard/investigations/{{ inv.investigation_id }}/replay"
             onsubmit="return confirm('Chạy lại investigation này?')">
         <button type="submit" class="btn btn-ghost" style="font-size:12px">⟳ Replay</button>

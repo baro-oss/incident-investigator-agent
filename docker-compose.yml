@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  agent:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist DB và giữ investigation.db ngoài container
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  mcp-server:
+    build: .
+    command: python scripts/start_mcp_server.py
+    ports:
+      - "9000:9000"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    profiles:
+      - mcp  # chỉ bật khi: docker compose --profile mcp up
