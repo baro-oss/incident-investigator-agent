@@ -12,12 +12,27 @@ Tham số hóa để dễ tái tạo biến thể khi bị nghi hardcode.
 from __future__ import annotations
 
 import json
+import os
 import random
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Tuple
+
+ROOT = Path(__file__).parent.parent
+
+
+def _open_conn():
+    """Mở connection theo DB_BACKEND (sqlite / postgres)."""
+    if os.environ.get("DB_BACKEND", "sqlite").lower() == "postgres":
+        sys.path.insert(0, str(ROOT / "src"))
+        from agent.storage.db import open_db  # type: ignore
+        return open_db()
+    path = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "data" / "investigation.db")
+    conn = sqlite3.connect(path)
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
 
 # ── Cấu hình tham số hóa ─────────────────────────────────────────────────────
 
@@ -217,8 +232,7 @@ def load_catalog(catalog_path: Path) -> List[tuple]:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def seed(db_path: str, catalog_path: str) -> None:
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn = _open_conn()
 
     # Xóa data cũ của scenario này trước khi seed lại
     conn.execute("DELETE FROM logs WHERE scenario = ?", (SCENARIO,))
@@ -255,16 +269,22 @@ def seed(db_path: str, catalog_path: str) -> None:
     print("Loading catalog...")
     catalog_rows = load_catalog(Path(catalog_path))
     conn.executemany(
-        "INSERT OR REPLACE INTO service_catalog "
+        "INSERT INTO service_catalog "
         "(service, description, depends_on, baseline_error_rate, baseline_latency_p99) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT (service) DO UPDATE SET "
+        "description=EXCLUDED.description, depends_on=EXCLUDED.depends_on, "
+        "baseline_error_rate=EXCLUDED.baseline_error_rate, "
+        "baseline_latency_p99=EXCLUDED.baseline_latency_p99",
         catalog_rows,
     )
     print(f"  {len(catalog_rows)} services in catalog")
 
     conn.commit()
     conn.close()
-    print(f"\nScenario 1 seeded → {db_path}")
+    backend = os.environ.get("DB_BACKEND", "sqlite").lower()
+    target = os.environ.get("DATABASE_URL", db_path) if backend == "postgres" else db_path
+    print(f"\nScenario 1 seeded → {target}")
     print(f"  Deploy: {TARGET_SERVICE} {VERSION_FAULTY} at {DEPLOY_TIME}")
     print(f"  Spike:  timeout rate {SPIKE_TIMEOUT_RATE*100:.0f}% from {SPIKE_START}")
 

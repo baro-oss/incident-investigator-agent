@@ -15,9 +15,9 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 ✅ HOÀN TẤT (46–50 — 262/262 tests) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate. Phase 10 ✅ HOÀN TẤT (51–55 — 444/444 tests) — agent đọc mã nguồn qua external MCP (GitHub/GitLab): F1 code seam + READ-ONLY guard · F2 deploy↔code synergy + E10/E11/E12 · V1 eval harness + E13 prior decay · P2 distill tổng quát · OPS1 catalog editor · T3 coverage 55%.**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 ✅ HOÀN TẤT (46–50 — 262/262 tests) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate. Phase 10 ✅ HOÀN TẤT (51–55 — 444/444 tests) — agent đọc mã nguồn qua external MCP (GitHub/GitLab): F1 code seam + READ-ONLY guard · F2 deploy↔code synergy + E10/E11/E12 · V1 eval harness + E13 prior decay · P2 distill tổng quát · OPS1 catalog editor · T3 coverage 55%. Phase 11 📋 ĐÃ LÊN KẾ HOẠCH (56–60, CHƯA CODE) — Postgres Tier-2 + cloud container deploy: PG backend qua storage seam · dialect parity + đóng rò seam · Dockerfile prod + secrets fail-fast · SIGTERM drain + trace retention + bug B1/B2. Single-instance, deploy fresh.**
 
-Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`. Plan Phase 9 (ĐÃ XONG): `docs/14-roadmap-phase-9.md`. **Plan Phase 10 (ĐÃ XONG): `docs/15-roadmap-phase-10.md`.**
+Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`. Plan Phase 9 (ĐÃ XONG): `docs/14-roadmap-phase-9.md`. Plan Phase 10 (ĐÃ XONG): `docs/15-roadmap-phase-10.md`. **Plan Phase 11 (KẾ HOẠCH TIẾP THEO): `docs/16-roadmap-phase-11.md`.**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
@@ -70,17 +70,29 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 
 **Cổng Phase 9 PASS:** E11 pre-seed + 27 tests · E10 hint+parity + 21 tests · E12 gate+downgrade+dashboard + 41 tests · nguyên tắc #2 giữ vững · mock eval 4/4 · 262/262 tests · CI xanh. Chi tiết: `docs/14-roadmap-phase-9.md`.
 
-**Phase 10 📋 ĐÃ LÊN KẾ HOẠCH (51–55, CHƯA CODE) — agent đọc mã nguồn qua external MCP (`docs/15-roadmap-phase-10.md`):**
+**Phase 10 ✅ HOÀN TẤT (51–55 — 444/444 tests) — agent đọc mã nguồn qua external MCP (`docs/15-roadmap-phase-10.md`):**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
-| 51 | F1 — Code seam over MCP | `code_distill` wrapper (raw diff/file → Observation chưng cất, P#1) · risk interpreter generic · `service_repos` mapping · READ-ONLY guard (chặn write/PR/merge) · UI repo config | ☐ |
-| 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` (giữ nguyên) → đọc diff version nghi vấn qua MCP · catalog code-aware (gắn code tool vào `relevant_tools` deploy_bug → E10/E11 tự kích) · code→E12 specificity + grounding | ☐ |
-| 53 | V1 + E13 — Eval harness + prior decay | Đo avg-steps/specificity before-after (mock; real-LLM ~$2 chờ credit) · time-weight `investigation_patterns` (prior decay) + refresh calibration | ☐ |
-| 54 | P2 + OPS1 — Distill tổng quát + catalog editor | Distill mọi external MCP (sửa truncate 500-char) + budget · catalog editor UI (thêm hypothesis/keyword/tool+repo mapping không sửa Python) | ☐ |
-| 55 | T3 + Close — Coverage + Cổng P10 | Coverage dashboard/server/runner + CI lớp code · docs/README · audit READ-ONLY + degrade safe · đóng pha | ☐ |
+| 51 | F1 — Code seam over MCP | `code_distill` wrapper (raw diff/file → Observation chưng cất, P#1) · risk interpreter generic · `service_repos` mapping · READ-ONLY guard (chặn write/PR/merge) · UI repo config | ✅ |
+| 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` (giữ nguyên) → đọc diff version nghi vấn qua MCP · catalog code-aware (gắn code tool vào `relevant_tools` deploy_bug → E10/E11 tự kích) · code→E12 specificity + grounding | ✅ |
+| 53 | V1 + E13 — Eval harness + prior decay | Đo avg-steps/specificity before-after (mock; real-LLM ~$2 chờ credit) · time-weight `investigation_patterns` (prior decay) + refresh calibration | ✅ |
+| 54 | P2 + OPS1 — Distill tổng quát + catalog editor | Distill mọi external MCP (sửa truncate 500-char) + budget · catalog editor UI (thêm hypothesis/keyword/tool+repo mapping không sửa Python) | ✅ |
+| 55 | T3 + Close — Coverage + Cổng P10 | Coverage dashboard/server/runner + CI lớp code · docs/README · audit READ-ONLY + degrade safe · đóng pha | ✅ |
 
-**Ràng buộc lõi Phase 10:** hệ thống KHÔNG quản lý source — code chỉ đọc qua external MCP (GitHub/GitLab là extension) · `get_recent_deploys` giữ nguyên · READ-ONLY tuyệt đối với code · real-LLM eval defer (mock + chờ credit) · Tier-2/bidirectional/horizontal vẫn Future.
+**Ràng buộc lõi Phase 10:** hệ thống KHÔNG quản lý source — code chỉ đọc qua external MCP (GitHub/GitLab là extension) · `get_recent_deploys` giữ nguyên · READ-ONLY tuyệt đối với code · real-LLM eval defer (mock + chờ credit) · bidirectional/horizontal vẫn Future.
+
+**Phase 11 🔄 ĐANG LÀM (56–60) — Postgres Tier-2 + deploy lên GreenNode AgentBase (`docs/16-roadmap-phase-11.md`):**
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|-----------|
+| 56 | PG backend adapter + local infra | psycopg connection shim (`?`→`%s`, dict-row, lastrowid) + connection pool qua storage seam · `schema_postgres.sql` + init/seed PG · `docker-compose` postgres local | ✅ |
+| 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR`→`ON CONFLICT` · `datetime/julianday` · **fix `auth/rbac.py` `import sqlite3`** · CI matrix `DB_BACKEND=[sqlite,postgres]` · 444 tests xanh trên cả 2 | ☐ |
+| 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** · Dockerfile non-root + multi-stage + amd64 + HEALTHCHECK · secrets fail-fast (prod) · `/health/ready` (DB ping) vs `/health` · **B1: `_make_error_state` truyền project_id** | ☐ |
+| 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight · JSON log opt-in · `/health` sâu · trace_events retention (TTL) · **B2: 2 `_emit_trace` thêm project_id (parity graph.py)** | ☐ |
+| 60 | Deploy lên AgentBase + smoke + Cổng P11 | build amd64 → managed CR (`vcr.vngcloud.vn`) → `runtime.sh create` (`min=max=1`) · `docker-compose.prod` + runbook/README/api docs · E2E smoke (PG) · audit READ-ONLY/degrade · đóng pha | ☐ |
+
+**Ràng buộc lõi Phase 11:** Postgres = backend runtime prod (Tier-2 kích hoạt theo lệnh người dùng — **bắt buộc vì AgentBase disk ephemeral, không PVC → SQLite không bền**) · SQLite vẫn default dev, seam giữ cả 2 · **nền tảng = GreenNode AgentBase**: port **8080** + build **amd64** + deploy qua CR/`runtime.sh` (KHÔNG `kubectl`) + 4 biến `GREENNODE_*` auto-inject không set tay · **single-instance** = `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · deploy fresh (init+seed PG, không migrate data SQLite cũ) · DB swap tuyệt đối không rò lên engine/tools · READ-ONLY + 4 nguyên tắc giữ. Skills tham chiếu: `greennode-agentbase-skills/`.
 
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 
@@ -91,7 +103,7 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **KHÔNG.** Khi thấy mình định làm bất kỳ cái nào dưới đây mà người dùng chưa yêu cầu rõ, DỪNG và hỏi trước.
 
 ### Vẫn còn trong danh sách KHÔNG (chưa làm / chưa được phép):
-- ❌ KHÔNG chạy Postgres / MySQL / vector DB **ở runtime** → **giữ SQLite WAL**. *(Phase 5 Ngày 21 thêm storage **seam** abstraction để đổi backend rẻ về sau — runtime VẪN SQLite; migration thật = Tier-2, cần lệnh rõ.)*
+- ⚠️ **Postgres Tier-2 ĐÃ ĐƯỢC KÍCH HOẠT cho Phase 11** (người dùng ra lệnh 2026-06-15, deploy cloud). PG = backend runtime **prod** qua `DB_BACKEND=postgres` + `DATABASE_URL`; **SQLite WAL vẫn là default dev/test** qua cùng storage seam (Phase 5 Ngày 21). ❌ KHÔNG MySQL/vector DB ở runtime · ❌ KHÔNG bỏ SQLite. DB swap **chỉ dưới seam** — engine/tools/dashboard/intake KHÔNG đổi.
 - ❌ KHÔNG Kafka / message broker → **asyncio background task**
 - ❌ KHÔNG sinh GB data thật → **vài nghìn dòng/kịch bản**; dùng `total_count` lớn để giả lập quy mô
 - ❌ KHÔNG OpenTelemetry → **trace ghi SQLite + Langfuse opt-in** là đủ
@@ -115,7 +127,8 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 **Phase 8** ✅ (Ngày 36–45, `docs/13`): engine domain-agnostic (hypothesis catalog theo miền) · hợp nhất loop/graph path + multi-agent parity · real-LLM calibration đóng vòng · test adapters/output/infra + CI gate · prompt caching · DX/docs.
 **Phase 9** ✅ (Ngày 46–50, `docs/14`): engine lõi thông minh hơn — E10 hypothesis-guided tool sequencing · E11 cross-investigation service prior · E12 verdict specificity gate. 100% engine-core, không cạnh mới.
 **Phase 10** ✅ (Ngày 51–55, `docs/15`): agent đọc mã nguồn qua external MCP (GitHub/GitLab) — code-distill seam (P#1) + READ-ONLY guard + `service_repos` mapping · synergy deploy↔code (E10/E11) + code→E12 specificity · eval harness (mock) + prior decay · distill tổng quát + catalog editor · coverage 55%/CI. 444/444 tests.
-**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration / code action (phá READ-ONLY, cần duyệt) · horizontal scale seam (hoàn thiện Redis SSE stub) · real-LLM eval đầy đủ (chờ credit, harness từ P10).
+**Phase 11** 📋 (Ngày 56–60, `docs/16`, CHƯA CODE): Postgres Tier-2 + deploy lên **GreenNode AgentBase** — PG backend qua storage seam (psycopg shim + pool, **bắt buộc vì AgentBase disk ephemeral**) · dialect parity + đóng rò seam `rbac.py` + CI matrix sqlite|postgres · **port 8080 + build amd64** + Dockerfile prod (non-root/healthcheck/secrets fail-fast) · deploy qua managed CR + `runtime.sh` (single-instance `min=max=1`) · SIGTERM drain + trace retention · bug fix B1 (project_id ở error state) + B2 (project_id ở trace tool). Deploy fresh.
+**Future:** MySQL backend (seam sẵn) · bidirectional integration / code action (phá READ-ONLY, cần duyệt) · horizontal scale seam (externalize queue/dedup/SSE + Redis, cho multi-replica) · real-LLM eval đầy đủ (chờ credit, harness từ P10).
 
 ---
 
@@ -126,7 +139,7 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 | Ngôn ngữ | Python 3.14 (nâng từ 3.9 ở Ngày 45) |
 | Agent loop | Tự viết (loop adaptive, hàm pure) |
 | LLM | Anthropic API (factory hỗ trợ OpenAI-compat: Groq, Mistral, ...) |
-| Storage | SQLite WAL — logs, metrics, deploys, trace_events, mcp_servers, projects, project_services |
+| Storage | Storage seam (`DB_BACKEND`) — **SQLite WAL** (default dev) · **Postgres** (prod, Tier-2 từ Phase 11). Bảng: logs, metrics, deploys, trace_events, mcp_servers, projects, project_services |
 | HTTP server | FastAPI + uvicorn |
 | HTTP client | aiohttp (MCP client, Telegram push) |
 | MCP protocol | JSON-RPC 2.0 over HTTP (không dùng mcp SDK) |
@@ -217,7 +230,8 @@ Chỉ synthetic data, tool **READ-ONLY**, không PII, không kết nối hệ th
 │   ├── 12-roadmap-phase-6.md  ← Phase 6 (đã xong)
 │   ├── 13-roadmap-phase-8.md  ← Phase 8 (đã xong)
 │   ├── 14-roadmap-phase-9.md  ← Phase 9 (đã xong)
-│   └── 15-roadmap-phase-10.md ← KẾ HOẠCH TIẾP THEO (Phase 10, Ngày 51–55, chưa code)
+│   ├── 15-roadmap-phase-10.md ← Phase 10 (đã xong)
+│   └── 16-roadmap-phase-11.md ← KẾ HOẠCH TIẾP THEO (Phase 11, Ngày 56–60, chưa code)
 ├── data/
 │   ├── schema.sql              ← DDL đầy đủ (có projects, project_services, mcp_servers)
 │   ├── init_db.py

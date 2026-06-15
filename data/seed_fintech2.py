@@ -299,9 +299,12 @@ def seed() -> None:
     print("  Generating ft_merchants ...")
     merch_rows = generate_merchants()
     conn.executemany(
-        "INSERT OR REPLACE INTO ft_merchants "
+        "INSERT INTO ft_merchants "
         "(id, scenario, name, category, status, notes) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?) "
+        "ON CONFLICT (id) DO UPDATE SET "
+        "scenario=EXCLUDED.scenario, name=EXCLUDED.name, category=EXCLUDED.category, "
+        "status=EXCLUDED.status, notes=EXCLUDED.notes",
         merch_rows,
     )
     conn.commit()

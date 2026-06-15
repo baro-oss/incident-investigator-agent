@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 10 ✅ HOÀN TẤT (51–55). **444/444 tests. CI xanh.** Ngày 51–55 ✅ XONG. **Phase 10 ĐÓNG.**
+**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 56 ✅ XONG** — PG backend adapter + local infra. 444/444 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
 **Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
-**Kế hoạch kế tiếp:** Phase 11 (chưa lên kế hoạch). Future: real-LLM eval (chờ credit) · Tier-2 Postgres · bidirectional output · horizontal scale seam.
+**Kế hoạch kế tiếp:** Phase 11 (Ngày 56–60) — kích hoạt Tier-2 Postgres (lệnh người dùng 2026-06-15) **+ deploy lên GreenNode AgentBase** (skills: `greennode-agentbase-skills/`). Nền tảng ràng buộc: **port 8080**, build **amd64**, deploy qua managed CR + `runtime.sh` (KHÔNG k8s/kubectl), single-instance `min=max=1`, **disk ephemeral → Postgres bắt buộc** (không PVC, SQLite không bền). Deploy fresh + docker-compose PG local. Bao gồm bug fix B1/B2 + trace retention. Future: MySQL backend · bidirectional output · horizontal scale (multi-replica) · k8s self-managed · LLM qua MaaS · real-LLM eval (chờ credit).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -129,6 +129,79 @@
 **Chốt Phase 10 (đã xác nhận với người dùng):** code đọc **chỉ qua external MCP** (GitHub/GitLab = extension, KHÔNG quản lý source trong hệ thống, KHÔNG local diff) · `get_recent_deploys` giữ nguyên · **READ-ONLY tuyệt đối với code** · real-LLM eval = mock + defer (chờ credit) · Tier-2/bidirectional/horizontal vẫn Future · 5 ngày (dồn khối lượng từ bản 10 ngày, không cắt scope).
 **Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
 **Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
+
+## Tiến độ Phase 11 (docs/16-roadmap-phase-11.md) — 📋 ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 56 | PG backend adapter + local infra | `postgres_backend.py`: thay stub bằng psycopg connection shim (`.execute` tự cursor + `?`→`%s`, dict-row key+index, `lastrowid` qua RETURNING, IntegrityError) + `psycopg_pool` connection pool · `data/schema_postgres.sql` (SERIAL, bỏ PRAGMA) · `init_db.py` backend-aware · seed/migrate chạy trên PG · `docker-compose.yml` service postgres local · `.env.example` +DB_BACKEND/DATABASE_URL · extra `[postgres]` | ✅ |
+| 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR IGNORE/REPLACE`→`ON CONFLICT` · `datetime()/julianday()` → Python/branch · **fix `auth/rbac.py` `import sqlite3`→open_db()** · `migrate_*.py` exception trung lập · CI `DB_BACKEND=[sqlite,postgres]` matrix (services postgres) · **444 tests xanh trên cả 2** + eval 4/4 PG | ☐ |
+| 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** trong `start_server.py`/Dockerfile/health tests · Dockerfile multi-stage non-root + amd64 + `EXPOSE 8080` + HEALTHCHECK + `.[postgres]` + entrypoint init/migrate · `.dockerignore` (.env/.db/.venv) · secrets fail-fast khi `APP_ENV=production` (SESSION_SECRET_KEY/SECRET_KEY) · `/health/ready` (DB ping + backend) tách `/health` (liveness) · `.env.example` ghi chú 4 biến `GREENNODE_*` auto-inject không set tay · **B1: `_make_error_state` truyền project_id+available_services** | ☐ |
+| 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight (A1 verify+mở rộng) + ghi rõ queue semantics restart · JSON log opt-in (`LOG_FORMAT=json`) · `/health` sâu (DB+backend+MCP reachable+LLM key) · trace_events retention (`TRACE_RETENTION_DAYS`) · **B2: `loop.py:1069,1090` 2 `_emit_trace` thêm `project_id=state.project_id` (parity graph.py)** + perf re-check pool | ☐ |
+| 60 | Deploy lên AgentBase + smoke + Cổng P11 | `docker-compose.prod.yml` (app+postgres) · **runbook AgentBase**: build amd64 → managed CR (`vcr.vngcloud.vn`, `cr.sh docker-login`) → `runtime.sh create --from-cr --min/max-replicas 1` → poll ACTIVE → `<endpoint>/health` 200 · `deploy/k8s/` skeleton **HẠ xuống Future** (deploy qua runtime.sh, không kubectl) · README/api Deploy-AgentBase section (port 8080/amd64/CR/env/auto-inject) · E2E smoke (PG, trigger→điều tra→Telegram) · audit READ-ONLY/4 nguyên tắc/degrade (DB down→ready đỏ) · đóng pha | ☐ |
+
+**Chốt Phase 11 (đã xác nhận với người dùng — 2026-06-15):** ① **Postgres ngay** (Tier-2 kích hoạt) — PG backend prod, SQLite vẫn default dev, seam giữ cả 2; **bắt buộc vì AgentBase disk ephemeral (không PVC) → SQLite không bền qua deploy** · ② **single-instance** = AgentBase `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · ③ **deploy fresh** (chỉ init+seed PG, không migrate data SQLite cũ) · ④ **docker-compose chạy PG local** trước khi đẩy cloud · ⑤ không giới hạn khối lượng/ngày · ⑥ **nền tảng = GreenNode AgentBase**: port 8080 + build amd64 + deploy qua CR/`runtime.sh` + 4 biến `GREENNODE_*` auto-inject không set tay (skills: `greennode-agentbase-skills/`).
+**Xương sống KHÔNG cắt:** D56+D57 (PG parity + 444 tests xanh trên PG + đóng rò seam) · D58 (**port 8080** + container+secrets+B1) · D59 B2. Cắt nếu hụt giờ: deploy AgentBase thật → giữ runbook+compose.prod smoke (D60) → JSON logging (D59) → retention qua scheduler (D59, giữ script). **Port 8080/amd64 = hợp đồng cứng, không cắt.**
+**Bất biến:** DB swap chỉ dưới seam (`open_db()`/`IntegrityError` trung lập, không rò `import sqlite3` ngoài `sqlite_backend.py`) · READ-ONLY · 4 nguyên tắc · regression gate mỗi ngày (444 tests + eval 4/4 + 2 KB E2E + Telegram; từ D57 trên cả 2 backend).
+
+### [Session 60 — 2026-06-15] — Ngày 56: PG backend adapter + local infra
+
+**Đã làm:**
+- `src/agent/storage/postgres_backend.py` (rewrite từ stub): psycopg3 shim hoàn chỉnh — `_translate()` (`%`→`%%` trước, `?`→`%s`, `INSERT OR IGNORE`→`ON CONFLICT DO NOTHING`) · `_PGRow` (key+index+iter+dict()) · `_PGCursor` (lastrowid, fetchall, fetchone) · `_PGConnection` (execute/executemany/executescript/commit/rollback/close→pool) · `_SERIAL_ID_TABLES` → inject `RETURNING id` · `psycopg_pool.ConnectionPool` module-level lazy init.
+- `data/schema_postgres.sql` (mới): tương đương schema.sql dialect PG — `BIGSERIAL PRIMARY KEY`, bỏ PRAGMA, giữ IF NOT EXISTS/UNIQUE/FK CASCADE/partial index.
+- `data/init_db.py` (rewrite): backend-aware — `DB_BACKEND=sqlite` → `sqlite3.connect` + PRAGMA WAL · `DB_BACKEND=postgres` → `open_db()` → `executescript(schema_postgres.sql)` · redact password khi in URL.
+- `data/seed_scenario1.py`: thêm `_open_conn()` (sqlite/postgres branch) · `INSERT OR REPLACE INTO service_catalog` → `ON CONFLICT (service) DO UPDATE SET`.
+- `data/seed_scenario2.py`, `seed_scenario3.py`, `seed_scenario4.py`: thêm `_open_conn()` (import os/sys/ROOT) · `main()` dùng `_open_conn()` thay `sqlite3.connect(DB_PATH)` · bỏ `conn.row_factory = sqlite3.Row`.
+- `data/seed_fintech1.py`, `seed_fintech2.py`: `INSERT OR REPLACE INTO ft_merchants` → `ON CONFLICT (id) DO UPDATE SET`.
+- `docker-compose.yml`: thêm service `postgres` (postgres:16-alpine, named volume `pgdata`, healthcheck pg_isready, profile `postgres`) + `volumes: pgdata:`.
+- `.env.example`: thêm `DB_BACKEND=sqlite`, `DATABASE_URL=` (với comment format), ghi chú 4 biến `GREENNODE_*` auto-inject (không set tay).
+- `pyproject.toml`: thêm `[project.optional-dependencies] postgres = ["psycopg[binary]>=3.1.0", "psycopg-pool>=3.2.0"]`.
+- `src/agent/storage/db.py`: cập nhật docstring (bỏ "stub Tier-2"), thông báo lỗi rõ hơn.
+
+**Cổng Ngày 56 PASS:**
+- `postgres_backend.py` import OK (psycopg installed) ✅
+- `init_db.py` SQLite init sạch ✅
+- `seed_scenario1.py` + `seed_scenario2.py` chạy trên SQLite ✅
+- Tất cả seed files parse clean (ast.parse) ✅
+- **444/444 tests SQLite xanh** ✅
+- `docker-compose.yml` syntax OK (postgres service + pgdata volume) ✅
+
+**Ghi chú kỹ thuật quan trọng:**
+- Thứ tự `_translate()`: `%` → `%%` TRƯỚC rồi `?` → `%s` (nếu đảo: `%s` bị bắt thành `%%s`)
+- `executemany()` dùng plain cursor (không dict_row) vì chỉ write, không cần row access
+- `_SERIAL_ID_TABLES` inject `RETURNING id` — chỉ các bảng này (`mcp_servers`, `logs`, `metrics`, `deploys`, `trace_events`, `eval_results`, `investigation_patterns`); TEXT PK tables không cần
+- `close()` → `pool.putconn()` (trả về pool, không đóng TCP)
+- Docker compose profile `postgres` → chỉ bật khi cần: `docker compose --profile postgres up -d postgres`
+
+**Chưa làm (Ngày 57+):**
+- Dialect parity còn lại: `auth/rbac.py` leak `import sqlite3` (DB3 bug) → D57
+- CI matrix `DB_BACKEND=[sqlite,postgres]` → D57
+- 444 tests xanh trên PG → D57 (cần postgres service chạy)
+- Port 8000→8080 (HARD AgentBase), Dockerfile prod → D58
+- B1/B2 fix → D58/D59
+
+### [Session 59 — 2026-06-15] — Lập kế hoạch Phase 11 (Ngày 56–60) + session review
+
+**Bối cảnh:** Phase 10 xong (444/444 tests). Session này **KHÔNG code** — đọc lại engine/MCP/runner/memory (`loop.py`, `mcp_client.py`, `runner.py`, `patterns.py`, `state.py`, `specificity.py`, `graph.py`, `storage/db.py`, `sqlite_backend.py`, `postgres_backend.py`) → tổng hợp hệ thống + tìm bug + lập Phase 11. Người dùng muốn deploy container lên cloud + cân nhắc Postgres.
+
+**Bug/nợ phát hiện (cơ sở Phase 11):**
+- **B1 (CAO):** `runner.py:_make_error_state` mất `project_id` → timeout/error route sai kênh project (multi-tenant). → fix D58.
+- **B2 (CAO):** `loop.py:1069,1090` 2 `_emit_trace` (`tool_call`/`tool_result`) thiếu `project_id` (graph.py đã đúng) → trace bước tool ghi vào "default", parity loop↔graph lệch. → fix D59.
+- **DB3 (rò seam):** `auth/rbac.py` `import sqlite3` trực tiếp, bypass dispatcher → vỡ trên PG. → fix D57.
+- **DB4 (perf):** `open_db()` gọi rất nhiều (mỗi `_emit_trace`/bước); SQLite rẻ nhưng PG cần connection pool. → D56 pool.
+- **OPS2:** trace_events phình vô hạn (A3 có config, chưa enforce cleanup). → D59 retention.
+- Nợ nhẹ (chưa lên lịch): `_distill_external_text` lấy head không "đại diện" + không tự diễn giải (soft P#1) · `get_warm_start_hint` không áp decay (E13 chỉ ở get_service_priors) · `get_service_priors` prefilter count thô có thể bỏ pattern rất mới · `_classify_root_cause` "unavailable"→provider_down trước processor_timeout.
+
+**Quyết định chốt (qua AskUserQuestion):** Postgres ngay · single-instance · deploy fresh (init+seed PG) · docker-compose PG local · không giới hạn khối lượng/ngày. → Tier-2 **kích hoạt** (rule CLAUDE.md "cần lệnh rõ" được người dùng ra lệnh).
+
+**Đã làm (3 file, không động code):**
+- `docs/16-roadmap-phase-11.md` (mới) — kế hoạch Ngày 56–60, format Làm/Cổng như docs/11–15; bảng kiểm 4 nguyên tắc + thay đổi kiến trúc Tier-2; thứ tự cắt; Future.
+- `CLAUDE.md` — header giai đoạn + bảng Phase 10 ☐→✅ + bảng Phase 11 + rule Postgres (Tier-2 kích hoạt) + Stack table Storage (seam SQLite/PG) + roadmap pitch + Future + cấu trúc file (docs/15 xong, thêm docs/16).
+- `BUILD_STATE.md` — header trạng thái + bảng Tiến độ Phase 11 + entry này.
+
+**Chưa làm:** chưa bắt đầu code Ngày 56 (chờ session mới khởi động). B1/B2 chưa fix (nằm trong D58/D59).
+
+**Addendum (cùng ngày) — review nền tảng AgentBase + cập nhật roadmap:** Người dùng hỏi giữ SQLite có giữ được data qua deploy không → đọc `greennode-agentbase-skills/` (runtime-contract.md + agentbase-deploy SKILL + runtime-ops.md). Phát hiện quyết định: ① AgentBase = serverless container, **chỉ enforce port 8080 + `GET /health` 200** · ② **disk ephemeral, KHÔNG có volume/PVC** trong API create/update → **SQLite không thể bền** qua deploy/restart/scale → **Postgres bắt buộc** (chốt Tier-2) · ③ deploy = build **amd64** → managed CR (`vcr.vngcloud.vn`) → `runtime.sh create`, KHÔNG kubectl → **k8s skeleton hạ xuống Future** · ④ env bơm qua `--env-file`; 4 biến `GREENNODE_CLIENT_ID/CLIENT_SECRET/AGENT_IDENTITY/ENDPOINT_URL` auto-inject, không set tay · ⑤ single-instance = `min=max=1 replica` (lý do cứng: in-memory state split-brain nếu >1) · ⑥ MaaS OpenAI-compat là tuyến LLM tùy chọn (factory đã hỗ trợ). → Cập nhật `docs/16` (thêm section "Ràng buộc nền tảng AgentBase", PLAT1/PLAT2, D58 port 8080, D60 deploy AgentBase), `CLAUDE.md` (bảng+pitch+ràng buộc lõi), `BUILD_STATE.md` (header+bảng+chốt). Vẫn **không động code**.
 
 ### [Session 58 — 2026-06-15] — Ngày 55: T3+Close Coverage + Cổng Phase 10
 

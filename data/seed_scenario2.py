@@ -19,12 +19,26 @@ Tín hiệu âm tính QUAN TRỌNG:
 from __future__ import annotations
 
 import json
+import os
 import random
 import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List
+
+ROOT = Path(__file__).parent.parent
+
+
+def _open_conn():
+    """Mở connection theo DB_BACKEND (sqlite / postgres)."""
+    if os.environ.get("DB_BACKEND", "sqlite").lower() == "postgres":
+        sys.path.insert(0, str(ROOT / "src"))
+        from agent.storage.db import open_db  # type: ignore
+        return open_db()
+    conn = sqlite3.connect(str(ROOT / "data" / "investigation.db"))
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
 
 SCENARIO = "scenario2"
 DATE = "2024-01-15"
@@ -184,8 +198,7 @@ def generate_deploys() -> List[tuple]:
 
 
 def main():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = _open_conn()
 
     # Xóa data kịch bản 2 cũ nếu có
     for table in ["logs", "metrics", "deploys"]:
@@ -215,7 +228,9 @@ def main():
     log_count = conn.execute("SELECT COUNT(*) FROM logs WHERE scenario=?", (SCENARIO,)).fetchone()[0]
     metric_count = conn.execute("SELECT COUNT(*) FROM metrics WHERE scenario=?", (SCENARIO,)).fetchone()[0]
 
-    print(f"KB2 seeded: {log_count} logs, {metric_count} metric rows, {len(deploys)} deploys")
+    backend = os.environ.get("DB_BACKEND", "sqlite").lower()
+    target = os.environ.get("DATABASE_URL", str(ROOT / "data" / "investigation.db")) if backend == "postgres" else str(ROOT / "data" / "investigation.db")
+    print(f"KB2 seeded: {log_count} logs, {metric_count} metric rows, {len(deploys)} deploys → {target}")
     print(f"  Provider fail từ: {PROVIDER_FAIL_START}")
     print(f"  Gateway cascade từ: {GATEWAY_FAIL_START}")
     print(f"  Metric gateway: BÌNH THƯỜNG (tín hiệu âm tính)")

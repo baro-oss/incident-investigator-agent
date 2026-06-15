@@ -4,8 +4,9 @@ Giữ API cũ `open_db()` / `get_db_path()` để 17+ caller không phải đổ
 Re-export `IntegrityError` trung lập (bind vào backend đang chọn) → caller bắt
 lỗi ràng buộc bằng `except IntegrityError`, không phụ thuộc driver native.
 
-Đổi DB: `DB_BACKEND=postgres` + hiện thực backend tương ứng (Tier-2).
-Runtime hiện tại = sqlite (CLAUDE.md: không chạy Postgres ở runtime).
+  DB_BACKEND=sqlite    → SQLite WAL (default, dev/test)
+  DB_BACKEND=postgres  → PostgreSQL qua psycopg3 + pool (Tier-2, prod)
+                         Yêu cầu: DATABASE_URL set + pip install '.[postgres]'
 """
 from __future__ import annotations
 
@@ -14,7 +15,6 @@ from typing import Any, Optional
 
 from agent.storage import sqlite_backend
 
-# Backend wire sẵn. Postgres lazy-load (stub) để không bắt buộc cài driver.
 _BACKENDS = {"sqlite": sqlite_backend}
 
 
@@ -27,7 +27,7 @@ def _load_backend():
         return postgres_backend
     raise ValueError(
         f"DB_BACKEND='{backend_name}' không hỗ trợ. "
-        "Hỗ trợ: sqlite (postgres = stub Tier-2)."
+        "Hỗ trợ: sqlite | postgres (cần DATABASE_URL + pip install '.[postgres]')."
     )
 
 
