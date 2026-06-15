@@ -113,11 +113,11 @@ Day 60  Deploy+Close   AgentBase deploy (CR + runtime.sh) + docker-compose.prod 
 
 | Ngày | Theme | Trọng | Trạng thái |
 |------|-------|:----:|-----------|
-| 56 | PG backend adapter + local dev infra | **L** | ☐ |
-| 57 | Dialect parity + đóng rò seam + CI matrix | **L** | ☐ |
-| 58 | Container & config hardening + port 8080 + B1 | M | ☐ |
-| 59 | Lifecycle + observability + retention + B2 | M | ☐ |
-| 60 | Deploy lên AgentBase + smoke + Cổng Phase 11 | M | ☐ |
+| 56 | PG backend adapter + local dev infra | **L** | ✅ |
+| 57 | Dialect parity + đóng rò seam + CI matrix | **L** | ✅ |
+| 58 | Container & config hardening + port 8080 + B1 | M | ✅ |
+| 59 | Lifecycle + observability + retention + B2 | M | ✅ |
+| 60 | Deploy lên AgentBase + smoke + Cổng Phase 11 | M | ✅ |
 
 **Phụ thuộc cứng:** D56 (backend) → D57 (dialect cần backend chạy) → D58 (container chạy PG cần parity) → D59 → D60.
 **Xương sống (KHÔNG cắt):** D56 + D57 (PG parity + 444 tests xanh trên PG) · D58 (**port 8080** + container + secrets + B1) · B2 (D59).

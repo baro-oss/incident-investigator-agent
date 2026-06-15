@@ -1,5 +1,5 @@
 PYTHON := .venv314/bin/python3
-PORT   := 8000
+PORT   := 8080
 MCP_PORT := 9000
 
 .PHONY: help install setup db init seed server run server-reload mcp chat eval eval-fintech eval-all \

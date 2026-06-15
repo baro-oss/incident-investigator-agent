@@ -40,17 +40,17 @@ make init                   # init DB + migrations
 make seed                   # seed 6 kịch bản (4 microservice + 2 fintech)
 
 # 4. Chạy server
-make run                    # API server :8000
+make run                    # API server :8080
 
 # 5. Trigger điều tra
 make trigger sc=1           # kịch bản 1 (deploy bug)
 # Hoặc HTTP:
-curl -X POST localhost:8000/trigger \
+curl -X POST localhost:8080/trigger \
   -H "Content-Type: application/json" \
   -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'
 ```
 
-Mở **dashboard:** http://localhost:8000/dashboard
+Mở **dashboard:** http://localhost:8080/dashboard
 
 ## Lệnh `make`
 
@@ -59,7 +59,7 @@ Mở **dashboard:** http://localhost:8000/dashboard
 | `make setup` | Cài đặt đầy đủ từ đầu (install + init + seed) |
 | `make init` | Init DB + chạy migrations |
 | `make seed` | Seed 6 kịch bản |
-| `make run` | Khởi động server port 8000 |
+| `make run` | Khởi động server port 8080 |
 | `make mcp` | Khởi động MCP demo server port 9000 |
 | `make test` | pytest (173 tests) |
 | `make eval` | Eval gate mock 4 kịch bản (CI gate) |
@@ -86,7 +86,7 @@ make trigger sc=1
 → engine điều tra (adaptive loop, 5 bước)
 → submit_verdict tool call → Verdict(confidence=high)
 → push Telegram + lưu trace
-→ http://localhost:8000/dashboard (xem kết quả realtime qua SSE)
+→ http://localhost:8080/dashboard (xem kết quả realtime qua SSE)
 ```
 
 ## Cấu trúc chính
@@ -122,4 +122,83 @@ src/agent/
 
 ## Stack
 
-Python 3.14 · FastAPI · SQLite WAL · Anthropic API (OpenAI-compat: Groq, Mistral) · asyncio background task · MCP JSON-RPC 2.0 over HTTP
+Python 3.14 · FastAPI · **SQLite WAL** (dev) / **PostgreSQL** (prod) · Anthropic API (OpenAI-compat: Groq, Mistral) · asyncio background task · MCP JSON-RPC 2.0 over HTTP
+
+---
+
+## Deploy lên GreenNode AgentBase
+
+> Chi tiết đầy đủ: [`deploy/RUNBOOK_AGENTBASE.md`](deploy/RUNBOOK_AGENTBASE.md)
+
+**Ràng buộc cứng:** port `8080` · build `linux/amd64` · `GET /health` → 200 · disk ephemeral → PostgreSQL bắt buộc · deploy via `runtime.sh` (KHÔNG kubectl) · single-instance `min=max=1`.
+
+### 1. Chuẩn bị
+
+```bash
+# Biến môi trường GreenNode (lấy từ IAM console)
+export GREENNODE_CLIENT_ID="<sa-client-id>"
+export GREENNODE_CLIENT_SECRET="<sa-secret>"
+
+# Tạo .env.prod (KHÔNG commit) — copy từ .env.example và điền:
+#   ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+#   DB_BACKEND=postgres, DATABASE_URL=postgresql://...
+#   APP_ENV=production, SESSION_SECRET_KEY=..., SECRET_KEY=...
+cp .env.example .env.prod
+```
+
+### 2. Build & push image (amd64)
+
+```bash
+# Đăng nhập managed CR
+/agentbase-deploy cr login    # hoặc: docker login vcr.vngcloud.vn -u <token> -p <token>
+
+# Build amd64 (PHẢI có --platform, dù build trên Apple Silicon)
+docker build --platform linux/amd64 -t vcr.vngcloud.vn/<namespace>/investigation-agent:latest .
+
+# Push
+docker push vcr.vngcloud.vn/<namespace>/investigation-agent:latest
+```
+
+### 3. Init PostgreSQL managed
+
+```bash
+# Chạy một lần trên DB managed (lấy DATABASE_URL từ PG service của GreenNode)
+DB_BACKEND=postgres DATABASE_URL="postgresql://..." python data/init_db.py
+DB_BACKEND=postgres DATABASE_URL="postgresql://..." python data/seed_scenario1.py
+# ... (seed các kịch bản khác tùy nhu cầu)
+```
+
+### 4. Deploy runtime
+
+```bash
+# Tạo runtime mới (single-instance)
+/agentbase-deploy deploy \
+  --image vcr.vngcloud.vn/<namespace>/investigation-agent:latest \
+  --env-file .env.prod \
+  --min-replicas 1 --max-replicas 1
+
+# Hoặc dùng runtime.sh trực tiếp:
+runtime.sh create \
+  --from-cr vcr.vngcloud.vn/<namespace>/investigation-agent:latest \
+  --env-file .env.prod \
+  --min-replicas 1 --max-replicas 1
+```
+
+### 5. Verify
+
+```bash
+# Endpoint tự động sau khi runtime ACTIVE:
+curl https://<runtime-endpoint>/health
+# → {"status":"ok","db_backend":"postgres",...}
+
+curl https://<runtime-endpoint>/health/ready
+# → {"status":"ready","backend":"postgres","db":"ok"}
+
+# Trigger test:
+curl -X POST https://<runtime-endpoint>/trigger \
+  -H "X-API-Token: <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'
+```
+
+> **Lưu ý:** 4 biến `GREENNODE_CLIENT_ID/CLIENT_SECRET/AGENT_IDENTITY/ENDPOINT_URL` được **auto-inject** bởi platform — không set trong `.env.prod`.

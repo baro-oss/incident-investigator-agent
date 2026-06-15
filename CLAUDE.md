@@ -15,7 +15,7 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 ✅ HOÀN TẤT (46–50 — 262/262 tests) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate. Phase 10 ✅ HOÀN TẤT (51–55 — 444/444 tests) — agent đọc mã nguồn qua external MCP (GitHub/GitLab): F1 code seam + READ-ONLY guard · F2 deploy↔code synergy + E10/E11/E12 · V1 eval harness + E13 prior decay · P2 distill tổng quát · OPS1 catalog editor · T3 coverage 55%. Phase 11 🔄 ĐANG LÀM (56–60) — Postgres Tier-2 + cloud container deploy: PG backend qua storage seam · dialect parity + đóng rò seam · Dockerfile prod + secrets fail-fast · SIGTERM drain + trace retention + bug B1/B2. Single-instance, deploy fresh. Ngày 56✅ 57✅ 58✅.**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 ✅ HOÀN TẤT (46–50 — 262/262 tests) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate. Phase 10 ✅ HOÀN TẤT (51–55 — 444/444 tests) — agent đọc mã nguồn qua external MCP (GitHub/GitLab): F1 code seam + READ-ONLY guard · F2 deploy↔code synergy + E10/E11/E12 · V1 eval harness + E13 prior decay · P2 distill tổng quát · OPS1 catalog editor · T3 coverage 55%. Phase 11 ✅ HOÀN TẤT (56–60) — Postgres Tier-2 + cloud container deploy: PG backend qua storage seam · dialect parity + đóng rò seam · Dockerfile prod + secrets fail-fast · SIGTERM drain + trace retention + bug B1/B2. Single-instance, deploy fresh. 461/461 tests.**
 
 Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`. Plan Phase 9 (ĐÃ XONG): `docs/14-roadmap-phase-9.md`. Plan Phase 10 (ĐÃ XONG): `docs/15-roadmap-phase-10.md`. **Plan Phase 11 (KẾ HOẠCH TIẾP THEO): `docs/16-roadmap-phase-11.md`.**
 
@@ -82,7 +82,7 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 
 **Ràng buộc lõi Phase 10:** hệ thống KHÔNG quản lý source — code chỉ đọc qua external MCP (GitHub/GitLab là extension) · `get_recent_deploys` giữ nguyên · READ-ONLY tuyệt đối với code · real-LLM eval defer (mock + chờ credit) · bidirectional/horizontal vẫn Future.
 
-**Phase 11 🔄 ĐANG LÀM (56–60) — Postgres Tier-2 + deploy lên GreenNode AgentBase (`docs/16-roadmap-phase-11.md`):**
+**Phase 11 ✅ HOÀN TẤT (56–60) — Postgres Tier-2 + deploy lên GreenNode AgentBase (`docs/16-roadmap-phase-11.md`):**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
@@ -90,7 +90,7 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 | 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR`→`ON CONFLICT` · `datetime/julianday` · **fix `auth/rbac.py` `import sqlite3`** · CI matrix `DB_BACKEND=[sqlite,postgres]` · 444 tests xanh trên cả 2 | ✅ |
 | 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** · Dockerfile non-root + multi-stage + amd64 + HEALTHCHECK · secrets fail-fast (prod) · `/health/ready` (DB ping) vs `/health` · **B1: `_make_error_state` truyền project_id** | ✅ |
 | 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight · JSON log opt-in · `/health` sâu · trace_events retention (TTL) · **B2: 2 `_emit_trace` thêm project_id (parity graph.py)** | ✅ |
-| 60 | Deploy lên AgentBase + smoke + Cổng P11 | build amd64 → managed CR (`vcr.vngcloud.vn`) → `runtime.sh create` (`min=max=1`) · `docker-compose.prod` + runbook/README/api docs · E2E smoke (PG) · audit READ-ONLY/degrade · đóng pha | ☐ |
+| 60 | Deploy lên AgentBase + smoke + Cổng P11 | build amd64 → managed CR (`vcr.vngcloud.vn`) → `runtime.sh create` (`min=max=1`) · `docker-compose.prod` + runbook/README/api docs · E2E smoke (PG) · audit READ-ONLY/degrade · đóng pha | ✅ |
 
 **Ràng buộc lõi Phase 11:** Postgres = backend runtime prod (Tier-2 kích hoạt theo lệnh người dùng — **bắt buộc vì AgentBase disk ephemeral, không PVC → SQLite không bền**) · SQLite vẫn default dev, seam giữ cả 2 · **nền tảng = GreenNode AgentBase**: port **8080** + build **amd64** + deploy qua CR/`runtime.sh` (KHÔNG `kubectl`) + 4 biến `GREENNODE_*` auto-inject không set tay · **single-instance** = `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · deploy fresh (init+seed PG, không migrate data SQLite cũ) · DB swap tuyệt đối không rò lên engine/tools · READ-ONLY + 4 nguyên tắc giữ. Skills tham chiếu: `greennode-agentbase-skills/`.
 

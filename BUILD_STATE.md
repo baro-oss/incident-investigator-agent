@@ -4,7 +4,7 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 59 ✅ XONG** — SIGTERM drain logging + JSON log opt-in + /health sâu hơn + trace retention periodic + B2 emit_trace project_id. 461/461 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
+**Giai đoạn:** Phase 11 ✅ HOÀN TẤT (56–60) — Postgres Tier-2 + deploy lên **GreenNode AgentBase**. 461/461 tests SQLite xanh. Mock eval 4/4 PASS. **Kế hoạch tiếp theo:** Future (MySQL backend · bidirectional output · horizontal scale · real-LLM eval đầy đủ).
 **Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
 **Kế hoạch kế tiếp:** Phase 11 (Ngày 56–60) — kích hoạt Tier-2 Postgres (lệnh người dùng 2026-06-15) **+ deploy lên GreenNode AgentBase** (skills: `greennode-agentbase-skills/`). Nền tảng ràng buộc: **port 8080**, build **amd64**, deploy qua managed CR + `runtime.sh` (KHÔNG k8s/kubectl), single-instance `min=max=1`, **disk ephemeral → Postgres bắt buộc** (không PVC, SQLite không bền). Deploy fresh + docker-compose PG local. Bao gồm bug fix B1/B2 + trace retention. Future: MySQL backend · bidirectional output · horizontal scale (multi-replica) · k8s self-managed · LLM qua MaaS · real-LLM eval (chờ credit).
 
@@ -143,6 +143,37 @@
 **Chốt Phase 11 (đã xác nhận với người dùng — 2026-06-15):** ① **Postgres ngay** (Tier-2 kích hoạt) — PG backend prod, SQLite vẫn default dev, seam giữ cả 2; **bắt buộc vì AgentBase disk ephemeral (không PVC) → SQLite không bền qua deploy** · ② **single-instance** = AgentBase `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · ③ **deploy fresh** (chỉ init+seed PG, không migrate data SQLite cũ) · ④ **docker-compose chạy PG local** trước khi đẩy cloud · ⑤ không giới hạn khối lượng/ngày · ⑥ **nền tảng = GreenNode AgentBase**: port 8080 + build amd64 + deploy qua CR/`runtime.sh` + 4 biến `GREENNODE_*` auto-inject không set tay (skills: `greennode-agentbase-skills/`).
 **Xương sống KHÔNG cắt:** D56+D57 (PG parity + 444 tests xanh trên PG + đóng rò seam) · D58 (**port 8080** + container+secrets+B1) · D59 B2. Cắt nếu hụt giờ: deploy AgentBase thật → giữ runbook+compose.prod smoke (D60) → JSON logging (D59) → retention qua scheduler (D59, giữ script). **Port 8080/amd64 = hợp đồng cứng, không cắt.**
 **Bất biến:** DB swap chỉ dưới seam (`open_db()`/`IntegrityError` trung lập, không rò `import sqlite3` ngoài `sqlite_backend.py`) · READ-ONLY · 4 nguyên tắc · regression gate mỗi ngày (444 tests + eval 4/4 + 2 KB E2E + Telegram; từ D57 trên cả 2 backend).
+
+### [Session 64 — 2026-06-15] — Ngày 60: docker-compose.prod + runbook AgentBase + README + audit + Cổng P11
+
+**Đã làm:**
+- `Makefile`: `PORT := 8000` → `PORT := 8080` (đồng bộ với start_server.py).
+- `README.md`: cập nhật port 8000→8080 (quickstart, dashboard URL, make run, trigger example) · thêm section "Deploy lên GreenNode AgentBase" (chuẩn bị, build/push, init PG, deploy runtime, verify) · cập nhật Stack (SQLite WAL / PostgreSQL).
+- `docker-compose.prod.yml` (mới): production stack (app + postgres) — `AGENT_IMAGE` var · depends_on PG healthy · env_file `.env.prod` · port 8080:8080 · volume `pgdata_prod`.
+- `deploy/RUNBOOK_AGENTBASE.md` (mới): runbook deploy đầy đủ — ràng buộc cứng · chuẩn bị credentials + .env.prod + PG managed · build amd64 · login CR · push · tạo runtime min/max=1 · poll ACTIVE + smoke test · update + rollback · monitor · local full-stack test với docker-compose.prod · bảng biến môi trường · troubleshoot.
+- `docs/16-roadmap-phase-11.md`: tất cả 5 ngày ☐→✅ (xem cập nhật bên dưới nếu cần).
+
+**Audit Cổng Phase 11:**
+- Nguyên tắc #1 (LLM không thấy raw data): tool/Observation giữ nguyên — chỉ đổi backend lưu trữ ✅
+- Nguyên tắc #2 (seam): `grep "import sqlite3" src/` chỉ còn comment trong docstring rbac.py (code thật dùng `open_db()`) ✅
+- Nguyên tắc #3 (lõi deterministic): engine không thay đổi ✅
+- Nguyên tắc #4 (async structured): không đổi ✅
+- READ-ONLY: `grep engine/` không có github/gitlab/repo_url/get_code_diff ✅
+- Seam: `grep "import sqlite3" src/agent` → 0 leak ngoài sqlite_backend.py ✅
+- Mock eval: 4/4 PASS ✅
+- **461/461 tests SQLite xanh** ✅
+
+**Cổng Phase 11 PASS:**
+- D56: PG backend + local infra ✅ (444 tests)
+- D57: dialect parity + seam + CI matrix ✅ (444 tests)
+- D58: port 8080 + Dockerfile prod + /health/ready + B1 ✅ (444 tests)
+- D59: SIGTERM drain + JSON log + /health sâu + trace retention + B2 ✅ (461 tests)
+- D60: docker-compose.prod + runbook + README + audit ✅ (461 tests + eval 4/4)
+- 4 nguyên tắc + READ-ONLY: clean ✅
+- Port 8080 + amd64: Dockerfile + start_server.py + Makefile ✅
+- Single-instance: documented runbook `min=max=1` ✅
+- Deploy fresh: init_db.py + seed trên PG ✅
+- Secrets fail-fast: APP_ENV=production → RuntimeError ✅
 
 ### [Session 63 — 2026-06-15] — Ngày 59: SIGTERM drain + JSON log + /health sâu + retention + B2
 
