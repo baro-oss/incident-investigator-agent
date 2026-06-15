@@ -4,9 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 7 (Ngày 31–35, đang thực hiện).
-**Kế hoạch Phase 7:** xem mục "Tiến độ Phase 7" bên dưới.
-**Cổng kiểm gần nhất:** Ngày 31 — Demo 401 fix ✅ · C3 GitHub/GitLab adapter ✅ · pytest 24/24 PASS ✅ · Regression 4/4 ✅
+**Giai đoạn:** Phase 7 (Ngày 31–35) ✅ HOÀN TẤT.
+**Cổng kiểm gần nhất:** Ngày 35 — 63/63 tests PASS · Engine smoke PASS · SSE seam OK · Docker OK · Gate PASS
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -82,10 +81,10 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 31 | Quick wins + Test skeleton | Demo 401 fix · C3 GitHub/GitLab adapter · pytest 24 tests | ✅ |
-| 32 | Proactive monitoring | Scheduled trigger · Recurring incident alert push | ☐ |
-| 33 | Engine depth | D2 baseline auto-update · Multi-agent conflict · Fintech re-verify | ☐ |
-| 34 | Deployment & DX | Docker + docker-compose · Investigation export JSON/CSV | ☐ |
-| 35 | Production bridge + close | Tier-2 Postgres hoặc Redis SSE seam · Phase 7 gate | ☐ |
+| 32 | Proactive monitoring | Scheduled trigger · Recurring incident alert push | ✅ |
+| 33 | Engine depth | D2 baseline auto-update · Multi-agent conflict resolution · Auth+tool tests (50/50) | ✅ |
+| 34 | Deployment & DX | Docker + docker-compose · Investigation export JSON/CSV · Tool unit tests (63/63) | ✅ |
+| 35 | Production bridge + close | Redis SSE seam (stub+factory) · Phase 7 gate PASS | ✅ |
 
 ## Nhật ký session (mới nhất lên đầu)
 
@@ -111,6 +110,36 @@
 - **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
 - **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
 - **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 38 — 2026-06-15] — Ngày 32–35: Phase 7 hoàn tất
+
+**Ngày 32 — Proactive monitoring:**
+- `data/migrate_day32.py` — CREATE TABLE `scheduled_triggers` + ADD COLUMN `investigation_patterns.alerted_at`
+- `src/agent/intake/scheduler.py` — asyncio 60s tick: fire due triggers → enqueue; check recurring patterns → push Telegram/Slack
+- `dashboard/router.py` — 4 CRUD routes `/dashboard/scheduled`
+- `templates/scheduled.html` — UI table + create form
+- `base.html` — nav link ⏱ Scheduled trong nhóm Cấu hình
+- `.env.example` — `RECURRING_ALERT_THRESHOLD=5`
+
+**Ngày 33 — Engine depth:**
+- `state.py:resolve_conflicting_hypotheses()` — winner = highest confidence + evidence count tiebreaker
+- `loop.py` — annotate `verdict.competing_hypotheses` khi 2+ hypothesis confirmed
+- `patterns.py` — D2: `save_pattern` cũng lưu medium confidence (không chỉ high)
+- `tests/test_auth.py` — 20 unit tests RBAC (user CRUD, API token, role/perm, user_can)
+- `tests/test_engine_core.py` — +5 tests conflict resolution → 29 tests total
+- **50/50 PASS**
+
+**Ngày 34 — Docker + Investigation export + Tool tests:**
+- `Dockerfile` + `docker-compose.yml` + `.dockerignore`
+- `router.py:investigation_export` — GET `/investigations/{id}/export?format=json|csv`
+- `detail.html` — nút ↓ JSON và ↓ CSV trong header
+- `tests/test_tools.py` — 13 unit tests `get_metrics` + `get_error_breakdown`
+- **63/63 PASS**
+
+**Ngày 35 — Production bridge + Phase 7 gate:**
+- `src/agent/dashboard/sse_backends.py` — Redis SSE seam: `SSEBroker` protocol + `InMemorySSEBroker` + `RedisSSEBrokerStub` + `get_sse_broker()` factory
+- `.env.example` — `SSE_BACKEND=memory`, `REDIS_URL=...`
+- **Phase 7 Gate PASS:** 63/63 tests · syntax 76 files · imports OK · engine smoke HIGH verdict · Docker files · SSE broker factory
 
 ### [Session 37 — 2026-06-15] — Ngày 31: Quick wins + Test skeleton
 

@@ -15,7 +15,7 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 📋 ĐÃ LÊN KẾ HOẠCH (Ngày 26–30 — chưa bắt đầu code).**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests).**
 
 Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. **Plan Phase 6: `docs/12-roadmap-phase-6.md`.**
 
@@ -69,7 +69,8 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 
 ### Roadmap — câu chuyện pitch (chưa phải code):
 **Phase 5** ✅ (xem `docs/11-roadmap-phase-5.md`): RBAC/auth · cost dashboard · Slack output · webhook signature · real MCP pack · storage seam.
-**Phase 6** 📋 (xem `docs/12-roadmap-phase-6.md`): engine quality (hypothesis lifecycle · evidence-grounding verdict · calibration) · webhook auth + secret at-rest · graceful shutdown + in-process queue · PagerDuty/deploy-hook intake.
+**Phase 6** ✅ (xem `docs/12-roadmap-phase-6.md`): engine quality (hypothesis lifecycle · evidence-grounding verdict · calibration) · webhook auth + secret at-rest · graceful shutdown + in-process queue · PagerDuty/deploy-hook intake.
+**Phase 7** ✅ (Ngày 31–35): proactive monitoring scheduler · multi-agent conflict resolution · Docker + export · Redis SSE seam · 63/63 tests.
 **Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration (phá READ-ONLY, cần duyệt) · horizontal scale seam.
 
 ---
