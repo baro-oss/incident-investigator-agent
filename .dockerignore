@@ -1,12 +1,34 @@
+# Secrets — KHÔNG BAO GIỜ vào image
+.env
+.env.*
+
+# Dev artifacts
 .venv/
 __pycache__/
 *.pyc
 *.pyo
-.env
-.env.*
-data/investigation.db
-.git/
-.pytest_cache/
 *.egg-info/
 dist/
 build/
+.coverage
+.pytest_cache/
+
+# SQLite data (PG prod dùng DATABASE_URL, SQLite dev không cần trong image)
+data/*.db
+data/investigation.db
+
+# Git & IDE
+.git/
+.gitignore
+.github/
+
+# Docs & tests (không cần trong runtime image)
+docs/
+tests/
+greennode-agentbase-skills/
+*.md
+!src/**/*.md
+
+# Temp
+*.tmp
+*.log

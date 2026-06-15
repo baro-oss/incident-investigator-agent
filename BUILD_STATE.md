@@ -4,7 +4,7 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 57 ✅ XONG** — Dialect parity + seam + CI matrix. 444/444 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
+**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 58 ✅ XONG** — Port 8080 + Dockerfile prod + /health/ready + secrets fail-fast + B1. 444/444 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
 **Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
 **Kế hoạch kế tiếp:** Phase 11 (Ngày 56–60) — kích hoạt Tier-2 Postgres (lệnh người dùng 2026-06-15) **+ deploy lên GreenNode AgentBase** (skills: `greennode-agentbase-skills/`). Nền tảng ràng buộc: **port 8080**, build **amd64**, deploy qua managed CR + `runtime.sh` (KHÔNG k8s/kubectl), single-instance `min=max=1`, **disk ephemeral → Postgres bắt buộc** (không PVC, SQLite không bền). Deploy fresh + docker-compose PG local. Bao gồm bug fix B1/B2 + trace retention. Future: MySQL backend · bidirectional output · horizontal scale (multi-replica) · k8s self-managed · LLM qua MaaS · real-LLM eval (chờ credit).
 
@@ -143,6 +143,36 @@
 **Chốt Phase 11 (đã xác nhận với người dùng — 2026-06-15):** ① **Postgres ngay** (Tier-2 kích hoạt) — PG backend prod, SQLite vẫn default dev, seam giữ cả 2; **bắt buộc vì AgentBase disk ephemeral (không PVC) → SQLite không bền qua deploy** · ② **single-instance** = AgentBase `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · ③ **deploy fresh** (chỉ init+seed PG, không migrate data SQLite cũ) · ④ **docker-compose chạy PG local** trước khi đẩy cloud · ⑤ không giới hạn khối lượng/ngày · ⑥ **nền tảng = GreenNode AgentBase**: port 8080 + build amd64 + deploy qua CR/`runtime.sh` + 4 biến `GREENNODE_*` auto-inject không set tay (skills: `greennode-agentbase-skills/`).
 **Xương sống KHÔNG cắt:** D56+D57 (PG parity + 444 tests xanh trên PG + đóng rò seam) · D58 (**port 8080** + container+secrets+B1) · D59 B2. Cắt nếu hụt giờ: deploy AgentBase thật → giữ runbook+compose.prod smoke (D60) → JSON logging (D59) → retention qua scheduler (D59, giữ script). **Port 8080/amd64 = hợp đồng cứng, không cắt.**
 **Bất biến:** DB swap chỉ dưới seam (`open_db()`/`IntegrityError` trung lập, không rò `import sqlite3` ngoài `sqlite_backend.py`) · READ-ONLY · 4 nguyên tắc · regression gate mỗi ngày (444 tests + eval 4/4 + 2 KB E2E + Telegram; từ D57 trên cả 2 backend).
+
+### [Session 62 — 2026-06-15] — Ngày 58: Port 8080 + Dockerfile prod + /health/ready + B1
+
+**Đã làm:**
+- `scripts/start_server.py`: host default `"127.0.0.1"` → `"0.0.0.0"` · port default `8000` → `int(os.environ.get("PORT", "8080"))` · docstring cập nhật.
+- `src/agent/intake/server.py`:
+  - Secrets fail-fast trong lifespan: `APP_ENV=production` → raise `RuntimeError` nếu `SESSION_SECRET_KEY` là dev fallback hoặc `SECRET_KEY` trống. Dev → `logger.warning` thay vì crash.
+  - `/health/ready` (readiness probe): ping DB (`open_db().execute("SELECT 1")`), trả 200 `{status:ready, backend, db:ok}` hoặc 503 `{status:not_ready, db:<error>}`. Tách hoàn toàn với `/health` (liveness, không ping DB).
+- `src/agent/intake/runner.py` — **B1 fix**: `_make_error_state` thêm `project_id=req.project_id` + `available_services=_get_project_services(req.project_id)`. Trước: timeout/error route luôn gửi về "default" channel thay vì project channel đúng.
+- `Dockerfile` (rewrite multi-stage):
+  - Builder: `FROM --platform=linux/amd64 python:3.14-slim AS builder` → `pip install --prefix=/install -e ".[postgres]"`.
+  - Runtime: copy `/install`→`/usr/local`, `--chown=agent:agent` source, non-root user `agent`, `EXPOSE 8080`, `ENV PORT=8080 PYTHONPATH=/app/src`, `HEALTHCHECK` → `http://localhost:8080/health`, `CMD ["sh","-c","python data/init_db.py && python scripts/start_server.py --host 0.0.0.0 --port 8080"]`.
+- `.dockerignore` (mới): loại trừ `.env`, `.venv/`, `__pycache__/`, `*.pyc`, `data/*.db`, `.git/`, `docs/`, `tests/`, `greennode-agentbase-skills/`, `*.md` (trừ `src/**/*.md`).
+- `docker-compose.yml`: service `agent` port `8000:8000`→`8080:8080` + `PORT: "8080"` env + healthcheck URL port 8080 + `start_period: 15s`.
+- `.env.example`: thêm `PORT=8080`, `APP_ENV=`.
+
+**Cổng Ngày 58 PASS:**
+- `/health` → 200 `{"status": "ok"}` ✅
+- `/health/ready` → 200 `{"status": "ready", "backend": "sqlite", "db": "ok"}` ✅
+- `APP_ENV=production` + `SESSION_SECRET_KEY` rỗng → RuntimeError ✅
+- `APP_ENV=production` + cả 2 secrets set → khởi động bình thường ✅
+- `_make_error_state` trả state có `project_id` và `available_services` đúng ✅
+- Dockerfile multi-stage + non-root + amd64 + EXPOSE 8080 ✅
+- 444/444 tests SQLite xanh ✅
+
+**Ghi chú kỹ thuật:**
+- `/health/ready` dùng `open_db()` không pool → đúng (readiness probe gọi thưa, không cần pool)
+- Fail-fast chỉ khi `APP_ENV=production` → dev/test không bị ảnh hưởng (backward compat)
+- `.dockerignore` loại `data/*.db` nhưng giữ `data/schema*.sql` + `data/init_db.py` (cần trong container cho CMD)
+- B1 fix đơn giản nhưng quan trọng: trước đó `available_services=[]` → `get_output_channels` dùng default project channel
 
 ### [Session 61 — 2026-06-15] — Ngày 57: Dialect parity + seam + CI matrix
 

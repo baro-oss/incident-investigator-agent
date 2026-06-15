@@ -4,19 +4,21 @@ services:
   agent:
     build: .
     ports:
-      - "8000:8000"
+      - "8080:8080"
     env_file:
       - .env
+    environment:
+      PORT: "8080"
     volumes:
-      # Persist DB và giữ investigation.db ngoài container
+      # Persist SQLite DB khi dev (PG prod không cần volume này)
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   mcp-server:
     build: .

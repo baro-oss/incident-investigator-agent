@@ -113,17 +113,24 @@ def _resolve_request(source: Optional[str], payload: Dict[str, Any], project_id:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Security: warn when session secret or encryption key is using dev fallback
+    # Security: secrets fail-fast in production; warn in dev
+    _is_prod = os.environ.get("APP_ENV", "").lower() == "production"
     if _SESSION_SECRET == "dev-secret-rbac-change-in-prod":
-        logger.warning(
-            "⚠️  SESSION_SECRET_KEY không được set — đang dùng dev fallback. "
-            "Set SESSION_SECRET_KEY trong .env trước khi deploy lên prod."
+        msg = (
+            "SESSION_SECRET_KEY không được set — đang dùng dev fallback. "
+            "Set SESSION_SECRET_KEY trước khi deploy lên prod."
         )
+        if _is_prod:
+            raise RuntimeError(f"[PROD] Từ chối khởi động: {msg}")
+        logger.warning("⚠️  %s", msg)
     if not os.environ.get("SECRET_KEY"):
-        logger.warning(
-            "⚠️  SECRET_KEY không được set — llm_config / auth_config lưu dạng plaintext. "
+        msg = (
+            "SECRET_KEY không được set — llm_config / auth_config lưu dạng plaintext. "
             "Set SECRET_KEY để mã hóa at-rest."
         )
+        if _is_prod:
+            raise RuntimeError(f"[PROD] Từ chối khởi động: {msg}")
+        logger.warning("⚠️  %s", msg)
 
     # Bootstrap root user từ env ROOT_USERNAME/ROOT_PASSWORD
     try:
@@ -326,12 +333,37 @@ async def ping_mcp_server_global(server_id: int) -> Dict[str, Any]:
 
 @app.get("/health")
 def health() -> Dict[str, Any]:
+    """Liveness probe — trả 200 ngay (không block, không IO)."""
     return {
         "status": "ok",
         "uptime_seconds": round(time.time() - _start_time, 1),
         "active_investigations": len(_active_investigations),
         "active_ids": list(_active_investigations),
     }
+
+
+@app.get("/health/ready")
+def health_ready() -> JSONResponse:
+    """Readiness probe — ping DB và kiểm tra backend. Trả 503 nếu DB không sẵn."""
+    from agent.storage.db import BACKEND_NAME, open_db
+    try:
+        conn = open_db()
+        conn.execute("SELECT 1")
+        conn.close()
+        db_ok = True
+    except Exception as exc:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "not_ready", "db": str(exc), "backend": BACKEND_NAME},
+        )
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "ready",
+            "backend": BACKEND_NAME,
+            "db": "ok",
+        },
+    )
 
 
 @app.get("/adapters")

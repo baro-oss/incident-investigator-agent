@@ -104,6 +104,8 @@ def _make_error_state(req: InvestigationRequest, stop_reason: str) -> Investigat
         date=req.date,
         stop_reason=stop_reason,
         finished=True,
+        project_id=req.project_id,
+        available_services=_get_project_services(req.project_id),
     )
 
 

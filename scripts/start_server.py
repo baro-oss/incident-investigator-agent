@@ -1,9 +1,11 @@
 """
 Uvicorn wrapper — khởi động FastAPI investigation server.
 
-Dùng: python scripts/start_server.py [--host 0.0.0.0] [--port 8000] [--reload]
+Dùng: python scripts/start_server.py [--host 0.0.0.0] [--port 8080] [--reload]
+Port mặc định: 8080 (AgentBase contract — KHÔNG đổi cho prod).
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -18,8 +20,8 @@ load_dotenv()
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Start Investigation Agent webhook server")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8080")))
     parser.add_argument("--reload", action="store_true", help="Hot-reload khi code thay đổi (dev only)")
     args = parser.parse_args()
 
