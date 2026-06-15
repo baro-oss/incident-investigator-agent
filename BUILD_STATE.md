@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45). **Phase 9 🔨 ĐANG CODE — Ngày 46 ✅ (E11 service prior + CVE fix).**
-**Cổng kiểm gần nhất:** Ngày 46 — E11 pre-seed hypothesis · get_service_priors · _classify_root_cause fintech · 200/200 tests · python-multipart 0.0.32 + starlette 1.3.1 + venv Python 3.14.
-**Kế hoạch kế tiếp:** Ngày 47 (E10 tool-sequencing hint trong `_build_user_message`).
+**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45). **Phase 9 🔨 ĐANG CODE — Ngày 46 ✅ · Ngày 47 ✅ (E10 tool sequencing).**
+**Cổng kiểm gần nhất:** Ngày 47 — _tool_sequencing_hint advisory · prior sort · cap 3 · parity loop↔graph · 221/221 tests.
+**Kế hoạch kế tiếp:** Ngày 48 (E12 specificity gate lõi — `engine/specificity.py` + `_apply_specificity_gate` dùng chung loop+graph).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -110,10 +110,22 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 46 | E11 — Service prior | Pre-seed `Hypothesis` open theo `investigation_patterns` (map root_cause_type→catalog tag); `Hypothesis.prior_seen_count`; confirm vẫn cần bằng chứng thật | ✅ |
-| 47 | E10 — Tool sequencing | `_tool_sequencing_hint(state)` nối vào `_build_user_message` (parity loop↔graph free); reuse catalog `relevant_tools`; advisory only | ☐ |
+| 47 | E10 — Tool sequencing | `_tool_sequencing_hint(state)` nối vào `_build_user_message` (parity loop↔graph free); reuse catalog `relevant_tools`; advisory only | ✅ |
 | 48 | E12 — Specificity gate (lõi) | `engine/specificity.py:compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph; `Verdict.specificity_score` | ☐ |
 | 49 | E12 — Multi-agent + đo | Downgrade/annotate trong `_synthesize_verdict` · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ☐ |
 | 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
+
+### [Session 49 — 2026-06-15] — Ngày 47: E10 hypothesis-guided tool sequencing
+
+**Đã làm:**
+- `engine/loop.py`: thêm `_tool_sequencing_hint(state) -> str` — hàm pure, với mỗi giả thuyết `open` có catalog entry: liệt kê `relevant_tools` chưa xuất hiện trong `tool_call_history`; sort prior_seen_count DESC (E11 synergy); cap ≤3; advisory only.
+- `_build_user_message`: nối hint sau budget warning, trước "Bước tiếp theo". Hint cập nhật mỗi bước theo `tool_call_history` thực tế.
+- `tests/test_e10_tool_sequencing.py` (21 tests mới): TestToolSequencingHint (14) · TestBuildUserMessageWithHint (4) · TestParity (3).
+- Parity loop↔graph **miễn phí** (cả 2 path đều gọi `_build_user_message`).
+
+**Tests:** 200 + 21 = 221/221.
+
+---
 
 **Chốt Phase 9 (đề xuất — chờ xác nhận khi khởi động code):** E11 = pre-seed hypothesis (không chỉ text hint) · E12 = nudge trong loop + downgrade trong multi-agent · Day 49 real-LLM = smoke ~$2 (KHÔNG full N=10) · gate dùng helper chung loop+graph (bài học E7).
 **Xương sống KHÔNG cắt:** D46 · D47 (mục A+B) · D48 (mục B) · D50.

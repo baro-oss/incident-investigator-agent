@@ -63,6 +63,44 @@ Lan truyền: <lỗi gốc ở đâu, lan thế nào>
 Giả thuyết cạnh tranh: <đã loại trừ gì, tại sao>"""
 
 
+def _tool_sequencing_hint(state: InvestigationState) -> str:
+    """E10: Gợi ý tool tiếp theo cho mỗi giả thuyết open có relevant_tool chưa gọi.
+
+    Advisory only — LLM vẫn tự quyết tool. Cap ≤3 giả thuyết để không phình context.
+    Ưu tiên giả thuyết có prior_seen_count cao (E11 synergy).
+    """
+    catalog_index = state.hypothesis_catalog_index
+    if not catalog_index:
+        return ""
+
+    called_tools = {c["name"] for c in state.tool_call_history}
+
+    # Giả thuyết open, xếp prior lên trước
+    open_hyps = sorted(
+        [h for h in state.hypotheses if h.status == "open"],
+        key=lambda h: h.prior_seen_count,
+        reverse=True,
+    )
+    if not open_hyps:
+        return ""
+
+    lines: List[str] = []
+    for hyp in open_hyps[:3]:
+        entry = catalog_index.get(hyp.id)
+        if not entry:
+            continue
+        uncalled = entry.relevant_tools - called_tools
+        if not uncalled:
+            continue
+        prior_note = f" (prior {hyp.prior_seen_count}×)" if hyp.prior_seen_count > 0 else ""
+        tool_list = ", ".join(sorted(uncalled))
+        lines.append(f"  {hyp.id}{prior_note} → {tool_list}")
+
+    if not lines:
+        return ""
+    return "## Tool gợi ý (advisory)\n" + "\n".join(lines)
+
+
 def _build_user_message(state: InvestigationState, last_obs: Optional[Observation]) -> str:
     parts = [
         f"# Điều tra sự cố: {state.symptom}",
@@ -84,6 +122,11 @@ def _build_user_message(state: InvestigationState, last_obs: Optional[Observatio
             f"\n⚠️ Còn {state.step_budget - state.steps_taken - 1} bước. "
             "Nếu đã đủ bằng chứng, hãy đưa ra VERDICT ngay."
         )
+
+    # E10: gợi ý tool theo giả thuyết open (advisory, cập nhật mỗi bước)
+    hint = _tool_sequencing_hint(state)
+    if hint:
+        parts += ["", hint]
 
     parts += [
         "",
