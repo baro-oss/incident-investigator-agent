@@ -8,6 +8,7 @@ Idempotent — an toàn khi chạy lại.
 """
 from __future__ import annotations
 
+import os
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -19,6 +20,10 @@ def _existing_columns(conn: sqlite3.Connection, table: str) -> set:
 
 
 def migrate(db_path: str) -> None:
+    if os.environ.get("DB_BACKEND", "sqlite").lower() == "postgres":
+        print("migrate_projects: PG backend — deploy fresh, skipping SQLite-only migration.")
+        return
+
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

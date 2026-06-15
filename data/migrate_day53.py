@@ -5,7 +5,7 @@ Idempotent: ALTER TABLE bọc trong try/except (SQLite không hỗ trợ IF NOT 
 cho ADD COLUMN). Chạy an toàn nhiều lần.
 """
 from __future__ import annotations
-import pathlib, sqlite3, sys
+import os, pathlib, sqlite3, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
@@ -13,6 +13,9 @@ from agent.storage.db import get_db_path
 
 
 def run() -> None:
+    if os.environ.get("DB_BACKEND", "sqlite").lower() == "postgres":
+        print("migrate_day53: PG backend — columns in schema_postgres.sql, skipping.")
+        return
     path = get_db_path()
     conn = sqlite3.connect(path)
     added = []

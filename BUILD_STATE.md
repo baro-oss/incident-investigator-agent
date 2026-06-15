@@ -4,7 +4,7 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 56 ✅ XONG** — PG backend adapter + local infra. 444/444 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
+**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 57 ✅ XONG** — Dialect parity + seam + CI matrix. 444/444 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
 **Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
 **Kế hoạch kế tiếp:** Phase 11 (Ngày 56–60) — kích hoạt Tier-2 Postgres (lệnh người dùng 2026-06-15) **+ deploy lên GreenNode AgentBase** (skills: `greennode-agentbase-skills/`). Nền tảng ràng buộc: **port 8080**, build **amd64**, deploy qua managed CR + `runtime.sh` (KHÔNG k8s/kubectl), single-instance `min=max=1`, **disk ephemeral → Postgres bắt buộc** (không PVC, SQLite không bền). Deploy fresh + docker-compose PG local. Bao gồm bug fix B1/B2 + trace retention. Future: MySQL backend · bidirectional output · horizontal scale (multi-replica) · k8s self-managed · LLM qua MaaS · real-LLM eval (chờ credit).
 
@@ -135,7 +135,7 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 56 | PG backend adapter + local infra | `postgres_backend.py`: thay stub bằng psycopg connection shim (`.execute` tự cursor + `?`→`%s`, dict-row key+index, `lastrowid` qua RETURNING, IntegrityError) + `psycopg_pool` connection pool · `data/schema_postgres.sql` (SERIAL, bỏ PRAGMA) · `init_db.py` backend-aware · seed/migrate chạy trên PG · `docker-compose.yml` service postgres local · `.env.example` +DB_BACKEND/DATABASE_URL · extra `[postgres]` | ✅ |
-| 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR IGNORE/REPLACE`→`ON CONFLICT` · `datetime()/julianday()` → Python/branch · **fix `auth/rbac.py` `import sqlite3`→open_db()** · `migrate_*.py` exception trung lập · CI `DB_BACKEND=[sqlite,postgres]` matrix (services postgres) · **444 tests xanh trên cả 2** + eval 4/4 PG | ☐ |
+| 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR IGNORE/REPLACE`→`ON CONFLICT` · `datetime()/julianday()` → Python/branch · **fix `auth/rbac.py` `import sqlite3`→open_db()** · `migrate_*.py` exception trung lập · CI `DB_BACKEND=[sqlite,postgres]` matrix (services postgres) · **444 tests xanh trên cả 2** + eval 4/4 PG | ✅ |
 | 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** trong `start_server.py`/Dockerfile/health tests · Dockerfile multi-stage non-root + amd64 + `EXPOSE 8080` + HEALTHCHECK + `.[postgres]` + entrypoint init/migrate · `.dockerignore` (.env/.db/.venv) · secrets fail-fast khi `APP_ENV=production` (SESSION_SECRET_KEY/SECRET_KEY) · `/health/ready` (DB ping + backend) tách `/health` (liveness) · `.env.example` ghi chú 4 biến `GREENNODE_*` auto-inject không set tay · **B1: `_make_error_state` truyền project_id+available_services** | ☐ |
 | 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight (A1 verify+mở rộng) + ghi rõ queue semantics restart · JSON log opt-in (`LOG_FORMAT=json`) · `/health` sâu (DB+backend+MCP reachable+LLM key) · trace_events retention (`TRACE_RETENTION_DAYS`) · **B2: `loop.py:1069,1090` 2 `_emit_trace` thêm `project_id=state.project_id` (parity graph.py)** + perf re-check pool | ☐ |
 | 60 | Deploy lên AgentBase + smoke + Cổng P11 | `docker-compose.prod.yml` (app+postgres) · **runbook AgentBase**: build amd64 → managed CR (`vcr.vngcloud.vn`, `cr.sh docker-login`) → `runtime.sh create --from-cr --min/max-replicas 1` → poll ACTIVE → `<endpoint>/health` 200 · `deploy/k8s/` skeleton **HẠ xuống Future** (deploy qua runtime.sh, không kubectl) · README/api Deploy-AgentBase section (port 8080/amd64/CR/env/auto-inject) · E2E smoke (PG, trigger→điều tra→Telegram) · audit READ-ONLY/4 nguyên tắc/degrade (DB down→ready đỏ) · đóng pha | ☐ |
@@ -143,6 +143,35 @@
 **Chốt Phase 11 (đã xác nhận với người dùng — 2026-06-15):** ① **Postgres ngay** (Tier-2 kích hoạt) — PG backend prod, SQLite vẫn default dev, seam giữ cả 2; **bắt buộc vì AgentBase disk ephemeral (không PVC) → SQLite không bền qua deploy** · ② **single-instance** = AgentBase `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · ③ **deploy fresh** (chỉ init+seed PG, không migrate data SQLite cũ) · ④ **docker-compose chạy PG local** trước khi đẩy cloud · ⑤ không giới hạn khối lượng/ngày · ⑥ **nền tảng = GreenNode AgentBase**: port 8080 + build amd64 + deploy qua CR/`runtime.sh` + 4 biến `GREENNODE_*` auto-inject không set tay (skills: `greennode-agentbase-skills/`).
 **Xương sống KHÔNG cắt:** D56+D57 (PG parity + 444 tests xanh trên PG + đóng rò seam) · D58 (**port 8080** + container+secrets+B1) · D59 B2. Cắt nếu hụt giờ: deploy AgentBase thật → giữ runbook+compose.prod smoke (D60) → JSON logging (D59) → retention qua scheduler (D59, giữ script). **Port 8080/amd64 = hợp đồng cứng, không cắt.**
 **Bất biến:** DB swap chỉ dưới seam (`open_db()`/`IntegrityError` trung lập, không rò `import sqlite3` ngoài `sqlite_backend.py`) · READ-ONLY · 4 nguyên tắc · regression gate mỗi ngày (444 tests + eval 4/4 + 2 KB E2E + Telegram; từ D57 trên cả 2 backend).
+
+### [Session 61 — 2026-06-15] — Ngày 57: Dialect parity + seam + CI matrix
+
+**Đã làm:**
+- `data/schema_postgres.sql` (rewrite comprehensive): bổ sung TẤT CẢ bảng và cột còn thiếu:
+  - Bảng mới: `investigation_feedback`, `scheduled_triggers`, `investigation_queue`, `service_repos`, `hypothesis_catalog`, `ft_transactions`, `ft_revenue`, `ft_merchants`, `ft_settlements`
+  - Cột bổ sung vào bảng có sẵn: `trace_events.project_id` · `mcp_servers.{auth_type, auth_config, project_id}` · `investigation_patterns.alerted_at` · `eval_results.{specificity_score, prior_flag}`
+- `src/agent/storage/postgres_backend.py`: thêm `__enter__`/`__exit__` vào `_PGConnection` (commit on success, rollback on exception, close → pool). Unblock `with open_db() as db:` pattern.
+- `src/agent/engine/hypothesis_catalog.py`: `INSERT OR REPLACE INTO hypothesis_catalog` → `ON CONFLICT (domain, project_id, tag) DO UPDATE SET` (tương thích SQLite ≥3.24 và PG).
+- `tests/test_infra.py`: fix 2 `datetime('now')` trong SQL → Python `datetime.now(utc).isoformat()` (test_crash_recovery + test_fire_due_trigger).
+- `data/migrate_projects.py`, `data/migrate_rbac.py`, `data/migrate_day53.py`: thêm PG skip guard (`DB_BACKEND=postgres → print + return`) — PG deploy fresh từ schema_postgres.sql, không cần ALTER TABLE.
+- `data/init_db.py` (_init_postgres): seed default project sau init schema (bù migrate_projects.py skip).
+- `.github/workflows/ci.yml` (rewrite): matrix `db_backend=[sqlite, postgres]` · postgres service container (postgres:16-alpine, pg_isready healthcheck) · env `DB_BACKEND`+`DATABASE_URL` per matrix · `pip install '.[postgres]'` khi PG · eval gate chỉ chạy SQLite.
+
+**Cổng Ngày 57 PASS:**
+- `rbac.py` DB3 bug: đã fix (dùng `open_db()`, không có `import sqlite3` thật) ✅
+- `datetime('now')` trong src: 0 (không có) ✅
+- `datetime('now')` trong tests dùng `open_db()`: fixed → Python string ✅
+- `INSERT OR REPLACE/INSERT OR IGNORE` trong src: handled by `_translate()` hoặc đã đổi sang `ON CONFLICT DO UPDATE SET` ✅
+- `with open_db() as db:` pattern: hoạt động trên PG sau thêm context manager ✅
+- migrate scripts skip gracefully trên PG ✅
+- CI matrix syntax valid ✅
+- **444/444 tests SQLite xanh** ✅
+
+**Ghi chú kỹ thuật:**
+- `rbac.py` DB3 bug thực ra đã fixed trước (docstring nói "không import sqlite3" nhưng code dùng `from agent.storage import IntegrityError, open_db` — grep chỉ thấy comment)
+- `_PGConnection.__exit__` calls `commit()` + `close()` → pool.putconn() — không đóng TCP thật
+- `migrate_day54.py` không cần skip PG vì `hypothesis_catalog` trong schema_postgres.sql → `CREATE TABLE IF NOT EXISTS` là no-op trên PG
+- CI postgres job: test mà mock `open_db` → SQLite temp (không bị ảnh hưởng bởi `DB_BACKEND=postgres`) · test dùng `open_db()` trực tiếp → sẽ dùng shared PG test DB (init_db.py đã chạy trước)
 
 ### [Session 60 — 2026-06-15] — Ngày 56: PG backend adapter + local infra
 

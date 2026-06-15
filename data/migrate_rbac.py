@@ -24,6 +24,10 @@ def _existing_tables(conn: sqlite3.Connection) -> set:
 
 
 def migrate(db_path: str) -> None:
+    if os.environ.get("DB_BACKEND", "sqlite").lower() == "postgres":
+        print("migrate_rbac: PG backend — deploy fresh, skipping SQLite-only migration.")
+        return
+
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")

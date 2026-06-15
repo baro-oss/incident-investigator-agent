@@ -105,8 +105,8 @@ class TestInvestigationQueue:
             # investigation_queue needs: id (PK), project_id, payload, status, enqueued_at
             conn.execute(
                 "INSERT INTO investigation_queue (id, project_id, payload, status, enqueued_at) "
-                "VALUES (?, 'default', ?, 'running', datetime('now'))",
-                (row_id, payload_json),
+                "VALUES (?, 'default', ?, 'running', ?)",
+                (row_id, payload_json, __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()),
             )
             conn.commit()
             # Simulate crash recovery: reset running → pending
@@ -186,13 +186,14 @@ class TestSchedulerCRUD:
         project = "sched-test-" + _unique_id()
         conn = open_db()
         try:
+            from datetime import datetime, timezone as _tz
             conn.execute(
                 """INSERT INTO scheduled_triggers
                    (id, project_id, service, scenario, interval_min, enabled,
                     next_run_at, created_at)
                    VALUES (?, ?, 'svc', 'scenario1', 60, 1,
-                           '2000-01-01T00:00:00+00:00', datetime('now'))""",
-                (trigger_id, project),
+                           '2000-01-01T00:00:00+00:00', ?)""",
+                (trigger_id, project, datetime.now(_tz.utc).isoformat()),
             )
             conn.commit()
         finally:

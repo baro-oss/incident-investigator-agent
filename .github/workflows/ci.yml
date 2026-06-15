@@ -7,8 +7,32 @@ on:
 
 jobs:
   test:
-    name: Test suite + eval gate
+    name: Test suite + eval gate (${{ matrix.db_backend }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        db_backend: [sqlite, postgres]
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: investigation
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: agent
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent -d investigation"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_BACKEND: ${{ matrix.db_backend }}
+      DATABASE_URL: ${{ matrix.db_backend == 'postgres' && 'postgresql://agent:agent@localhost/investigation' || '' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -19,7 +43,11 @@ jobs:
           cache: "pip"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e ".[dev]"
+          if [ "$DB_BACKEND" = "postgres" ]; then
+            pip install -e ".[postgres]"
+          fi
 
       # ── Syntax check ───────────────────────────────────────────────────────
       - name: Syntax check — py_compile all .py files
@@ -72,6 +100,7 @@ jobs:
         run: pytest --cov=agent --cov-report=term-missing -q
         continue-on-error: true
 
-      # ── Eval gate ─────────────────────────────────────────────────────────
+      # ── Eval gate (SQLite only — mock eval không phụ thuộc backend) ────────
       - name: Mock eval gate — all scenarios PASS
+        if: matrix.db_backend == 'sqlite'
         run: python scripts/eval_agent.py --mock --n 3 --scenario all

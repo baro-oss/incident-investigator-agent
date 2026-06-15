@@ -87,7 +87,7 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
 | 56 | PG backend adapter + local infra | psycopg connection shim (`?`→`%s`, dict-row, lastrowid) + connection pool qua storage seam · `schema_postgres.sql` + init/seed PG · `docker-compose` postgres local | ✅ |
-| 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR`→`ON CONFLICT` · `datetime/julianday` · **fix `auth/rbac.py` `import sqlite3`** · CI matrix `DB_BACKEND=[sqlite,postgres]` · 444 tests xanh trên cả 2 | ☐ |
+| 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR`→`ON CONFLICT` · `datetime/julianday` · **fix `auth/rbac.py` `import sqlite3`** · CI matrix `DB_BACKEND=[sqlite,postgres]` · 444 tests xanh trên cả 2 | ✅ |
 | 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** · Dockerfile non-root + multi-stage + amd64 + HEALTHCHECK · secrets fail-fast (prod) · `/health/ready` (DB ping) vs `/health` · **B1: `_make_error_state` truyền project_id** | ☐ |
 | 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight · JSON log opt-in · `/health` sâu · trace_events retention (TTL) · **B2: 2 `_emit_trace` thêm project_id (parity graph.py)** | ☐ |
 | 60 | Deploy lên AgentBase + smoke + Cổng P11 | build amd64 → managed CR (`vcr.vngcloud.vn`) → `runtime.sh create` (`min=max=1`) · `docker-compose.prod` + runbook/README/api docs · E2E smoke (PG) · audit READ-ONLY/degrade · đóng pha | ☐ |

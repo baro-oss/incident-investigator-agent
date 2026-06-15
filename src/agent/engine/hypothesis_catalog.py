@@ -236,10 +236,17 @@ def add_catalog_entry(
     from agent.storage.db import open_db
     with open_db() as db:
         db.execute(
-            """INSERT OR REPLACE INTO hypothesis_catalog
+            """INSERT INTO hypothesis_catalog
                (domain, project_id, tag, content, keywords, relevant_tools,
                 confirm_kws, rule_out_kws, confirm_conf, root_cause_type)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT (domain, project_id, tag) DO UPDATE SET
+               content=EXCLUDED.content, keywords=EXCLUDED.keywords,
+               relevant_tools=EXCLUDED.relevant_tools,
+               confirm_kws=EXCLUDED.confirm_kws,
+               rule_out_kws=EXCLUDED.rule_out_kws,
+               confirm_conf=EXCLUDED.confirm_conf,
+               root_cause_type=EXCLUDED.root_cause_type""",
             (
                 domain, project_id, tag, content,
                 json.dumps(keywords, ensure_ascii=False),

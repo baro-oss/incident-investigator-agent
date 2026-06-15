@@ -213,6 +213,17 @@ class _PGConnection:
         """Trả connection về pool (không đóng thật TCP connection)."""
         self._pool.putconn(self._conn)
 
+    def __enter__(self) -> "_PGConnection":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+        if exc_type is None:
+            self.commit()
+        else:
+            self.rollback()
+        self.close()
+        return False
+
 
 # ── Public API ────────────────────────────────────────────────────────────────
 

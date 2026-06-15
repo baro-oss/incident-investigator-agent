@@ -41,11 +41,20 @@ def _init_sqlite(db_path: str) -> None:
 def _init_postgres() -> None:
     sys.path.insert(0, str(ROOT / "src"))
     from agent.storage.db import open_db  # type: ignore
+    from datetime import datetime, timezone
     conn = open_db()
     conn.executescript(SCHEMA_POSTGRES.read_text())
+    # Seed default project (bù migrate_projects.py skip trên PG)
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO projects (id, name, description, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT (id) DO NOTHING",
+        ("default", "Default Project", "Dự án mặc định — backward compat", now, now),
+    )
+    conn.commit()
     conn.close()
     url = os.environ.get("DATABASE_URL", "")
-    # Redact password từ URL khi in
     import re
     display = re.sub(r"://([^:]+):[^@]+@", r"://\1:***@", url)
     print(f"[postgres] DB initialized: {display}")
