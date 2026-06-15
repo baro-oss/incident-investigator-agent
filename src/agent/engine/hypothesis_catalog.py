@@ -9,8 +9,12 @@ tool liên quan, ngưỡng xác nhận/loại trừ.
 """
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Set
+from typing import Dict, List, Optional, Set
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -151,3 +155,128 @@ def build_rct_index(
 ) -> Dict[str, HypothesisCatalogEntry]:
     """Build dict{root_cause_type → entry} cho E11 pre-seed. Bỏ qua entry không có root_cause_type."""
     return {entry.root_cause_type: entry for entry in catalog if entry.root_cause_type}
+
+
+# ── OPS1: Catalog DB persistence ─────────────────────────────────────────────
+
+def _row_to_entry(row: dict) -> Optional[HypothesisCatalogEntry]:
+    try:
+        return HypothesisCatalogEntry(
+            tag=row["tag"],
+            content=row.get("content", ""),
+            keywords=json.loads(row.get("keywords") or "[]"),
+            relevant_tools=set(json.loads(row.get("relevant_tools") or "[]")),
+            confirm_kws=set(json.loads(row.get("confirm_kws") or "[]")),
+            rule_out_kws=set(json.loads(row.get("rule_out_kws") or "[]")),
+            confirm_conf=row.get("confirm_conf", "medium"),
+            root_cause_type=row.get("root_cause_type", ""),
+        )
+    except Exception as e:
+        logger.warning("hypothesis_catalog: bỏ qua row lỗi tag=%s: %s", row.get("tag"), e)
+        return None
+
+
+def load_db_catalog_entries(domain: str = "microservice", project_id: str = "default") -> List[HypothesisCatalogEntry]:
+    """Đọc tất cả entry trong DB cho (domain, project_id). Trả [] nếu bảng chưa có."""
+    try:
+        from agent.storage.db import open_db
+        with open_db() as db:
+            rows = db.execute(
+                "SELECT * FROM hypothesis_catalog WHERE domain=? AND project_id=?",
+                (domain, project_id),
+            ).fetchall()
+        entries = [_row_to_entry(dict(r)) for r in rows]
+        return [e for e in entries if e is not None]
+    except Exception as e:
+        logger.warning("load_db_catalog_entries: %s", e)
+        return []
+
+
+def merge_catalog_with_db(
+    base: List[HypothesisCatalogEntry],
+    domain: str = "microservice",
+    project_id: str = "default",
+) -> List[HypothesisCatalogEntry]:
+    """
+    Merge DB entries lên trên default catalog.
+
+    • DB entry cùng tag → ghi đè default
+    • DB entry tag mới → thêm vào cuối
+    DB override không xóa default entries không có trong DB.
+    """
+    db_entries = load_db_catalog_entries(domain, project_id)
+    if not db_entries:
+        return list(base)
+
+    by_tag: Dict[str, HypothesisCatalogEntry] = {e.tag: e for e in base}
+    for entry in db_entries:
+        by_tag[entry.tag] = entry  # overwrite hoặc thêm mới
+
+    # Giữ thứ tự: base trước (theo tag order), rồi new tags từ DB
+    base_tags = [e.tag for e in base]
+    new_tags = [e.tag for e in db_entries if e.tag not in {e2.tag for e2 in base}]
+    ordered_tags = base_tags + new_tags
+    return [by_tag[t] for t in ordered_tags if t in by_tag]
+
+
+# ── OPS1: CRUD helpers (dùng cho dashboard routes) ───────────────────────────
+
+def add_catalog_entry(
+    domain: str,
+    project_id: str,
+    tag: str,
+    content: str,
+    keywords: List[str],
+    relevant_tools: List[str],
+    confirm_kws: List[str],
+    rule_out_kws: List[str],
+    confirm_conf: str,
+    root_cause_type: str,
+) -> None:
+    from agent.storage.db import open_db
+    with open_db() as db:
+        db.execute(
+            """INSERT OR REPLACE INTO hypothesis_catalog
+               (domain, project_id, tag, content, keywords, relevant_tools,
+                confirm_kws, rule_out_kws, confirm_conf, root_cause_type)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                domain, project_id, tag, content,
+                json.dumps(keywords, ensure_ascii=False),
+                json.dumps(relevant_tools, ensure_ascii=False),
+                json.dumps(confirm_kws, ensure_ascii=False),
+                json.dumps(rule_out_kws, ensure_ascii=False),
+                confirm_conf, root_cause_type,
+            ),
+        )
+        db.commit()
+
+
+def delete_catalog_entry(entry_id: int) -> bool:
+    from agent.storage.db import open_db
+    with open_db() as db:
+        cur = db.execute("DELETE FROM hypothesis_catalog WHERE id=?", (entry_id,))
+        db.commit()
+        return cur.rowcount > 0
+
+
+def list_catalog_entries_db(domain: Optional[str] = None, project_id: Optional[str] = None) -> List[dict]:
+    """Trả list raw dict từ DB để hiển thị trong UI."""
+    try:
+        from agent.storage.db import open_db
+        with open_db() as db:
+            clauses, params = [], []
+            if domain:
+                clauses.append("domain=?")
+                params.append(domain)
+            if project_id:
+                clauses.append("project_id=?")
+                params.append(project_id)
+            where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+            rows = db.execute(
+                f"SELECT * FROM hypothesis_catalog {where} ORDER BY domain, project_id, tag",
+                params,
+            ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []

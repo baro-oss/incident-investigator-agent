@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **365/365 tests. CI xanh.** Ngày 51–53 ✅ XONG.
-**Cổng kiểm gần nhất:** Ngày 53 (V1+E13) — 365 tests · eval 4/4 mock · avg specificity 0.67 in output · prior decay half-life 30d · --no-prior A/B flag · eval_comparison dashboard panel.
-**Kế hoạch kế tiếp:** Ngày 54 — P2+OPS1: distill tổng quát (sửa 500-char truncate) + catalog editor UI.
+**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **384/384 tests. CI xanh.** Ngày 51–54 ✅ XONG.
+**Cổng kiểm gần nhất:** Ngày 54 (P2+OPS1) — 384 tests · external MCP distill (không còn cắt 500-char) · hypothesis_catalog DB CRUD + merge · catalog editor UI.
+**Kế hoạch kế tiếp:** Ngày 55 — T3+Close: coverage/CI + audit READ-ONLY + docs + Cổng P10.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -123,12 +123,33 @@
 | 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` **giữ nguyên** → agent đọc diff/file đúng version qua MCP (map version→repo qua `service_repos`) · catalog: thêm code tool vào `relevant_tools` `deploy_bug`/`dependency` → E10 hint + E11 prior tự kích · `specificity.py` cộng điểm code evidence (file+dòng+version) · grounding nhận code Observation · ~25 tests | ✅ |
 | 53 | V1 + E13 — Eval harness + prior decay | `eval_agent.py`: --no-prior flag (A/B) + specificity_score per run + avg specificity in summary · `patterns.py`: `_decay_weight` (half-life 30d) + sort by weighted_count · `queries.py:get_eval_comparison_data` · `eval.html`: E13 Before/After panel · `migrate_day53.py`: +2 cột eval_results · 24 tests | ✅ |
 
-| 54 | P2 + OPS1 — Distill tổng quát + catalog editor | `mcp_client.py:_parse_observation` distill text dài thay vì cắt 500-char + budget tuning · bảng `hypothesis_catalog` (DB override lên default) + CRUD UI (tag/keywords/relevant_tools/root_cause_type/repo-tool mapping) | ☐ |
+| 54 | P2 + OPS1 — Distill tổng quát + catalog editor | `mcp_client.py:_parse_observation` distill text dài thay vì cắt 500-char + budget tuning · bảng `hypothesis_catalog` (DB override lên default) + CRUD UI (tag/keywords/relevant_tools/root_cause_type/repo-tool mapping) | ✅ |
 | 55 | T3 + Close — Coverage + Cổng P10 | Tests dashboard/server/runner + CI import/syntax lớp code + ngưỡng coverage gate nhẹ · docs/15 ✅ + README/api · audit READ-ONLY (grep không tool ghi) + degrade safe · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
 
 **Chốt Phase 10 (đã xác nhận với người dùng):** code đọc **chỉ qua external MCP** (GitHub/GitLab = extension, KHÔNG quản lý source trong hệ thống, KHÔNG local diff) · `get_recent_deploys` giữ nguyên · **READ-ONLY tuyệt đối với code** · real-LLM eval = mock + defer (chờ credit) · Tier-2/bidirectional/horizontal vẫn Future · 5 ngày (dồn khối lượng từ bản 10 ngày, không cắt scope).
 **Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
 **Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
+
+### [Session 57 — 2026-06-15] — Ngày 54: P2+OPS1 Distill tổng quát + Catalog Editor
+
+**Đã làm:**
+- `tools/mcp_client.py`: thêm hàm `_distill_external_text(text, tool_name, server_url) -> Observation` — distill text tự do từ external MCP: summary = dòng đầu ≤200 char có prefix `[tool_name]`, samples ≤5 dòng đại diện từ phần còn lại, total_count = số dòng không trống, truncated flag. Thay thế hoàn toàn logic cắt 500-char cũ. `_parse_observation` path external gọi `_distill_external_text`. JSON path (Observation-structure) giữ nguyên không đổi.
+- `data/migrate_day54.py` (mới): tạo bảng `hypothesis_catalog` idempotent (domain, project_id, tag UNIQUE). Chạy ngay.
+- `engine/hypothesis_catalog.py`: thêm `import json, logging`; thêm `_row_to_entry`, `load_db_catalog_entries`, `merge_catalog_with_db`, `add_catalog_entry`, `delete_catalog_entry`, `list_catalog_entries_db`. `merge_catalog_with_db(base, domain, project_id)` — DB override cùng tag ghi đè, tag mới thêm cuối; fallback an toàn khi DB trống/lỗi.
+- `intake/runner.py`: `get_default_catalog(domain)` → `merge_catalog_with_db(get_default_catalog(domain), domain, project_id)`. Project-scoped DB overrides.
+- `dashboard/router.py`: 3 route mới — `GET /catalog` (list DB + default read-only), `POST /catalog/add` (form add entry), `POST /catalog/{id}/delete`. Degrade-safe, redirect 303.
+- `dashboard/templates/catalog.html` (mới): form add entry (tag/content/keywords/tools/conf/root_cause_type) + bảng DB overrides với nút Xóa + bảng Default catalog (read-only).
+- `dashboard/templates/base.html`: thêm link "Catalog Editor" vào nav nhóm Cấu hình.
+- `tests/test_day54.py` (mới, 19 tests): TestDistillExternalText (10) · TestParseObservationDistills (2) · TestLoadDbCatalogEntries (3) · TestMergeCatalogWithDb (4).
+
+**Tests:** 365 + 19 = **384/384 tests**.
+
+**Cổng Ngày 54 PASS:**
+- `_distill_external_text`: summary ≤200 char có tool prefix · samples ≤5 · total_count = non-blank lines · truncated flag đúng · blank lines bỏ qua · source metadata đúng ✅
+- `_parse_observation` external path dùng distill (không còn [:500]) · JSON path giữ nguyên ✅
+- `merge_catalog_with_db`: empty DB → base unchanged · DB tag override ghi đè · new tag thêm cuối · order preserved ✅
+- Catalog CRUD UI hoạt động (route add/delete/list) ✅
+- 384/384 tests ✅
 
 ### [Session 56 — 2026-06-15] — Ngày 53: V1+E13 Eval harness + Prior decay
 

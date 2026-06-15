@@ -147,8 +147,8 @@ async def run_investigation_background(
 
             # Xây tool registry + hypothesis catalog theo domain
             domain = getattr(req, "domain", "microservice")
-            from agent.engine.hypothesis_catalog import get_default_catalog
-            hypothesis_catalog = get_default_catalog(domain)
+            from agent.engine.hypothesis_catalog import get_default_catalog, merge_catalog_with_db
+            hypothesis_catalog = merge_catalog_with_db(get_default_catalog(domain), domain, project_id)
 
             if domain == "fintech":
                 from agent.tools.registry_fintech import get_fintech_tool_registry

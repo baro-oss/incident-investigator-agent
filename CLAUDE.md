@@ -15,9 +15,9 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 📋 ĐÃ LÊN KẾ HOẠCH (46–50, CHƯA CODE) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate.**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 ✅ HOÀN TẤT (46–50 — 262/262 tests) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate. Phase 10 📋 ĐÃ LÊN KẾ HOẠCH (51–55, CHƯA CODE) — agent đọc mã nguồn (diff/file deploy nghi vấn) qua external MCP (GitHub/GitLab), distill + READ-ONLY.**
 
-Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`. **Plan Phase 9 (CHƯA CODE): `docs/14-roadmap-phase-9.md`.**
+Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`. Plan Phase 9 (ĐÃ XONG): `docs/14-roadmap-phase-9.md`. **Plan Phase 10 (CHƯA CODE): `docs/15-roadmap-phase-10.md`.**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
@@ -58,17 +58,29 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 
 **Cổng Phase 8 PASS:** engine domain-agnostic · parity loop↔graph · calibration đóng vòng · CI xanh · 173 tests · prompt caching · E9 structured verdict · README+Makefile+API docs · security audit + startup warnings. Chi tiết: `docs/13-roadmap-phase-8.md`.
 
-**Phase 9 📋 ĐÃ LÊN KẾ HOẠCH (46–50, CHƯA CODE) — engine-core round 3 (`docs/14-roadmap-phase-9.md`):**
+**Phase 9 ✅ HOÀN TẤT (46–50 — 262/262 tests) — engine-core round 3 (`docs/14-roadmap-phase-9.md`):**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
-| 46 | E11 — Service prior | Pre-seed giả thuyết theo lịch sử service (`investigation_patterns` → catalog tag); confirm vẫn cần bằng chứng thật | ☐ |
-| 47 | E10 — Tool sequencing | Hint `relevant_tools` cho giả thuyết open vào prompt (advisory) · parity loop↔graph miễn phí qua `_build_user_message` | ☐ |
-| 48 | E12 — Specificity gate (lõi) | `compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph (idempotent, budget-guard) | ☐ |
-| 49 | E12 — Multi-agent + đo | Downgrade/annotate multi-agent · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ☐ |
-| 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · đóng pha | ☐ |
+| 46 | E11 — Service prior | Pre-seed giả thuyết theo lịch sử service (`investigation_patterns` → catalog tag); confirm vẫn cần bằng chứng thật | ✅ |
+| 47 | E10 — Tool sequencing | Hint `relevant_tools` cho giả thuyết open vào prompt (advisory) · parity loop↔graph miễn phí qua `_build_user_message` | ✅ |
+| 48 | E12 — Specificity gate (lõi) | `compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph (idempotent, budget-guard) | ✅ |
+| 49 | E12 — Multi-agent + đo | Downgrade/annotate multi-agent · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ✅ |
+| 50 | Tests + CI + Cổng P9 | 262 tests · CI xanh · audit degrade an toàn · đóng pha | ✅ |
 
-**Bất biến Phase 9:** 100% engine-core · KHÔNG phá 4 nguyên tắc (nhất là #2 — tri thức miền sống trong catalog, KHÔNG hardcode keyword vào engine) · regression gate mỗi ngày engine (eval 4/4 + 2 KB E2E + Telegram).
+**Cổng Phase 9 PASS:** E11 pre-seed + 27 tests · E10 hint+parity + 21 tests · E12 gate+downgrade+dashboard + 41 tests · nguyên tắc #2 giữ vững · mock eval 4/4 · 262/262 tests · CI xanh. Chi tiết: `docs/14-roadmap-phase-9.md`.
+
+**Phase 10 📋 ĐÃ LÊN KẾ HOẠCH (51–55, CHƯA CODE) — agent đọc mã nguồn qua external MCP (`docs/15-roadmap-phase-10.md`):**
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|-----------|
+| 51 | F1 — Code seam over MCP | `code_distill` wrapper (raw diff/file → Observation chưng cất, P#1) · risk interpreter generic · `service_repos` mapping · READ-ONLY guard (chặn write/PR/merge) · UI repo config | ☐ |
+| 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` (giữ nguyên) → đọc diff version nghi vấn qua MCP · catalog code-aware (gắn code tool vào `relevant_tools` deploy_bug → E10/E11 tự kích) · code→E12 specificity + grounding | ☐ |
+| 53 | V1 + E13 — Eval harness + prior decay | Đo avg-steps/specificity before-after (mock; real-LLM ~$2 chờ credit) · time-weight `investigation_patterns` (prior decay) + refresh calibration | ☐ |
+| 54 | P2 + OPS1 — Distill tổng quát + catalog editor | Distill mọi external MCP (sửa truncate 500-char) + budget · catalog editor UI (thêm hypothesis/keyword/tool+repo mapping không sửa Python) | ☐ |
+| 55 | T3 + Close — Coverage + Cổng P10 | Coverage dashboard/server/runner + CI lớp code · docs/README · audit READ-ONLY + degrade safe · đóng pha | ☐ |
+
+**Ràng buộc lõi Phase 10:** hệ thống KHÔNG quản lý source — code chỉ đọc qua external MCP (GitHub/GitLab là extension) · `get_recent_deploys` giữ nguyên · READ-ONLY tuyệt đối với code · real-LLM eval defer (mock + chờ credit) · Tier-2/bidirectional/horizontal vẫn Future.
 
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 
@@ -101,8 +113,9 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 **Phase 6** ✅ (xem `docs/12-roadmap-phase-6.md`): engine quality (hypothesis lifecycle · evidence-grounding verdict · calibration) · webhook auth + secret at-rest · graceful shutdown + in-process queue · PagerDuty/deploy-hook intake.
 **Phase 7** ✅ (Ngày 31–35): proactive monitoring scheduler · multi-agent conflict resolution · Docker + export · Redis SSE seam · 63/63 tests.
 **Phase 8** ✅ (Ngày 36–45, `docs/13`): engine domain-agnostic (hypothesis catalog theo miền) · hợp nhất loop/graph path + multi-agent parity · real-LLM calibration đóng vòng · test adapters/output/infra + CI gate · prompt caching · DX/docs.
-**Phase 9** 📋 (Ngày 46–50, `docs/14`): engine lõi thông minh hơn — E10 hypothesis-guided tool sequencing · E11 cross-investigation service prior · E12 verdict specificity gate. 100% engine-core, không cạnh mới.
-**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration (phá READ-ONLY, cần duyệt) · horizontal scale seam (hoàn thiện Redis SSE stub) · catalog editor UI.
+**Phase 9** ✅ (Ngày 46–50, `docs/14`): engine lõi thông minh hơn — E10 hypothesis-guided tool sequencing · E11 cross-investigation service prior · E12 verdict specificity gate. 100% engine-core, không cạnh mới.
+**Phase 10** 📋 (Ngày 51–55, `docs/15`, CHƯA CODE): agent đọc mã nguồn qua external MCP (GitHub/GitLab) — code-distill seam (P#1) + READ-ONLY guard + `service_repos` mapping · synergy deploy↔code (E10/E11) + code→E12 specificity · eval harness (mock) + prior decay · distill tổng quát + catalog editor · coverage/CI.
+**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration / code action (phá READ-ONLY, cần duyệt) · horizontal scale seam (hoàn thiện Redis SSE stub) · real-LLM eval đầy đủ (chờ credit, harness từ P10).
 
 ---
 
@@ -203,7 +216,8 @@ Chỉ synthetic data, tool **READ-ONLY**, không PII, không kết nối hệ th
 │   ├── 11-roadmap-phase-5.md  ← Phase 5 (đã xong)
 │   ├── 12-roadmap-phase-6.md  ← Phase 6 (đã xong)
 │   ├── 13-roadmap-phase-8.md  ← Phase 8 (đã xong)
-│   └── 14-roadmap-phase-9.md  ← KẾ HOẠCH TIẾP THEO (Phase 9, Ngày 46–50, chưa code)
+│   ├── 14-roadmap-phase-9.md  ← Phase 9 (đã xong)
+│   └── 15-roadmap-phase-10.md ← KẾ HOẠCH TIẾP THEO (Phase 10, Ngày 51–55, chưa code)
 ├── data/
 │   ├── schema.sql              ← DDL đầy đủ (có projects, project_services, mcp_servers)
 │   ├── init_db.py

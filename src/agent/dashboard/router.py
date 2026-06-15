@@ -1273,3 +1273,78 @@ async def investigation_export(
         media_type="application/json",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )
+
+
+# ── OPS1: Catalog Editor ──────────────────────────────────────────────────────
+
+@router.get("/catalog", response_class=HTMLResponse)
+async def dashboard_catalog(
+    request: Request,
+    domain: Optional[str] = None,
+    project_id: Optional[str] = None,
+    user: dict = Depends(require_login),
+):
+    from agent.engine.hypothesis_catalog import list_catalog_entries_db, get_default_catalog
+    db_entries = list_catalog_entries_db(domain=domain or None, project_id=project_id or None)
+    # Show defaults in a separate read-only list
+    default_catalog = get_default_catalog(domain or "microservice")
+    return templates.TemplateResponse(request, "catalog.html", _ctx(request, user,
+        active="catalog",
+        db_entries=db_entries,
+        default_catalog=default_catalog,
+        filter_domain=domain or "microservice",
+        filter_project=project_id or "default",
+        projects=_get_all_project_ids(),
+    ))
+
+
+@router.post("/catalog/add", response_class=HTMLResponse)
+async def dashboard_catalog_add(
+    request: Request,
+    domain: str = Form("microservice"),
+    project_id: str = Form("default"),
+    tag: str = Form(...),
+    content: str = Form(""),
+    keywords: str = Form(""),
+    relevant_tools: str = Form(""),
+    confirm_kws: str = Form(""),
+    rule_out_kws: str = Form(""),
+    confirm_conf: str = Form("medium"),
+    root_cause_type: str = Form(""),
+    user: dict = Depends(require_login),
+):
+    def _split(s: str):
+        return [x.strip() for x in s.split(",") if x.strip()]
+
+    from agent.engine.hypothesis_catalog import add_catalog_entry
+    add_catalog_entry(
+        domain=domain,
+        project_id=project_id,
+        tag=tag.strip(),
+        content=content.strip(),
+        keywords=_split(keywords),
+        relevant_tools=_split(relevant_tools),
+        confirm_kws=_split(confirm_kws),
+        rule_out_kws=_split(rule_out_kws),
+        confirm_conf=confirm_conf,
+        root_cause_type=root_cause_type.strip(),
+    )
+    return RedirectResponse(
+        f"/dashboard/catalog?domain={domain}&project_id={project_id}",
+        status_code=303,
+    )
+
+
+@router.post("/catalog/{entry_id}/delete", response_class=HTMLResponse)
+async def dashboard_catalog_delete(
+    request: Request, entry_id: int,
+    domain: str = Form("microservice"),
+    project_id: str = Form("default"),
+    user: dict = Depends(require_login),
+):
+    from agent.engine.hypothesis_catalog import delete_catalog_entry
+    delete_catalog_entry(entry_id)
+    return RedirectResponse(
+        f"/dashboard/catalog?domain={domain}&project_id={project_id}",
+        status_code=303,
+    )

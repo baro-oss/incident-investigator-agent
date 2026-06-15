@@ -158,6 +158,53 @@ def _extract_text(content: List[Dict[str, Any]]) -> str:
     return "\n".join(parts)
 
 
+_SUMMARY_CHARS = 200   # độ dài summary tối đa
+_MAX_SAMPLES   = 5    # số dòng mẫu tối đa
+
+
+def _distill_external_text(text: str, tool_name: str, server_url: str) -> Observation:
+    """
+    Distill text tự do từ external MCP → Observation có cấu trúc (Nguyên tắc #1).
+
+    • summary: dòng đầu tiên (≤200 char) kèm prefix diễn giải
+    • samples: ≤5 dòng đại diện (bỏ trống, ưu tiên dòng ngắn)
+    • total_count: tổng số dòng không trống
+    • truncated: True nếu text bị cắt khi lấy samples
+    """
+    if not text:
+        return Observation(
+            summary=f"Tool {tool_name} hoàn tất (không có output)",
+            aggregates={},
+            samples=[],
+            total_count=0,
+            truncated=False,
+            metadata={"tool_name": tool_name, "source": "mcp_external", "server_url": server_url},
+        )
+
+    lines = [ln.strip() for ln in text.splitlines()]
+    nonempty = [ln for ln in lines if ln]
+
+    # Summary = dòng đầu tiên có nội dung, cắt ở _SUMMARY_CHARS
+    first_line = nonempty[0] if nonempty else text[:_SUMMARY_CHARS]
+    summary = f"[{tool_name}] {first_line[:_SUMMARY_CHARS]}"
+    if len(first_line) > _SUMMARY_CHARS:
+        summary += "…"
+
+    # Samples: ≤5 dòng đại diện từ phần còn lại (bỏ dòng đầu đã dùng làm summary)
+    remaining = nonempty[1:] if len(nonempty) > 1 else []
+    samples = remaining[:_MAX_SAMPLES]
+    truncated = len(remaining) > _MAX_SAMPLES
+
+    return Observation(
+        summary=summary,
+        aggregates={"total_lines": len(nonempty)},
+        samples=samples,
+        total_count=len(nonempty),
+        truncated=truncated,
+        metadata={"tool_name": tool_name, "source": "mcp_external", "server_url": server_url},
+    )
+
+
 def _parse_observation(text: str, tool_name: str, server_url: str) -> Observation:
     """
     Parse text từ MCP tool response → Observation.
@@ -181,13 +228,5 @@ def _parse_observation(text: str, tool_name: str, server_url: str) -> Observatio
         except (json.JSONDecodeError, TypeError, KeyError):
             pass
 
-    # External server — wrap toàn bộ text vào summary
-    summary = text[:500] if text else f"Tool {tool_name} hoàn tất (không có output)"
-    return Observation(
-        summary=summary,
-        aggregates={},
-        samples=[],
-        total_count=0,
-        truncated=len(text) > 500 if text else False,
-        metadata={"tool_name": tool_name, "source": "mcp_external", "server_url": server_url},
-    )
+    # External server — distill text thay vì cắt 500-char (Nguyên tắc #1)
+    return _distill_external_text(text, tool_name, server_url)
