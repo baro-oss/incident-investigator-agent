@@ -6,7 +6,11 @@ E12: Verdict specificity metric — đo độ cụ thể của verdict.
   (b) evidence_summary có ≥2 số phân biệt
   (c) propagation_note không rỗng + có service/số
 
-Score = sum(signals) / 3, range [0.0, 1.0].
+Bonus signal (4th, F2):
+  (d) investigation có code evidence (source=code_mcp) với risk_signals cụ thể
+      → total=4 thay vì 3, score = (passed+1)/4 (chỉ tăng, không giảm)
+
+Score = sum(signals) / total, range [0.0, 1.0].
 Gate fires khi score < SPECIFICITY_THRESHOLD và conf in {high, medium}.
 """
 from __future__ import annotations
@@ -49,7 +53,28 @@ def compute_verdict_specificity(
     else:
         reasons.append("propagation_note trống hoặc không nêu service/số liệu")
 
-    return passed / 3, reasons
+    # Bonus signal (F2): code evidence với risk_signals → total=4
+    total = 3
+    if _has_code_evidence_with_signals(state):
+        passed += 1
+        total = 4
+
+    return passed / total, reasons
+
+
+def _has_code_evidence_with_signals(state: "InvestigationState") -> bool:
+    """True khi investigation có code evidence (source=code_mcp) với risk_signals cụ thể."""
+    for ev in state.evidence:
+        obs = getattr(ev, "observation", None)
+        if obs is None:
+            continue
+        meta = getattr(obs, "metadata", {}) or {}
+        if meta.get("source") != "code_mcp":
+            continue
+        agg = getattr(obs, "aggregates", {}) or {}
+        if agg.get("risk_signals"):
+            return True
+    return False
 
 
 def _has_specific_token(text: str, services: list) -> bool:

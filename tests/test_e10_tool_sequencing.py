@@ -68,7 +68,10 @@ class TestToolSequencingHint:
     def test_no_hint_when_all_tools_called(self):
         state = _make_state(
             hypotheses=[_open_hyp("deploy")],
-            tool_history=[{"name": "get_recent_deploys", "params": {}}],
+            tool_history=[
+                {"name": "get_recent_deploys", "params": {}},
+                {"name": "get_code_diff", "params": {}},
+            ],
         )
         hint = _tool_sequencing_hint(state)
         assert hint == ""
@@ -169,8 +172,9 @@ class TestBuildUserMessageWithHint:
         msg_before = _build_user_message(state, last_obs=None)
         assert "deploy" in msg_before
 
-        # Giả lập đã gọi tool
+        # Giả lập đã gọi hết relevant_tools của deploy (F2: bao gồm get_code_diff)
         state.tool_call_history.append({"name": "get_recent_deploys", "params": {}})
+        state.tool_call_history.append({"name": "get_code_diff", "params": {}})
         msg_after = _build_user_message(state, last_obs=None)
         # deploy không còn trong hint (nhưng có thể còn trong summarize_for_llm)
         after_hint_section = msg_after.split("## Tool gợi ý")[1] if "## Tool gợi ý" in msg_after else ""
@@ -198,6 +202,9 @@ class TestParity:
         """Idempotent khi đã gọi hết tool: trả '' không có whitespace thừa."""
         state = _make_state(
             hypotheses=[_open_hyp("deploy")],
-            tool_history=[{"name": "get_recent_deploys", "params": {}}],
+            tool_history=[
+                {"name": "get_recent_deploys", "params": {}},
+                {"name": "get_code_diff", "params": {}},
+            ],
         )
         assert _tool_sequencing_hint(state) == ""

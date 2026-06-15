@@ -156,6 +156,16 @@ async def run_investigation_background(
                 logger.info("[%s] Dùng Fintech tool registry (%d tools)", key, len(tools))
             else:
                 tools = await build_tool_registry(mcp_clients if mcp_clients else None)
+                # F2: thêm get_code_diff khi project có service_repos cấu hình
+                try:
+                    from agent.intake.project_registry import list_service_repos
+                    from agent.tools.get_code_diff import CODE_DIFF_TOOL_NAME, build_code_diff_tool
+                    repos = list_service_repos(project_id)
+                    if repos and not any(t.name == CODE_DIFF_TOOL_NAME for t in tools):
+                        tools = list(tools) + [build_code_diff_tool(project_id)]
+                        logger.info("[%s] Thêm %s (%d repo mapping)", project_id, CODE_DIFF_TOOL_NAME, len(repos))
+                except Exception as e:
+                    logger.warning("Không thêm được code_diff tool: %s", e)
 
             # Resolve LLM: project DB config → global env vars
             llm_cfg = None

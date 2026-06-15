@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **314/314 tests. CI xanh.** Ngày 51 ✅ XONG.
-**Cổng kiểm gần nhất:** Ngày 51 (F1 Code seam) — 314 tests · eval 4/4 mock · distill_code_response hợp lệ P#1 · READ-ONLY guard · service_repos CRUD + UI · Telegram KHÔNG đụng.
-**Kế hoạch kế tiếp:** Ngày 52 — F2 Deploy↔code synergy: `get_recent_deploys`→đọc diff version qua MCP; catalog code-aware (E10/E11); code→E12 specificity.
+**Giai đoạn:** Phase 10 🔄 ĐANG LÀM (51–55). **341/341 tests. CI xanh.** Ngày 51 ✅ XONG. Ngày 52 ✅ XONG.
+**Cổng kiểm gần nhất:** Ngày 52 (F2 Deploy↔code) — 341 tests · eval 4/4 mock · build_code_diff_tool factory · catalog deploy.relevant_tools có get_code_diff · E10 hint tự kích · code→E12 specificity boost (4th signal) · Nguyên tắc #2 giữ vững.
+**Kế hoạch kế tiếp:** Ngày 53 — V1+E13: eval harness (avg-steps/specificity before-after, mock) + prior decay (time-weight investigation_patterns).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -120,7 +120,7 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 51 | F1 — Code seam over MCP | `tools/code_distill.py:distill_code_response` (raw diff/file → Observation chưng cất, P#1) · risk interpreter generic (pool/timeout/config/dep-bump) · bảng `service_repos` (mapping metadata, project-scoped) · READ-ONLY guard `is_read_only_tool` (chặn write/PR/merge/push) · UI repo config card · tests mocked MCP | ✅ |
-| 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` **giữ nguyên** → agent đọc diff/file đúng version qua MCP (map version→repo qua `service_repos`) · catalog: thêm code tool vào `relevant_tools` `deploy_bug`/`dependency` → E10 hint + E11 prior tự kích · `specificity.py` cộng điểm code evidence (file+dòng+version) · grounding nhận code Observation · ~25 tests | ☐ |
+| 52 | F2 — Deploy↔code + specificity | `get_recent_deploys` **giữ nguyên** → agent đọc diff/file đúng version qua MCP (map version→repo qua `service_repos`) · catalog: thêm code tool vào `relevant_tools` `deploy_bug`/`dependency` → E10 hint + E11 prior tự kích · `specificity.py` cộng điểm code evidence (file+dòng+version) · grounding nhận code Observation · ~25 tests | ✅ |
 | 53 | V1 + E13 — Eval harness + prior decay | `eval_agent.py` đo avg-steps + specificity, flag A/B `--no-prior`; dashboard before/after; chạy **mock**, real-LLM ~$2 chờ credit (lệnh sẵn) · `patterns.py:get_service_priors` time-weight count theo `updated_at` (prior decay) + refresh calibration | ☐ |
 | 54 | P2 + OPS1 — Distill tổng quát + catalog editor | `mcp_client.py:_parse_observation` distill text dài thay vì cắt 500-char + budget tuning · bảng `hypothesis_catalog` (DB override lên default) + CRUD UI (tag/keywords/relevant_tools/root_cause_type/repo-tool mapping) | ☐ |
 | 55 | T3 + Close — Coverage + Cổng P10 | Tests dashboard/server/runner + CI import/syntax lớp code + ngưỡng coverage gate nhẹ · docs/15 ✅ + README/api · audit READ-ONLY (grep không tool ghi) + degrade safe · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
@@ -128,6 +128,30 @@
 **Chốt Phase 10 (đã xác nhận với người dùng):** code đọc **chỉ qua external MCP** (GitHub/GitLab = extension, KHÔNG quản lý source trong hệ thống, KHÔNG local diff) · `get_recent_deploys` giữ nguyên · **READ-ONLY tuyệt đối với code** · real-LLM eval = mock + defer (chờ credit) · Tier-2/bidirectional/horizontal vẫn Future · 5 ngày (dồn khối lượng từ bản 10 ngày, không cắt scope).
 **Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
 **Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
+
+### [Session 55 — 2026-06-15] — Ngày 52: F2 Deploy↔code synergy
+
+**Đã làm:**
+- `tools/get_code_diff.py` (mới): `build_code_diff_tool(project_id, code_mcp_client=None) -> Tool` — factory scope theo project; lookup `service_repos`; 3 nhánh degrade-safe: (a) no repo mapping → Observation status=no_repo_mapping, (b) repo configured no MCP → status=no_mcp_client + repo_url in aggregates, (c) với MCP client → tìm get_diff/diff/get_file_diff/fetch_diff → gọi + distill qua `distill_code_response`. Tool name `"get_code_diff"` — passes `is_read_only_tool` (tiền tố `get_`). READ-ONLY hoàn toàn.
+- `engine/hypothesis_catalog.py`: thêm `"get_code_diff"` vào `deploy.relevant_tools` → E10 hint + E11 prior tự kích miễn phí (Nguyên tắc #2 giữ vững — engine không thay đổi).
+- `engine/specificity.py`: thêm 4th signal bonus (F2) — `_has_code_evidence_with_signals(state)` check `ev.observation.metadata.source == "code_mcp"` + `risk_signals` non-empty; nếu True: `passed += 1, total = 4` (chỉ tăng không giảm). Tài liệu hoá trong docstring. Backward-compat: no code evidence → `total = 3` (hành vi cũ).
+- `intake/runner.py`: sau khi build tool registry (domain != fintech), gọi `list_service_repos(project_id)` → nếu có repo mapping, inject `build_code_diff_tool(project_id)` vào tools list (degrade-safe, wrapped trong try/except).
+- `tests/test_code_layer.py` (+27 tests, tổng 79 trong file này): TestGetCodeDiffTool (9) · TestCatalogCodeAware (5) · TestCodeSpecificity (9) · TestPrincipleGuard (4). Thêm `_make_temp_repos_db()` helper.
+- `tests/test_e10_tool_sequencing.py` (3 tests sửa): cập nhật `test_no_hint_when_all_tools_called`, `test_hint_updates_after_tool_call`, `test_hint_empty_string_when_all_called` — thêm `get_code_diff` vào tool_call_history (vì deploy.relevant_tools giờ có 2 tool).
+
+**Tests:** 314 + 27 = **341/341 tests**.
+**Eval mock:** 4/4 PASS.
+**Nguyên tắc #2:** `grep src/agent/engine/` không có "github", "gitlab", "repo_url", "get_code_diff" trong loop.py ✅.
+
+**Cổng Ngày 52 PASS:**
+- build_code_diff_tool factory: schema đúng, 3 nhánh degrade-safe ✅
+- is_read_only_tool("get_code_diff") = True ✅
+- deploy.relevant_tools có get_code_diff; E10 hint khi deploy open ✅
+- Hint biến mất khi cả get_recent_deploys + get_code_diff đã gọi ✅
+- _has_code_evidence_with_signals: True/False đúng cases ✅
+- Score với code evidence > không có code evidence ✅
+- Nguyên tắc #2 giữ vững ✅
+- 341/341 tests · eval 4/4 ✅
 
 ### [Session 53 — 2026-06-15] — Lập kế hoạch Phase 10 (Ngày 51–55)
 

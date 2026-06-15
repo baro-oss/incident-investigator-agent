@@ -15,8 +15,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from agent.tools.code_distill import distill_code_response, _detect_risk_signals
+from agent.engine.hypothesis_catalog import MICROSERVICE_CATALOG, build_catalog_index
+from agent.engine.loop import _tool_sequencing_hint
+from agent.engine.specificity import _has_code_evidence_with_signals, compute_verdict_specificity
+from agent.engine.state import Evidence, Hypothesis, InvestigationState, Verdict
+from agent.tools.code_distill import _detect_risk_signals, distill_code_response
 from agent.tools.contracts import SAMPLES_HARD_CAP, Observation
+from agent.tools.get_code_diff import CODE_DIFF_TOOL_NAME, build_code_diff_tool
 from agent.tools.registry import is_read_only_tool
 
 
@@ -438,6 +443,424 @@ class TestServiceReposCRUD:
         assert len(repos_b) == 1
         assert repos_b[0]["repo_url"] == "https://github.com/org/repo-b"
         os.unlink(db_path)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# E. get_code_diff tool — factory + degrade scenarios
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestGetCodeDiffTool:
+    """build_code_diff_tool() factory: schema, degrade-safe, distill path."""
+
+    def test_tool_name(self):
+        tool = build_code_diff_tool("default")
+        assert tool.name == CODE_DIFF_TOOL_NAME
+        assert tool.name == "get_code_diff"
+
+    def test_schema_required_fields(self):
+        tool = build_code_diff_tool("default")
+        required = tool.input_schema.get("required", [])
+        assert "service" in required
+        assert "version" in required
+
+    def test_tool_passes_read_only_guard(self):
+        assert is_read_only_tool("get_code_diff") is True
+
+    @pytest.mark.asyncio
+    async def test_no_repo_mapping_degrade_safe(self):
+        """Khi chưa cấu hình repo → Observation hợp lệ, status=no_repo_mapping."""
+        db_path = _make_temp_repos_db()
+        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
+            tool = build_code_diff_tool("proj-no-repo")
+            obs = await tool.run({"service": "unknown-svc", "version": "v1.0"})
+        assert obs.summary.strip()
+        assert obs.metadata.get("status") == "no_repo_mapping"
+        assert obs.metadata.get("source") == "code_mcp"
+        assert _validate(obs) == []
+        os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_no_repo_mapping_summary_helpful(self):
+        db_path = _make_temp_repos_db()
+        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
+            tool = build_code_diff_tool("proj-no-repo")
+            obs = await tool.run({"service": "svc", "version": "v2"})
+        assert "chưa cấu hình" in obs.summary or "repo" in obs.summary.lower()
+        os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_repo_mapping_no_mcp_client(self):
+        """Repo đã cấu hình, chưa có MCP → metadata về repo_url, configured=True."""
+        db_path = _make_temp_repos_db()
+        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
+            from agent.intake.project_registry import upsert_service_repo
+            upsert_service_repo("proj1", "payment-gw", "https://github.com/org/pay")
+            tool = build_code_diff_tool("proj1", code_mcp_client=None)
+            obs = await tool.run({"service": "payment-gw", "version": "v1.5.0"})
+        assert obs.metadata.get("status") == "no_mcp_client"
+        assert obs.metadata.get("source") == "code_mcp"
+        assert obs.aggregates.get("configured") is True
+        assert "https://github.com/org/pay" in (obs.aggregates.get("repo_url", "") or obs.summary)
+        assert _validate(obs) == []
+        os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_with_mcp_client_distills_raw(self):
+        """Có MCP client → gọi tool diff, distill output, trả Observation chưng cất."""
+        db_path = _make_temp_repos_db()
+        raw_diff = (
+            "diff --git a/config.yaml b/config.yaml\n"
+            "@@ -1,3 +1,3 @@\n"
+            "-  max_pool: 100\n"
+            "+  max_pool: 20\n"
+        )
+        mock_diff_tool_obs = Observation(
+            summary=raw_diff,
+            aggregates={},
+            samples=[],
+            total_count=1,
+            truncated=False,
+            metadata={},
+        )
+
+        async def _mock_run(params):
+            return mock_diff_tool_obs
+
+        from agent.tools.contracts import Tool as _Tool
+        mock_diff_tool = _Tool("get_diff", "mock diff", {}, _mock_run)
+
+        async def _mock_get_tools():
+            return [mock_diff_tool]
+
+        mock_client = MagicMock()
+        mock_client.get_tools = _mock_get_tools
+
+        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
+            from agent.intake.project_registry import upsert_service_repo
+            upsert_service_repo("proj1", "api-svc", "https://github.com/org/api")
+            tool = build_code_diff_tool("proj1", code_mcp_client=mock_client)
+            obs = await tool.run({"service": "api-svc", "version": "v2.1"})
+
+        assert obs.metadata.get("source") == "code_mcp"
+        risk = obs.aggregates.get("risk_signals", [])
+        assert any("config-knob" in s for s in risk), f"Expected config-knob in {risk}"
+        assert _validate(obs) == []
+        os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_mcp_error_degrade_safe(self):
+        """MCP raises → Observation status=mcp_error, không crash."""
+        db_path = _make_temp_repos_db()
+
+        async def _mock_get_tools():
+            raise ConnectionError("MCP server down")
+
+        mock_client = MagicMock()
+        mock_client.get_tools = _mock_get_tools
+
+        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
+            from agent.intake.project_registry import upsert_service_repo
+            upsert_service_repo("proj1", "svc", "https://github.com/org/svc")
+            tool = build_code_diff_tool("proj1", code_mcp_client=mock_client)
+            obs = await tool.run({"service": "svc", "version": "v1"})
+
+        assert obs.metadata.get("status") == "mcp_error"
+        assert obs.metadata.get("source") == "code_mcp"
+        assert _validate(obs) == []
+        os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_all_cases_have_code_mcp_source(self):
+        """Mọi nhánh trả về metadata source=code_mcp."""
+        db_path = _make_temp_repos_db()
+        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
+            tool = build_code_diff_tool("proj-x")
+            obs = await tool.run({"service": "missing", "version": "v0"})
+        assert obs.metadata.get("source") == "code_mcp"
+        os.unlink(db_path)
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# F. Catalog code-aware — deploy entry + E10 hint
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestCatalogCodeAware:
+    """Deploy entry có get_code_diff; E10 hint tự kích khi deploy open."""
+
+    def test_deploy_entry_has_get_code_diff(self):
+        deploy_entry = next(e for e in MICROSERVICE_CATALOG if e.tag == "deploy")
+        assert "get_code_diff" in deploy_entry.relevant_tools
+
+    def test_deploy_entry_still_has_get_recent_deploys(self):
+        deploy_entry = next(e for e in MICROSERVICE_CATALOG if e.tag == "deploy")
+        assert "get_recent_deploys" in deploy_entry.relevant_tools
+
+    def test_hint_generated_for_open_deploy_hypothesis(self):
+        """Khi hypothesis deploy open, hint phải gợi ý get_code_diff + get_recent_deploys."""
+        catalog_idx = build_catalog_index(MICROSERVICE_CATALOG)
+        state = InvestigationState(
+            investigation_id="test-01",
+            symptom="test",
+            time_window="00:00-01:00",
+            scenario="s1",
+            date="2026-06-15",
+            hypothesis_catalog_index=catalog_idx,
+        )
+        state.hypotheses.append(Hypothesis(
+            id="deploy",
+            content="Deployment gây sự cố",
+            status="open",
+        ))
+        hint = _tool_sequencing_hint(state)
+        assert "get_code_diff" in hint
+        assert "deploy" in hint
+
+    def test_hint_excludes_already_called_tool(self):
+        """Sau khi gọi get_code_diff → hint không gợi ý nữa."""
+        catalog_idx = build_catalog_index(MICROSERVICE_CATALOG)
+        state = InvestigationState(
+            investigation_id="test-02",
+            symptom="test",
+            time_window="00:00-01:00",
+            scenario="s1",
+            date="2026-06-15",
+            hypothesis_catalog_index=catalog_idx,
+        )
+        state.hypotheses.append(Hypothesis(id="deploy", content="deploy", status="open"))
+        state.tool_call_history = [
+            {"name": "get_code_diff", "params": {"service": "svc", "version": "v1"}},
+            {"name": "get_recent_deploys", "params": {}},
+        ]
+        hint = _tool_sequencing_hint(state)
+        # Cả 2 tool đã gọi → không còn uncalled → hint trống hoặc không đề cập deploy
+        assert "get_code_diff" not in hint
+        assert "get_recent_deploys" not in hint
+
+    def test_no_hint_when_no_open_hypothesis(self):
+        catalog_idx = build_catalog_index(MICROSERVICE_CATALOG)
+        state = InvestigationState(
+            investigation_id="test-03",
+            symptom="test",
+            time_window="00:00-01:00",
+            scenario="s1",
+            date="2026-06-15",
+            hypothesis_catalog_index=catalog_idx,
+        )
+        state.hypotheses.append(Hypothesis(id="deploy", content="deploy", status="confirmed"))
+        hint = _tool_sequencing_hint(state)
+        assert hint == ""
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# G. Code evidence → specificity boost (E12 + F2)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def _make_code_evidence(risk_signals: list) -> Evidence:
+    """Helper: tạo Evidence có source=code_mcp với risk_signals cho sẵn."""
+    obs = Observation(
+        summary="get_code_diff (svc@v2): 2 file(s) changed; RISK: config-knob changed: pool→20",
+        aggregates={"files_changed": 2, "risk_signals": risk_signals},
+        samples=[],
+        total_count=2,
+        truncated=False,
+        metadata={"source": "code_mcp", "tool_name": "get_code_diff"},
+    )
+    return Evidence(
+        id="ev-code-01",
+        step=2,
+        tool_name="get_code_diff",
+        params={"service": "svc", "version": "v2"},
+        summary=obs.summary,
+        observation=obs,
+    )
+
+
+def _make_base_state() -> InvestigationState:
+    return InvestigationState(
+        investigation_id="spec-test",
+        symptom="payment latency spike",
+        time_window="14:00-15:00",
+        scenario="s1",
+        date="2026-06-15",
+        available_services=["payment-gateway"],
+    )
+
+
+def _make_vague_verdict() -> Verdict:
+    return Verdict(
+        root_cause="something went wrong",
+        confidence="medium",
+        evidence_summary="errors occurred",
+        propagation_note="",
+        competing_hypotheses="",
+        raw_text="",
+    )
+
+
+def _make_specific_verdict() -> Verdict:
+    return Verdict(
+        root_cause="payment-gateway v2.3.1 max_pool hạ từ 100 xuống 20",
+        confidence="high",
+        evidence_summary="error_rate tăng 5× (baseline 1%, hiện 5.2%) từ 14:02",
+        propagation_note="payment-gateway pool exhausted → checkout timeout 3s",
+        competing_hypotheses="provider_down loại trừ: provider metrics bình thường",
+        raw_text="",
+    )
+
+
+class TestCodeSpecificity:
+    """_has_code_evidence_with_signals + compute_verdict_specificity boost."""
+
+    def test_no_evidence_returns_false(self):
+        state = _make_base_state()
+        assert _has_code_evidence_with_signals(state) is False
+
+    def test_wrong_source_returns_false(self):
+        state = _make_base_state()
+        obs = Observation(
+            summary="metrics summary",
+            aggregates={"risk_signals": ["config-knob"]},
+            samples=[],
+            total_count=1,
+            truncated=False,
+            metadata={"source": "local_tool"},
+        )
+        state.evidence.append(Evidence(
+            id="ev-local", step=1, tool_name="get_metrics", params={},
+            summary=obs.summary, observation=obs,
+        ))
+        assert _has_code_evidence_with_signals(state) is False
+
+    def test_code_mcp_no_risk_signals_returns_false(self):
+        state = _make_base_state()
+        state.evidence.append(_make_code_evidence(risk_signals=[]))
+        assert _has_code_evidence_with_signals(state) is False
+
+    def test_code_mcp_with_risk_signals_returns_true(self):
+        state = _make_base_state()
+        state.evidence.append(_make_code_evidence(risk_signals=["config-knob changed: pool→20"]))
+        assert _has_code_evidence_with_signals(state) is True
+
+    def test_code_evidence_boosts_score(self):
+        """Cùng 2/3 signals pass: với code evidence → 3/4=0.75 > 2/3≈0.667."""
+        state_no_code = _make_base_state()
+        state_with_code = _make_base_state()
+        state_with_code.evidence.append(_make_code_evidence(["config-knob"]))
+
+        # Verdict có 2 signal pass: root_cause có số, evidence_summary có 2 số
+        v = Verdict(
+            root_cause="v2.3.1 deployed at 14:00",
+            confidence="medium",
+            evidence_summary="error 5% vs baseline 1%, pool wait 200ms",
+            propagation_note="",   # signal 3 fails
+            competing_hypotheses="",
+            raw_text="",
+        )
+        score_no_code, _ = compute_verdict_specificity(v, state_no_code)
+        score_with_code, _ = compute_verdict_specificity(v, state_with_code)
+        assert score_with_code > score_no_code, (
+            f"Code evidence không boost: {score_with_code} vs {score_no_code}"
+        )
+
+    def test_no_code_evidence_backward_compat(self):
+        """Không có code evidence → score = passed/3, không thay đổi logic cũ."""
+        state = _make_base_state()
+        v = _make_vague_verdict()
+        score, _ = compute_verdict_specificity(v, state)
+        assert score == 0.0   # 0/3
+
+    def test_vague_verdict_zero_score(self):
+        state = _make_base_state()
+        v = _make_vague_verdict()
+        score, reasons = compute_verdict_specificity(v, state)
+        assert score == 0.0
+        assert len(reasons) == 3
+
+    def test_code_grounded_scores_higher_than_vague(self):
+        """Vague=0/3=0.0; với code evidence (0+1)/4=0.25 > 0.0."""
+        state_vague = _make_base_state()
+        state_code = _make_base_state()
+        state_code.evidence.append(_make_code_evidence(["config-knob"]))
+
+        v = _make_vague_verdict()
+        score_vague, _ = compute_verdict_specificity(v, state_vague)
+        score_code, _ = compute_verdict_specificity(v, state_code)
+        assert score_code > score_vague
+
+    def test_all_three_signals_plus_code_gives_max(self):
+        state = _make_base_state()
+        state.evidence.append(_make_code_evidence(["config-knob", "large-delete"]))
+        v = _make_specific_verdict()
+        score, reasons = compute_verdict_specificity(v, state)
+        assert score == 1.0
+        assert reasons == []
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# H. Principle #2 guard — engine/ không hardcode domain keywords
+# ═════════════════════════════════════════════════════════════════════════════
+
+class TestPrincipleGuard:
+    """Engine lõi không chứa keyword domain (repo/git/github/gitlab/code_mcp)."""
+
+    def _read_engine_files(self) -> str:
+        import pathlib
+        engine_dir = pathlib.Path(__file__).parent.parent / "src" / "agent" / "engine"
+        code_files = ["loop.py", "state.py", "specificity.py", "multi_agent.py"]
+        combined = ""
+        for fname in code_files:
+            p = engine_dir / fname
+            if p.exists():
+                combined += p.read_text()
+        return combined
+
+    def test_no_github_in_engine(self):
+        code = self._read_engine_files()
+        assert "github" not in code.lower(), "engine/ không được chứa 'github'"
+
+    def test_no_gitlab_in_engine(self):
+        code = self._read_engine_files()
+        assert "gitlab" not in code.lower(), "engine/ không được chứa 'gitlab'"
+
+    def test_no_hardcoded_repo_url_in_engine(self):
+        code = self._read_engine_files()
+        assert "repo_url" not in code, "engine/ không được chứa 'repo_url'"
+
+    def test_get_code_diff_not_hardcoded_in_engine_loop(self):
+        """loop.py chỉ xử lý tool qua interface, không hardcode tên tool cụ thể."""
+        import pathlib
+        loop_code = (
+            pathlib.Path(__file__).parent.parent / "src" / "agent" / "engine" / "loop.py"
+        ).read_text()
+        assert "get_code_diff" not in loop_code, (
+            "loop.py không được hardcode tên tool 'get_code_diff' — dùng catalog thay thế"
+        )
+
+
+# ── DB helpers ────────────────────────────────────────────────────────────────
+
+def _make_temp_repos_db() -> str:
+    """Tạo temp DB với bảng service_repos cho TestGetCodeDiffTool."""
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    conn = sqlite3.connect(path)
+    conn.execute("""
+        CREATE TABLE service_repos (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id     TEXT    NOT NULL DEFAULT 'default',
+            service        TEXT    NOT NULL,
+            provider       TEXT    NOT NULL DEFAULT 'github',
+            repo_url       TEXT    NOT NULL,
+            default_branch TEXT    NOT NULL DEFAULT 'main',
+            subpath        TEXT    NOT NULL DEFAULT '',
+            created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(project_id, service)
+        )
+    """)
+    conn.commit()
+    conn.close()
+    return path
 
 
 # ── DB helper (không dùng agent.storage.db để tránh side-effect) ─────────────
