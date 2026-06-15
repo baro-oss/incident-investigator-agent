@@ -228,13 +228,17 @@ async def run_investigation_background(
 def trigger_investigation(
     req: InvestigationRequest,
     step_budget: int = 10,
-) -> asyncio.Task:
+) -> None:
     """
-    Fire-and-forget: tạo background task và trả ngay.
-    Caller không cần await — điều tra chạy nền.
+    B3: Enqueue investigation vào in-process queue.
+    Nếu queue chưa khởi động (test / direct call) → fallback fire-and-forget.
     """
-    task = asyncio.create_task(
-        run_investigation_background(req, step_budget=step_budget),
-        name=f"investigation-{req.dedup_key}",
-    )
-    return task
+    from agent.intake.investigation_queue import enqueue, _queue
+    if _queue is not None:
+        enqueue(req, step_budget=step_budget)
+    else:
+        # Fallback: fire-and-forget (dùng trong test hoặc khi server chưa start)
+        asyncio.create_task(
+            run_investigation_background(req, step_budget=step_budget),
+            name=f"investigation-{req.dedup_key}",
+        )

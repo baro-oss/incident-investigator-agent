@@ -131,6 +131,22 @@ def migrate(db_path: str) -> None:
         )
     """)
 
+    # 10. Bảng investigation_queue (B3 — Phase 6 Ngày 29, in-process queue persist)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS investigation_queue (
+            id          TEXT PRIMARY KEY,
+            project_id  TEXT NOT NULL DEFAULT 'default',
+            payload     TEXT NOT NULL,
+            priority    INTEGER NOT NULL DEFAULT 0,
+            status      TEXT NOT NULL DEFAULT 'pending',
+            enqueued_at TEXT NOT NULL,
+            started_at  TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_inv_queue_status ON investigation_queue (status, enqueued_at)"
+    )
+
     conn.commit()
     conn.close()
     print(f"Migration OK: {db_path}")

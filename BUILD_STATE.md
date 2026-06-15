@@ -6,8 +6,8 @@
 
 **Giai đoạn:** Phase 6 📋 (Ngày 26–30, đang thực hiện).
 **Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
-**Cổng kiểm gần nhất:** Ngày 28 — A4 API token auth ✅ · A2 secret at-rest ✅ · A3 trace retention ✅ · D per-project LLM endpoint ✅
-**Việc kế tiếp:** Ngày 29 (Reliability infra — A1 graceful shutdown · B3 investigation queue · B4 rate limiting · nav sidebar grouping · default light mode).
+**Cổng kiểm gần nhất:** Ngày 29 — B3 investigation queue ✅ · A1 graceful shutdown ✅ · B4 rate limiting ✅ · D sidebar grouping ✅ · E default light mode ✅
+**Việc kế tiếp:** Ngày 30 (Ecosystem + close — C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 root cause clustering · Cổng Phase 6).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -73,7 +73,7 @@
 | 26 | Engine core | E1 vòng đời giả thuyết thật · E5 structured verdict · E2 evidence-grounding guard | ✅ |
 | 27 | Engine intelligence | E4 stop/loop thông minh + cổng giả thuyết cạnh tranh · E3/D1 calibration · D2 baseline auto-update | ✅ |
 | 28 | Security + custom LLM | A4 API token webhook · A2 secret at-rest · A3 trace retention · per-project LLM endpoint riêng (model/url/header, fallback default) | ✅ |
-| 29 | Reliability infra | A1 graceful shutdown · B3 investigation queue (in-process) · B4 rate limiting | 📋 |
+| 29 | Reliability infra | A1 graceful shutdown · B3 investigation queue (in-process) · B4 rate limiting | ✅ |
 | 30 | Ecosystem + close | C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 clustering · Cổng Phase 6 | 📋 |
 
 **Defer → Future:** B1 Tier-2 Postgres (cần lệnh rõ + env) · C2 bidirectional (phá READ-ONLY, cần duyệt) · B2 horizontal scale seam · D4 real MCP pack mở rộng.
@@ -102,6 +102,48 @@
 - **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
 - **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
 - **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 35 — 2026-06-15] — Ngày 29: Reliability Infra + UI Polish
+
+**A. B3 — Investigation queue (thay fire-and-forget):**
+- `data/migrate_projects.py` — thêm bảng `investigation_queue` (id, project_id, payload, status, enqueued_at, started_at) + index.
+- `src/agent/intake/investigation_queue.py` (mới) — module quản lý queue:
+  - `start_workers()`: khởi tạo `asyncio.Queue` + 3 worker tasks.
+  - `enqueue(req)`: persist row vào SQLite (INSERT OR IGNORE) rồi `put_nowait()` vào memory queue.
+  - `drain_and_stop(timeout=60s)`: set `_draining=True`, đợi `_queue.join()`, cancel workers.
+  - `_reload_pending()`: crash recovery — reset rows status='running'→'pending', reload vào queue khi khởi động.
+  - Worker loop: poll với timeout 0.5s, check `_draining`, gọi `run_investigation_background()`, cập nhật DB status.
+- `runner.py:trigger_investigation()`: không còn `asyncio.create_task()` — gọi `enqueue()` từ queue module; fallback fire-and-forget nếu queue chưa start (test/CI).
+
+**B. A1 — Graceful shutdown:**
+- `server.py:lifespan()`: sau `yield`, gọi `drain_and_stop(timeout=60s)` → log "Queue drained".
+- `server.py:_do_trigger()`: kiểm `is_draining()` trước khi nhận trigger → 503 khi đang shutdown.
+- `investigation_queue.py:start_workers()`: gọi trong lifespan trước `yield`.
+
+**C. B4 — Rate limiting (per-project, in-memory):**
+- `server.py`: thêm `_rate_windows` (defaultdict, sliding window 1h) + `_check_rate_limit(project_id)`.
+- `_do_trigger()`: sau dedup check, gọi `_check_rate_limit()` → 429 khi vượt `INVESTIGATION_RATE_LIMIT` (default 20/h).
+- `.env.example`: thêm `INVESTIGATION_RATE_LIMIT=20`.
+
+**D. UI — Sidebar grouping theo chức năng:**
+- `base.html`: 11 link phẳng → 4 nhóm: **Điều tra** (Investigations, Trigger, Chat, Demo) · **Cấu hình** (Projects, MCP, Channels, Tools) · **Quan sát** (Health, Cost, Eval, Metrics Live) · **Admin** (Users & Roles, API Tokens, API Docs).
+- `style.css`: thêm `.nav-group-label` (uppercase, muted, letter-spacing).
+- Logo: v0.8→v0.9 · Phase 5→Phase 6.
+
+**E. UI — Default theme Light mode:**
+- `base.html`: đổi `|| 'dark'` → `|| 'light'` ở cả `toggleTheme()` và IIFE apply. Người dùng chưa set localStorage → mặc định light.
+
+**Verify (cổng Ngày 29):**
+- B3: `investigation_queue` table tồn tại ✅; worker count=3 ✅; crash recovery reset running→pending ✅; bad payload skipped gracefully ✅
+- B4: rate limit chặn request thứ 4 khi limit=3 ✅; 429 path exists ✅
+- A1: `is_draining()` check trong `_do_trigger` ✅; `drain_and_stop` trong lifespan ✅; `start_workers` trước yield ✅
+- D+E: nav-group-label trong HTML ✅; 4 nhóm ngữ nghĩa ✅; default `'light'` ✅
+
+**Cổng Ngày 29 ✅ PASS**
+
+**Quyết định lệch:**
+- `ConcurrencyLimiter` từ D16 không dùng lại trong queue worker (worker tự block khi `asyncio.wait_for` timeout rồi re-check `_draining`). Thiết kế đơn giản hơn, đủ cho 3 workers cố định không cần semaphore riêng.
+- Rate limit in-memory (không persist DB) — đủ cho 1 process; restart sẽ reset window, chấp nhận được.
 
 ### [Session 34 — 2026-06-15] — Ngày 28: Security + Custom LLM
 

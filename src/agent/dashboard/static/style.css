@@ -94,6 +94,16 @@ nav a:hover, nav a.active {
   background: var(--surface2);
 }
 nav a .ico { width: 16px; text-align: center; }
+.nav-group-label {
+  padding: 10px 20px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--muted));
+  opacity: .6;
+  margin-top: 4px;
+}
 
 main {
   flex: 1;

@@ -148,7 +148,23 @@ async def lifespan(app: FastAPI):
             "Project '%s': %d MCP server(s) enabled, services: %s",
             p["id"], enabled, services or "(none)",
         )
+
+    # B3: Khởi động investigation queue + worker pool
+    from agent.intake.investigation_queue import start_workers, drain_and_stop
+    try:
+        start_workers()
+    except Exception as e:
+        logger.warning("Investigation queue start failed: %s", e)
+
     yield
+
+    # A1: Graceful shutdown — drain queue trước khi exit
+    logger.info("Server shutting down — draining investigation queue …")
+    try:
+        await drain_and_stop(timeout=60.0)
+    except Exception as e:
+        logger.warning("Queue drain error: %s", e)
+    logger.info("Graceful shutdown complete")
 
 
 app = FastAPI(title="Investigation Agent", version="0.8.0", docs_url="/docs", lifespan=lifespan)
@@ -507,6 +523,26 @@ app.include_router(project_router)
 
 # ── Shared implementation ─────────────────────────────────────────────────────
 
+# B4: Per-project in-memory rate limiter (max N triggers/hour)
+from collections import defaultdict as _defaultdict
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+_rate_windows: dict = _defaultdict(list)  # project_id → list[datetime]
+
+
+def _check_rate_limit(project_id: str) -> bool:
+    """Returns True nếu được phép, False nếu vượt rate limit.
+    Giới hạn: INVESTIGATION_RATE_LIMIT triggers/giờ (mặc định 20).
+    """
+    max_per_hour = int(os.environ.get("INVESTIGATION_RATE_LIMIT", "20"))
+    now = _dt.now(_tz.utc)
+    cutoff = now - _td(hours=1)
+    _rate_windows[project_id] = [t for t in _rate_windows[project_id] if t > cutoff]
+    if len(_rate_windows[project_id]) >= max_per_hour:
+        return False
+    _rate_windows[project_id].append(now)
+    return True
+
+
 def _allow_anon_trigger() -> bool:
     """A4: Cho phép trigger không cần token khi ALLOW_ANON_TRIGGER=true (dev-only)."""
     return os.environ.get("ALLOW_ANON_TRIGGER", "false").lower() in ("1", "true", "yes")
@@ -563,6 +599,14 @@ async def _do_trigger(
     payload: Dict[str, Any],
     source: Optional[str],
 ) -> JSONResponse:
+    # A1: Từ chối trigger mới khi server đang drain (shutting down)
+    from agent.intake.investigation_queue import is_draining
+    if is_draining():
+        raise HTTPException(
+            status_code=503,
+            detail="Server đang shutdown — không nhận trigger mới. Thử lại sau vài giây.",
+        )
+
     req = _resolve_request(source, payload, project_id)
 
     if req.dedup_key in _active_investigations:
@@ -571,6 +615,14 @@ async def _do_trigger(
             "investigation_id": req.dedup_key,
             "project_id": project_id,
         })
+
+    # B4: Rate limiting — max N triggers/giờ per project
+    if not _check_rate_limit(project_id):
+        max_per_hour = int(os.environ.get("INVESTIGATION_RATE_LIMIT", "20"))
+        raise HTTPException(
+            status_code=429,
+            detail=f"Rate limit vượt quá: tối đa {max_per_hour} investigation/giờ cho project '{project_id}'. Thử lại sau.",
+        )
 
     trigger_investigation(req)
     return JSONResponse(status_code=202, content={

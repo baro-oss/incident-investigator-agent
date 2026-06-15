@@ -18,31 +18,31 @@
   <nav>
     <div class="logo">
       Investigation Agent
-      <span>v0.8 · Phase 5</span>
+      <span>v0.9 · Phase 6</span>
     </div>
+
+    <!-- Nhóm: Điều tra -->
+    <div class="nav-group-label">Điều tra</div>
     <a href="/dashboard" class="{{ 'active' if active == 'home' }}">
       <span class="ico">⚡</span> Investigations
     </a>
     <a href="/dashboard/trigger" class="{{ 'active' if active == 'trigger' }}">
       <span class="ico">▶</span> Trigger
     </a>
-    <a href="/dashboard/projects" class="{{ 'active' if active == 'projects' }}">
-      <span class="ico">◈</span> Projects
-    </a>
     <a href="/dashboard/chat" class="{{ 'active' if active == 'chat' }}">
       <span class="ico">💬</span> Chat
     </a>
-    <a href="/dashboard/eval" class="{{ 'active' if active == 'eval' }}">
-      <span class="ico">📊</span> Eval Results
+    <a href="/dashboard/demo" class="{{ 'active' if active == 'demo' }}">
+      <span class="ico">▣</span> Demo Mode
     </a>
-    <a href="/dashboard/cost" class="{{ 'active' if active == 'cost' }}">
-      <span class="ico">💰</span> Cost
+
+    <!-- Nhóm: Cấu hình -->
+    <div class="nav-group-label">Cấu hình</div>
+    <a href="/dashboard/projects" class="{{ 'active' if active == 'projects' }}">
+      <span class="ico">◈</span> Projects
     </a>
-    <a href="/dashboard/health" class="{{ 'active' if active == 'health' }}">
-      <span class="ico">◉</span> Health
-    </a>
-    <a href="/dashboard/metrics-live" class="{{ 'active' if active == 'metrics' }}">
-      <span class="ico">⟳</span> Metrics Live
+    <a href="/dashboard/mcp" class="{{ 'active' if active == 'mcp' }}">
+      <span class="ico">⬡</span> MCP Registry
     </a>
     <a href="/dashboard/channels" class="{{ 'active' if active == 'channels' }}">
       <span class="ico">⊠</span> Channels
@@ -50,24 +50,39 @@
     <a href="/dashboard/tools" class="{{ 'active' if active == 'tools' }}">
       <span class="ico">⚙</span> Tools
     </a>
-    <a href="/dashboard/mcp" class="{{ 'active' if active == 'mcp' }}">
-      <span class="ico">⬡</span> MCP Registry
+
+    <!-- Nhóm: Quan sát -->
+    <div class="nav-group-label">Quan sát</div>
+    <a href="/dashboard/health" class="{{ 'active' if active == 'health' }}">
+      <span class="ico">◉</span> Health
     </a>
-    <a href="/dashboard/demo" class="{{ 'active' if active == 'demo' }}">
-      <span class="ico">▣</span> Demo Mode
+    <a href="/dashboard/cost" class="{{ 'active' if active == 'cost' }}">
+      <span class="ico">💰</span> Cost
     </a>
+    <a href="/dashboard/eval" class="{{ 'active' if active == 'eval' }}">
+      <span class="ico">📊</span> Eval
+    </a>
+    <a href="/dashboard/metrics-live" class="{{ 'active' if active == 'metrics' }}">
+      <span class="ico">⟳</span> Metrics Live
+    </a>
+
+    <!-- Nhóm: Admin -->
     {% if current_user and (current_user.is_root or true) %}
+    <div class="nav-group-label">Admin</div>
     <a href="/dashboard/admin/users" class="{{ 'active' if active == 'admin' }}">
-      <span class="ico">⛨</span> Admin
+      <span class="ico">⛨</span> Người dùng & Vai trò
     </a>
-    <a href="/dashboard/admin/tokens" class="{{ 'active' if active == 'admin_tokens' }}"
-       style="padding-left:2rem;font-size:.82rem">
+    <a href="/dashboard/admin/tokens" class="{{ 'active' if active == 'admin_tokens' }}">
       <span class="ico">🔑</span> API Tokens
     </a>
-    {% endif %}
     <a href="/docs" target="_blank">
       <span class="ico">⊞</span> API Docs
     </a>
+    {% else %}
+    <a href="/docs" target="_blank">
+      <span class="ico">⊞</span> API Docs
+    </a>
+    {% endif %}
     {% if current_user %}
     <div style="margin-top:auto;padding-top:.5rem;border-top:1px solid var(--border)">
       <div style="font-size:.8rem;color:var(--text-muted);padding:.3rem .5rem">
@@ -98,12 +113,12 @@ function _applyTheme(t) {
   document.getElementById('theme-lbl').textContent = t === 'light' ? 'Dark Mode' : 'Light Mode';
 }
 function toggleTheme() {
-  var cur = localStorage.getItem('ia-theme') || 'dark';
+  var cur = localStorage.getItem('ia-theme') || 'light';
   var next = cur === 'dark' ? 'light' : 'dark';
   localStorage.setItem('ia-theme', next);
   _applyTheme(next);
 }
-(function(){ _applyTheme(localStorage.getItem('ia-theme') || 'dark'); })();
+(function(){ _applyTheme(localStorage.getItem('ia-theme') || 'light'); })();
 
 // ── Toasts ─────────────────────────────────────────────────────────────
 function showToast(msg, type, duration) {
