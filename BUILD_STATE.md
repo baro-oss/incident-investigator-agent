@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–42.
-**Cổng kiểm gần nhất:** Ngày 42 — 166 tests · eval 4/4 · prompt caching hooked · before/after trên cost dashboard
+**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–43.
+**Cổng kiểm gần nhất:** Ngày 43 — 173 tests · eval 4/4 · E9 structured verdict direct path · parse_degraded flag
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -97,7 +97,7 @@
 | 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ✅ |
 | 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ✅ |
 | 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ✅ |
-| 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ☐ |
+| 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ✅ |
 | 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ☐ |
 | 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ☐ |
 
@@ -105,6 +105,31 @@
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 44 — 2026-06-15] — Ngày 43: E9 Structured verdict direct path
+
+**Ngày 43 — E9: Structured verdict đường thẳng:**
+- `src/agent/engine/state.py` — thêm `parse_degraded: bool = False` vào `Verdict`
+- `src/agent/engine/loop.py`:
+  - Thêm `_args_to_verdict(args: dict) -> Verdict` — build Verdict trực tiếp từ `submit_verdict` tool args (không qua text round-trip)
+  - `_apply_competing_gate` — thêm `conf_override: Optional[str]` kwarg (E9 structured path truyền confidence trực tiếp)
+  - `decide_next_action` — đổi thành 4-tuple `(tool_call, vtext, llm_resp, verdict_obj)`; structured path: `return None, None, response, _args_to_verdict(tc.arguments)`
+  - `_run_loop` — unpack 4-tuple, handle `verdict_obj` path với gate check, return 3-tuple `(state, vtext, verdict_obj)`
+  - `_run_with_graph` — return 3-tuple `(state, vtext, verdict_obj)`, include `verdict_obj` trong `initial` dict
+  - `run()` finalization — ưu tiên `verdict_obj` (không qua `_parse_verdict`); fallback text-parse → `parse_degraded = True`; cả hai path vẫn qua `_check_evidence_grounding` + `apply_calibration`
+  - Emit `parse_degraded` trong verdict trace event
+- `src/agent/engine/graph.py`:
+  - `LoopState` — thêm `verdict_obj: Optional[Any]`
+  - `decide_node` — unpack 4-tuple, xử lý `v_obj is not None` (E9 path), emit `verdict_obj` trong return dict
+  - `_route_after_decide` — check `state.get("verdict_obj") is not None` như điều kiện END
+
+**Cổng Ngày 43:**
+- 173/173 tests PASS (7 tests mới E9)
+- Eval gate: 4/4 PASS (12/12 runs, 100%)
+- `_args_to_verdict` build đúng tất cả field; `parse_degraded=False` trên structured path
+- `decide_next_action` structured path: `vtext=None`, `verdict_obj` có giá trị (không qua text)
+- `_parse_verdict` KHÔNG được gọi khi real LLM dùng `submit_verdict` tool
+- MockLLM (text fallback) vẫn hoạt động → `parse_degraded=True` đúng
 
 ### [Session 43 — 2026-06-15] — Ngày 42: P1 Prompt caching + context trim
 

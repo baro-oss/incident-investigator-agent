@@ -5,7 +5,12 @@ from __future__ import annotations
 
 import pytest
 
-from agent.engine.loop import _check_evidence_grounding, _structured_args_to_verdict_text
+from agent.engine.loop import (
+    _args_to_verdict,
+    _check_evidence_grounding,
+    _structured_args_to_verdict_text,
+    decide_next_action,
+)
 from agent.engine.state import Evidence, Hypothesis, InvestigationState, Verdict
 from agent.tools.contracts import Observation
 
@@ -480,3 +485,78 @@ class TestMultiAgentParity:
 
         winner = sample_state.resolve_conflicting_hypotheses()
         assert winner is h1  # high beats medium
+
+
+# ── E9: Structured verdict direct path ────────────────────────────────────────
+
+class TestStructuredVerdictDirect:
+    """_args_to_verdict xây Verdict trực tiếp, không qua text round-trip."""
+
+    def _args(self, confidence="high"):
+        return {
+            "root_cause": "Deploy v2.3.1 gây lỗi",
+            "confidence": confidence,
+            "evidence_summary": "Deploy tại 14:03 khớp spike lỗi",
+            "propagation": "payment-gateway → api-gateway",
+            "competing_hypotheses": "Provider down đã loại trừ",
+        }
+
+    def test_builds_verdict_with_correct_fields(self):
+        v = _args_to_verdict(self._args())
+        assert v.root_cause == "Deploy v2.3.1 gây lỗi"
+        assert v.confidence == "high"
+        assert v.evidence_summary == "Deploy tại 14:03 khớp spike lỗi"
+        assert v.propagation_note == "payment-gateway → api-gateway"
+        assert v.competing_hypotheses == "Provider down đã loại trừ"
+
+    def test_parse_degraded_false_on_structured_path(self):
+        v = _args_to_verdict(self._args())
+        assert v.parse_degraded is False
+
+    def test_all_confidence_levels(self):
+        for conf in ("high", "medium", "low", "insufficient"):
+            v = _args_to_verdict(self._args(conf))
+            assert v.confidence == conf
+
+    def test_invalid_confidence_defaults_to_insufficient(self):
+        v = _args_to_verdict(self._args("unknown_value"))
+        assert v.confidence == "insufficient"
+
+    def test_raw_text_empty_on_structured_path(self):
+        v = _args_to_verdict(self._args())
+        assert v.raw_text == ""
+
+    def test_parse_degraded_true_on_text_fallback(self):
+        """Verdict đến từ text-parse phải có parse_degraded=True."""
+        v = Verdict(
+            root_cause="x", confidence="insufficient",
+            evidence_summary="", propagation_note="",
+            competing_hypotheses="", raw_text="VERDICT: ...",
+        )
+        v.parse_degraded = True
+        assert v.parse_degraded is True
+
+    async def test_decide_next_action_structured_path_returns_verdict_obj(self, sample_state):
+        """LLM gọi submit_verdict → decide_next_action trả verdict_obj, không qua text."""
+        from unittest.mock import AsyncMock, MagicMock
+        from agent.llm.base import LLMResponse, ToolCall as TC
+
+        mock_llm = MagicMock()
+        tc = TC(id="tc1", name="submit_verdict", arguments={
+            "root_cause": "Deploy bug",
+            "confidence": "high",
+            "evidence_summary": "Deploy at 14:03",
+            "propagation": "gw → api",
+            "competing_hypotheses": "none",
+        })
+        resp = LLMResponse(text=None, tool_calls=[tc], usage={})
+        mock_llm.complete = AsyncMock(return_value=resp)
+
+        tool_call, vtext, llm_resp, v_obj = await decide_next_action(
+            sample_state, mock_llm, []
+        )
+        assert tool_call is None
+        assert vtext is None  # E9: không còn text round-trip
+        assert v_obj is not None
+        assert v_obj.confidence == "high"
+        assert v_obj.parse_degraded is False

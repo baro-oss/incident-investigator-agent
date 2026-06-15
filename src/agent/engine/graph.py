@@ -30,6 +30,7 @@ class LoopState(TypedDict, total=False):
     last_obs: Optional[Any]      # Observation
     tool_call: Optional[Any]     # ToolCall | None
     verdict_text: Optional[str]
+    verdict_obj: Optional[Any]   # E9: Verdict trực tiếp từ structured path
     llm: Any                     # LLMClient
     tools: List[Any]             # List[Tool]
     tracer: Any                  # LangfuseTracer
@@ -55,7 +56,7 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
     # --- E7: Stop conditions — dùng chung với while-loop path ---
     stop_vtext = _check_stop_conditions(inv)
     if stop_vtext:
-        return {"inv": inv, "verdict_text": stop_vtext, "tool_call": None}
+        return {"inv": inv, "verdict_text": stop_vtext, "tool_call": None, "verdict_obj": None}
 
     tracer.start_step(current_step)
 
@@ -64,7 +65,7 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
 
     try:
         t_llm = time.monotonic()
-        tool_call, vtext, llm_resp = await llm_circuit_breaker.call(
+        tool_call, vtext, llm_resp, v_obj = await llm_circuit_breaker.call(
             lambda: with_retry(lambda: decide_next_action(inv, llm, tools, last_obs))
         )
         llm_ms = (time.monotonic() - t_llm) * 1000
@@ -81,6 +82,7 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
                 "Bằng chứng: N/A\nLan truyền: N/A\nGiả thuyết cạnh tranh: N/A"
             ),
             "tool_call": None,
+            "verdict_obj": None,
         }
 
     if llm_resp and llm_resp.usage:
@@ -91,7 +93,7 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
 
     output_desc = (
         f"tool:{tool_call.name}" if tool_call
-        else ("verdict" if vtext else "no_action")
+        else ("verdict_structured" if v_obj is not None else ("verdict" if vtext else "no_action"))
     )
     tracer.record_llm_call(
         input_summary=inv.symptom[:200],
@@ -100,21 +102,35 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
         latency_ms=llm_ms,
     )
 
+    from agent.engine.loop import _apply_competing_gate, _emit_trace
+
+    if v_obj is not None:
+        # E9: structured path — check competing gate bằng confidence trực tiếp
+        nudge_tc, _ = _apply_competing_gate(inv, conf_override=v_obj.confidence)
+        if nudge_tc:
+            _emit_trace(investigation_id, current_step, "tool_call", {
+                "tool": nudge_tc.name, "args": nudge_tc.arguments,
+            }, project_id=inv.project_id)
+            return {"inv": inv, "tool_call": nudge_tc, "verdict_text": None, "verdict_obj": None}
+        inv.stop_reason = "verdict"
+        inv.finished = True
+        tracer.end_step()
+        return {"inv": inv, "verdict_text": None, "tool_call": None, "verdict_obj": v_obj}
+
     if vtext:
         # E4: cổng cạnh tranh — chặn verdict high/medium nếu còn hypothesis open
-        from agent.engine.loop import _apply_competing_gate, _emit_trace
         nudge_tc, accepted_vtext = _apply_competing_gate(inv, vtext)
         if nudge_tc:
             # Gate fires: inject nudge như tool call, tiếp tục điều tra
             _emit_trace(investigation_id, current_step, "tool_call", {
                 "tool": nudge_tc.name, "args": nudge_tc.arguments,
             }, project_id=inv.project_id)
-            return {"inv": inv, "tool_call": nudge_tc, "verdict_text": None}
+            return {"inv": inv, "tool_call": nudge_tc, "verdict_text": None, "verdict_obj": None}
 
         inv.stop_reason = "verdict"
         inv.finished = True
         tracer.end_step()
-        return {"inv": inv, "verdict_text": accepted_vtext, "tool_call": None}
+        return {"inv": inv, "verdict_text": accepted_vtext, "tool_call": None, "verdict_obj": None}
 
     if tool_call:
         _emit_trace(investigation_id, current_step, "tool_call", {
@@ -123,13 +139,13 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
         logger.info("[%s] Bước %d → %s(%s)",
                     investigation_id, current_step + 1,
                     tool_call.name, tool_call.arguments)
-        return {"inv": inv, "tool_call": tool_call, "verdict_text": None}
+        return {"inv": inv, "tool_call": tool_call, "verdict_text": None, "verdict_obj": None}
 
     # Không có tool_call lẫn verdict — dừng an toàn
     logger.warning("[%s] Không có tool_call lẫn verdict", investigation_id)
     tracer.end_step()
     inv.finished = True
-    return {"inv": inv, "tool_call": None, "verdict_text": None}
+    return {"inv": inv, "tool_call": None, "verdict_text": None, "verdict_obj": None}
 
 
 async def run_tool_node(state: LoopState) -> Dict[str, Any]:
@@ -183,7 +199,7 @@ def update_node(state: LoopState) -> Dict[str, Any]:
 def _route_after_decide(state: LoopState) -> str:
     from langgraph.graph import END
     inv = state["inv"]
-    if inv.finished or state.get("verdict_text") is not None:
+    if inv.finished or state.get("verdict_text") is not None or state.get("verdict_obj") is not None:
         return END
     if state.get("tool_call") is not None:
         return "run_tool"

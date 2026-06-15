@@ -49,6 +49,7 @@ class Verdict:
     raw_text: str              # toàn văn LLM trả về
     speculative: bool = False  # E2: True khi root cause không neo được vào bằng chứng thu thập
     calibrated_confidence: Optional[str] = None  # E8: set khi calibration hạ bậc confidence
+    parse_degraded: bool = False  # E9: True khi verdict đến từ text-parse fallback (không qua structured tool call)
 
 
 @dataclass

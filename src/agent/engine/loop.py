@@ -164,6 +164,22 @@ def _structured_args_to_verdict_text(args: dict) -> str:
     ])
 
 
+def _args_to_verdict(args: dict) -> "Verdict":
+    """E9: Dựng Verdict trực tiếp từ submit_verdict args — bỏ text round-trip."""
+    conf_valid = {"high", "medium", "low", "insufficient"}
+    raw_conf = str(args.get("confidence", "insufficient")).lower().strip()
+    confidence = raw_conf if raw_conf in conf_valid else "insufficient"
+    return Verdict(
+        root_cause=str(args.get("root_cause", "Không xác định")),
+        confidence=confidence,
+        evidence_summary=str(args.get("evidence_summary", "")),
+        propagation_note=str(args.get("propagation", "")),
+        competing_hypotheses=str(args.get("competing_hypotheses", "")),
+        raw_text="",
+        parse_degraded=False,
+    )
+
+
 def _check_evidence_grounding(verdict: "Verdict", evidence: "List[Evidence]") -> "Verdict":
     """E2: Kiểm root_cause có neo vào bằng chứng đã thu không.
 
@@ -234,7 +250,9 @@ def _quick_parse_confidence(text: str) -> str:
 
 def _apply_competing_gate(
     state: "InvestigationState",
-    vtext: str,
+    vtext: Optional[str] = None,
+    *,
+    conf_override: Optional[str] = None,
 ) -> "Tuple[Optional[ToolCall], Optional[str]]":
     """E4: Chặn verdict high/medium nếu còn hypothesis cạnh tranh chưa loại trừ.
 
@@ -244,13 +262,15 @@ def _apply_competing_gate(
     - không còn budget
     - gate đã fired rồi
 
+    E9: conf_override cho phép truyền confidence trực tiếp (structured path) thay vì parse từ text.
+
     Returns (nudge_tool_call, None) khi gate fire,
             (None, vtext) khi gate pass.
     """
     if state._competing_gate_fired:
         return None, vtext
 
-    conf = _quick_parse_confidence(vtext)
+    conf = conf_override if conf_override else (_quick_parse_confidence(vtext) if vtext else "insufficient")
     if conf not in ("high", "medium"):
         return None, vtext
 
@@ -282,10 +302,12 @@ async def decide_next_action(
     llm: LLMClient,
     tools: List[Tool],
     last_obs: Optional[Observation] = None,
-) -> Tuple[Optional[ToolCall], Optional[str], Optional[LLMResponse]]:
-    """Pure: nhận state → hỏi LLM → trả (tool_call, verdict_text, llm_response).
+) -> Tuple[Optional[ToolCall], Optional[str], Optional[LLMResponse], Optional[Verdict]]:
+    """Pure: nhận state → hỏi LLM → trả (tool_call, verdict_text, llm_response, verdict_obj).
 
-    Đúng một trong tool_call/verdict_text sẽ có giá trị; llm_response luôn có (trừ exception).
+    E9: Structured path trả verdict_obj trực tiếp (bỏ text round-trip).
+    Text path (MockLLM / fallback) trả verdict_text, verdict_obj=None.
+    Đúng một trong tool_call/verdict_text/verdict_obj sẽ có giá trị.
     """
     user_msg = _build_user_message(state, last_obs)
     # E5: thêm submit_verdict vào tool list để LLM có thể kết luận có cấu trúc
@@ -298,21 +320,21 @@ async def decide_next_action(
 
     if response.has_tool_calls:
         tc = response.tool_calls[0]
-        # E5: LLM gọi submit_verdict → chuyển args có cấu trúc → verdict text reliable
+        # E9: LLM gọi submit_verdict → dựng Verdict trực tiếp (không qua text round-trip)
         if tc.name == VERDICT_TOOL_NAME:
-            logger.info("[%s] Bước %d → submit_verdict (structured)",
+            logger.info("[%s] Bước %d → submit_verdict (E9 structured direct)",
                         state.investigation_id, state.steps_taken + 1)
-            return None, _structured_args_to_verdict_text(tc.arguments), response
-        return tc, None, response
+            return None, None, response, _args_to_verdict(tc.arguments)
+        return tc, None, response, None
 
     # Text response fallback — kiểm tra có phải verdict không (backward compat MockLLM)
     text = response.text or ""
     if "VERDICT" in text.upper():
-        return None, text, response
+        return None, text, response, None
 
     # LLM trả text nhưng không phải verdict → prompt lại (tránh vòng lặp vô hạn)
     logger.warning("LLM trả text không phải verdict, không phải tool_call: %s", text[:100])
-    return None, f"VERDICT:\nChưa đủ bằng chứng.\nLLM response: {text}", response
+    return None, f"VERDICT:\nChưa đủ bằng chứng.\nLLM response: {text}", response, None
 
 
 async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
@@ -669,17 +691,24 @@ class InvestigationEngine:
         )
 
         if self._graph is not None:
-            state, verdict_text = await self._run_with_graph(state, tracer)
+            state, verdict_text, verdict_obj = await self._run_with_graph(state, tracer)
         else:
-            state, verdict_text = await self._run_loop(state, tracer, investigation_id)
+            state, verdict_text, verdict_obj = await self._run_loop(state, tracer, investigation_id)
 
         # --- Finalize ---
-        if verdict_text:
+        from agent.engine.calibration import apply_calibration
+        if verdict_obj is not None:
+            # E9: structured direct path — dùng Verdict đã dựng, không parse text
+            state.verdict = verdict_obj
+            state.verdict = _check_evidence_grounding(state.verdict, state.evidence)
+            state.verdict = apply_calibration(state.verdict)
+        elif verdict_text:
+            # Fallback text-parse path (MockLLM / stop conditions / error)
             state.verdict = _parse_verdict(verdict_text, state)
+            state.verdict.parse_degraded = True  # E9: đánh dấu đường fallback
             # E2: Kiểm tra root_cause có neo vào bằng chứng không; hạ confidence nếu không
             state.verdict = _check_evidence_grounding(state.verdict, state.evidence)
             # E8: Calibration — hạ confidence nếu historical accuracy < threshold
-            from agent.engine.calibration import apply_calibration
             state.verdict = apply_calibration(state.verdict)
 
         # Ngày 33: Multi-agent conflict resolution — annotate khi nhiều hypothesis confirmed
@@ -703,6 +732,7 @@ class InvestigationEngine:
             "root_cause": state.verdict.root_cause if state.verdict else "N/A",
             "confidence": state.verdict.confidence if state.verdict else "N/A",
             "speculative": state.verdict.speculative if state.verdict else False,
+            "parse_degraded": state.verdict.parse_degraded if state.verdict else False,
             "total_tokens": state.total_tokens,
             # P1: prompt caching stats
             "cache_creation_tokens": state.cache_creation_tokens,
@@ -724,13 +754,14 @@ class InvestigationEngine:
         self,
         state: InvestigationState,
         tracer: Any,
-    ) -> Tuple[InvestigationState, Optional[str]]:
+    ) -> Tuple[InvestigationState, Optional[str], Optional[Verdict]]:
         """Chạy investigation loop qua LangGraph StateGraph."""
         initial: Dict[str, Any] = {
             "inv": state,
             "last_obs": None,
             "tool_call": None,
             "verdict_text": None,
+            "verdict_obj": None,
             "llm": self.llm,
             "tools": self.tools,
             "tracer": tracer,
@@ -746,7 +777,7 @@ class InvestigationEngine:
             result = await self._graph.ainvoke(
                 initial, config={"recursion_limit": recursion_limit}
             )
-            return result["inv"], result.get("verdict_text")
+            return result["inv"], result.get("verdict_text"), result.get("verdict_obj")
         except GraphRecursionError:
             logger.warning(
                 "[%s] Chạm recursion_limit=%d của LangGraph — kết luận partial (không chết im lặng).",
@@ -760,7 +791,7 @@ class InvestigationEngine:
                 f"Bằng chứng: Đã đi {state.steps_taken} bước, chưa kết luận.\n"
                 "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
             )
-            return state, verdict_text
+            return state, verdict_text, None
 
     # -----------------------------------------------------------------------
     # Private: fallback while-loop path (original logic)
@@ -771,10 +802,11 @@ class InvestigationEngine:
         state: InvestigationState,
         tracer: Any,
         investigation_id: str,
-    ) -> Tuple[InvestigationState, Optional[str]]:
+    ) -> Tuple[InvestigationState, Optional[str], Optional[Verdict]]:
         """Fallback: original adaptive while loop."""
         last_obs: Optional[Observation] = None
         verdict_text: Optional[str] = None
+        verdict_obj: Optional[Verdict] = None
 
         while not state.finished:
             # E7: điều kiện dừng dùng chung với LangGraph path
@@ -788,7 +820,7 @@ class InvestigationEngine:
 
             try:
                 t_llm = time.monotonic()
-                tool_call, vtext, llm_resp = await decide_next_action(
+                tool_call, vtext, llm_resp, v_obj = await decide_next_action(
                     state, self.llm, self.tools, last_obs
                 )
                 llm_ms = (time.monotonic() - t_llm) * 1000
@@ -813,14 +845,29 @@ class InvestigationEngine:
                 state.cache_creation_tokens += llm_resp.usage.get("cache_creation_input_tokens", 0)
                 state.cache_read_tokens += llm_resp.usage.get("cache_read_input_tokens", 0)
 
-            output_desc = (f"tool:{tool_call.name}" if tool_call
-                           else ("verdict" if vtext else "no_action"))
+            output_desc = (
+                f"tool:{tool_call.name}" if tool_call
+                else ("verdict_structured" if v_obj is not None else ("verdict" if vtext else "no_action"))
+            )
             tracer.record_llm_call(
                 input_summary=state.symptom[:200],
                 output_summary=output_desc,
                 usage=llm_resp.usage if llm_resp else None,
                 latency_ms=llm_ms,
             )
+
+            if v_obj is not None:
+                # E9: structured path — check competing gate bằng confidence trực tiếp
+                nudge_tc, _ = _apply_competing_gate(state, conf_override=v_obj.confidence)
+                if nudge_tc:
+                    tool_call = nudge_tc
+                    v_obj = None
+                else:
+                    verdict_obj = v_obj
+                    state.stop_reason = "verdict"
+                    state.finished = True
+                    tracer.end_step()
+                    break
 
             if vtext:
                 # E4: cổng cạnh tranh — chặn verdict high/medium nếu còn hypothesis open
@@ -875,4 +922,4 @@ class InvestigationEngine:
             tracer.end_step()
             last_obs = obs
 
-        return state, verdict_text
+        return state, verdict_text, verdict_obj
