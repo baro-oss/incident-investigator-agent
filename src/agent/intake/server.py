@@ -113,6 +113,18 @@ def _resolve_request(source: Optional[str], payload: Dict[str, Any], project_id:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Security: warn when session secret or encryption key is using dev fallback
+    if _SESSION_SECRET == "dev-secret-rbac-change-in-prod":
+        logger.warning(
+            "⚠️  SESSION_SECRET_KEY không được set — đang dùng dev fallback. "
+            "Set SESSION_SECRET_KEY trong .env trước khi deploy lên prod."
+        )
+    if not os.environ.get("SECRET_KEY"):
+        logger.warning(
+            "⚠️  SECRET_KEY không được set — llm_config / auth_config lưu dạng plaintext. "
+            "Set SECRET_KEY để mã hóa at-rest."
+        )
+
     # Bootstrap root user từ env ROOT_USERNAME/ROOT_PASSWORD
     try:
         from agent.auth.rbac import bootstrap_root

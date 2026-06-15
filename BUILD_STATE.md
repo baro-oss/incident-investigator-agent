@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–44.
-**Cổng kiểm gần nhất:** Ngày 44 — README.md · docs/api.md · Makefile aliases (init/run) · 173 tests · eval 4/4
+**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45, 10/10 ngày). **Tất cả Phase 1–8 hoàn tất: 45/45 ngày.**
+**Cổng kiểm gần nhất:** Ngày 45 — security audit · SESSION_SECRET_KEY warning · dep audit · 173 tests · eval 4/4 · Cổng Phase 8 PASS
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -99,12 +99,38 @@
 | 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ✅ |
 | 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ✅ |
 | 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ✅ |
-| 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ☐ |
+| 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ✅ |
 
 **Chốt Phase 8:** Day 38 = smoke mở rộng ~$2 (KHÔNG full N=10) · horizontal scale seam vẫn Future (Redis SSE giữ stub) · Tier-2/bidirectional vẫn Future.
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 46 — 2026-06-15] — Ngày 45: Hardening + Cổng Phase 8
+
+**Ngày 45 — Security audit + đóng pha:**
+- `src/agent/intake/server.py` — thêm startup warning khi `SESSION_SECRET_KEY` dùng dev fallback; thêm startup warning khi `SECRET_KEY` không set (plaintext at-rest)
+- `.env.example` — thêm `SESSION_SECRET_KEY` với comment + lệnh tạo key
+- **Dependency audit (pip-audit):**
+  - `python-multipart 0.0.20` — 3 CVE (path traversal + 2 DoS); fix ≥0.0.27 yêu cầu Python 3.10+ — **không thể fix trên Python 3.9** (ghi nhận là known limitation)
+  - `starlette 0.49.3` — PYSEC-2026-161 (Host header injection); fix ≥0.50.0 yêu cầu Python 3.10+ — **không thể fix trên Python 3.9**
+  - `requests`, `setuptools`, `urllib3` — CVEs không ảnh hưởng đến runtime của project này
+  - Các package runtime chính (`anthropic 0.109.1`, `cryptography 49.0.0`, `fastapi 0.128.8`) — không có CVE
+- `.gitignore` đã cover `.env`, `.env.*` ✅
+- Không có secret thật trong tracked files ✅
+- `ALLOW_ANON_TRIGGER` mặc định `false` ✅
+
+**Cổng Phase 8 — PASS:**
+- Engine domain-agnostic (E6): hypothesis catalog theo miền, fintech có hypothesis lifecycle thật ✅
+- Parity (E7): loop ↔ graph cùng verdict; multi-agent ngang hàng (grounding+conflict+merge) ✅
+- Calibration đóng vòng (E8): engine tự hạ confidence khi historical accuracy < threshold; before/after trên dashboard ✅
+- CI xanh (T2): GitHub Actions pytest + mock eval + syntax + import check ✅
+- Test phủ adapters/output/infra/contract (T1): 173/173 tests ✅
+- Cost giảm đo được (P1): prompt caching hooked, before/after trên cost dashboard ✅
+- Structured verdict (E9): submit_verdict args → Verdict trực tiếp, parse_degraded flag ✅
+- DX (D44): README.md + docs/api.md + Makefile aliases ✅
+- Regression: eval 4/4 + 173 tests PASS ✅
+- Security: startup warnings, .gitignore, no plaintext secrets in repo ✅
 
 ### [Session 45 — 2026-06-15] — Ngày 44: DX + docs
 

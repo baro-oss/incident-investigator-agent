@@ -15,9 +15,9 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 📋 ĐÃ LÊN KẾ HOẠCH (36–45 — chưa code).**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests).**
 
-Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. **Plan Phase 8 (TIẾP THEO): `docs/13-roadmap-phase-8.md`.**
+Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. **Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`.**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
@@ -41,22 +41,22 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 
 **Defer → Future:** Tier-2 Postgres (B1, cần lệnh rõ) · bidirectional output (C2, phá READ-ONLY) · horizontal scale seam (B2). Chi tiết: `docs/12-roadmap-phase-6.md`.
 
-**Phase 8 📋 ĐÃ LÊN KẾ HOẠCH (36–45 — chưa code):**
+**Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests):**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
-| 36 | E6 — Engine domain-agnostic | Rút hypothesis lifecycle khỏi engine → catalog theo miền (cạnh tool registry) + catalog fintech | ☐ |
-| 37 | E7 — Hợp nhất path + parity | 1 nguồn stop/gate cho loop+graph · multi-agent ngang hàng (grounding+conflict+merge evidence_id) | ☐ |
-| 38 | E8 — Real-LLM eval + calib | Smoke mở rộng (~$2) · feed ngưỡng calibration ngược vào engine (đóng vòng E3) | ☐ |
-| 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer | ☐ |
-| 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ☐ |
-| 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval + syntax/import + coverage | ☐ |
-| 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ☐ |
-| 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ☐ |
-| 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo | ☐ |
-| 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ☐ |
+| 36 | E6 — Engine domain-agnostic | Rút hypothesis lifecycle khỏi engine → catalog theo miền (cạnh tool registry) + catalog fintech | ✅ |
+| 37 | E7 — Hợp nhất path + parity | 1 nguồn stop/gate cho loop+graph · multi-agent ngang hàng (grounding+conflict+merge evidence_id) | ✅ |
+| 38 | E8 — Real-LLM eval + calib | Smoke mở rộng (~$2) · feed ngưỡng calibration ngược vào engine (đóng vòng E3) | ✅ |
+| 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer | ✅ |
+| 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ✅ |
+| 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval + syntax/import + coverage | ✅ |
+| 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ✅ |
+| 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ✅ |
+| 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo | ✅ |
+| 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ✅ |
 
-**Chốt Phase 8 (session lập kế hoạch):** Day 38 = smoke mở rộng ~$2 (KHÔNG full N=10) · horizontal scale seam vẫn Future · Tier-2/bidirectional vẫn Future. Cơ sở: E6 = engine hardcode keyword miền → fintech 0 hypothesis (vi phạm ngầm nguyên tắc #2). Chi tiết: `docs/13-roadmap-phase-8.md`.
+**Cổng Phase 8 PASS:** engine domain-agnostic · parity loop↔graph · calibration đóng vòng · CI xanh · 173 tests · prompt caching · E9 structured verdict · README+Makefile+API docs · security audit + startup warnings. Chi tiết: `docs/13-roadmap-phase-8.md`.
 
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 
