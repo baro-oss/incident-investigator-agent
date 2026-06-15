@@ -1106,3 +1106,64 @@ async def admin_revoke_token(
     from agent.auth.rbac import revoke_token
     revoke_token(token_id)
     return RedirectResponse("/dashboard/admin/tokens", status_code=303)
+
+
+# ── Scheduled triggers (Ngày 32) ─────────────────────────────────────────────
+
+@router.get("/scheduled", response_class=HTMLResponse)
+async def scheduled_list(
+    request: Request,
+    project_id: Optional[str] = None,
+    user: dict = Depends(require_login),
+):
+    from agent.intake.scheduler import list_triggers
+    from agent.intake.project_registry import list_projects, list_project_services
+    triggers = list_triggers(project_id=project_id or None)
+    projects = [p["id"] for p in list_projects()]
+    services_map = {p: list_project_services(p) for p in projects}
+    return templates.TemplateResponse("scheduled.html", _ctx(request, user,
+        active="scheduled",
+        triggers=triggers,
+        projects=projects,
+        services_map=services_map,
+        filter_project=project_id or "",
+    ))
+
+
+@router.post("/scheduled", response_class=HTMLResponse)
+async def scheduled_create(
+    request: Request,
+    project_id: str = Form("default"),
+    service: str = Form(...),
+    scenario: str = Form("scenario1"),
+    interval_min: int = Form(60),
+    user: dict = Depends(require_login),
+):
+    from agent.intake.scheduler import create_trigger
+    try:
+        create_trigger(project_id, service, scenario, max(5, interval_min))
+    except Exception as e:
+        pass  # DB error — bỏ qua, reload page
+    return RedirectResponse("/dashboard/scheduled", status_code=303)
+
+
+@router.post("/scheduled/{trigger_id}/toggle", response_class=HTMLResponse)
+async def scheduled_toggle(
+    request: Request,
+    trigger_id: str,
+    user: dict = Depends(require_login),
+):
+    from agent.intake.scheduler import toggle_trigger
+    toggle_trigger(trigger_id)
+    return RedirectResponse("/dashboard/scheduled", status_code=303)
+
+
+@router.post("/scheduled/{trigger_id}/delete", response_class=HTMLResponse)
+async def scheduled_delete(
+    request: Request,
+    trigger_id: str,
+    user: dict = Depends(require_login),
+):
+    from agent.intake.scheduler import delete_trigger
+    delete_trigger(trigger_id)
+    return RedirectResponse("/dashboard/scheduled", status_code=303)

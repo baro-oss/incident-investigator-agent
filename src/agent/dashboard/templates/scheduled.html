@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Scheduled Triggers{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>⏰ Scheduled Triggers</h1>
+  <p class="muted">Trigger điều tra định kỳ per-project. Mỗi lần fire → 1 investigation được đưa vào queue.</p>
+</div>
+
+{# Form tạo trigger mới #}
+<div class="card" style="margin-bottom:24px">
+  <h3 style="margin:0 0 16px">Tạo trigger mới</h3>
+  <form method="POST" action="/dashboard/scheduled" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Project</label>
+      <select name="project_id" class="form-control" style="min-width:140px">
+        {% for pid in projects %}
+        <option value="{{ pid }}">{{ pid }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Service</label>
+      <input name="service" class="form-control" placeholder="payment-gateway" required style="min-width:180px">
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Scenario</label>
+      <select name="scenario" class="form-control" style="min-width:130px">
+        <option value="scenario1">scenario1 — deploy bug</option>
+        <option value="scenario2">scenario2 — provider down</option>
+        <option value="scenario3">scenario3 — DB pool</option>
+        <option value="scenario4">scenario4 — traffic surge</option>
+        <option value="fintech1">fintech1 — processor</option>
+        <option value="fintech2">fintech2 — merchant</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0">
+      <label class="form-label">Interval (phút)</label>
+      <input name="interval_min" type="number" min="5" value="60" class="form-control" style="width:110px">
+    </div>
+    <button type="submit" class="btn btn-primary">＋ Tạo</button>
+  </form>
+</div>
+
+{# Filter theo project #}
+<div style="margin-bottom:16px;display:flex;gap:8px;align-items:center">
+  <span class="muted" style="font-size:13px">Lọc:</span>
+  <a href="/dashboard/scheduled" class="badge {% if not filter_project %}badge-info{% endif %}" style="text-decoration:none">Tất cả</a>
+  {% for pid in projects %}
+  <a href="/dashboard/scheduled?project_id={{ pid }}" class="badge {% if filter_project == pid %}badge-info{% endif %}" style="text-decoration:none">{{ pid }}</a>
+  {% endfor %}
+</div>
+
+{# Bảng triggers #}
+{% if triggers %}
+<div class="card" style="padding:0;overflow:hidden">
+  <table class="table" style="margin:0">
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Service</th>
+        <th>Scenario</th>
+        <th>Interval</th>
+        <th>Trạng thái</th>
+        <th>Last run</th>
+        <th>Next run</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in triggers %}
+      <tr>
+        <td><span class="badge">{{ t.project_id }}</span></td>
+        <td>{{ t.service }}</td>
+        <td><code>{{ t.scenario }}</code></td>
+        <td>{{ t.interval_min }}m</td>
+        <td>
+          {% if t.enabled %}
+          <span class="badge" style="background:var(--success,#22c55e);color:#fff">● Bật</span>
+          {% else %}
+          <span class="badge" style="background:var(--muted);color:#fff">○ Tắt</span>
+          {% endif %}
+        </td>
+        <td class="muted" style="font-size:12px">
+          {% if t.last_run_at %}{{ t.last_run_at[:16].replace('T',' ') }}{% else %}—{% endif %}
+        </td>
+        <td class="muted" style="font-size:12px">
+          {{ t.next_run_at[:16].replace('T',' ') if t.next_run_at else '—' }}
+        </td>
+        <td style="display:flex;gap:6px">
+          <form method="POST" action="/dashboard/scheduled/{{ t.id }}/toggle" style="margin:0">
+            <button type="submit" class="btn" style="padding:4px 10px;font-size:12px">
+              {% if t.enabled %}Tắt{% else %}Bật{% endif %}
+            </button>
+          </form>
+          <form method="POST" action="/dashboard/scheduled/{{ t.id }}/delete"
+                onsubmit="return confirm('Xóa trigger này?')" style="margin:0">
+            <button type="submit" class="btn btn-danger" style="padding:4px 10px;font-size:12px">✕</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="text-align:center;color:var(--muted);padding:40px">
+  Chưa có scheduled trigger nào.{% if filter_project %} Thử bỏ filter.{% endif %}
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:20px;background:var(--surface2,var(--surface))">
+  <h4 style="margin:0 0 8px">ℹ️ Recurring Incident Alerts</h4>
+  <p class="muted" style="margin:0;font-size:13px">
+    Khi một root cause type xuất hiện ≥ <code>RECURRING_ALERT_THRESHOLD</code> lần (mặc định 5),
+    hệ thống tự động push cảnh báo qua Telegram/Slack. Xem <a href="/dashboard/health">Health</a> → Recurring Incidents.
+  </p>
+</div>
+{% endblock %}

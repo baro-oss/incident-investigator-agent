@@ -156,9 +156,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Investigation queue start failed: %s", e)
 
+    # Ngày 32: Khởi động proactive monitoring scheduler
+    from agent.intake.scheduler import start_scheduler, stop_scheduler
+    try:
+        start_scheduler()
+    except Exception as e:
+        logger.warning("Scheduler start failed: %s", e)
+
     yield
 
-    # A1: Graceful shutdown — drain queue trước khi exit
+    # A1: Graceful shutdown — dừng scheduler + drain queue
+    try:
+        await stop_scheduler()
+    except Exception as e:
+        logger.warning("Scheduler stop error: %s", e)
+
     logger.info("Server shutting down — draining investigation queue …")
     try:
         await drain_and_stop(timeout=60.0)
