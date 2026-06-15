@@ -29,7 +29,7 @@ def save_pattern(state: "InvestigationState") -> None:
     Chỉ gọi sau khi state.verdict.confidence == 'high'.
     Idempotent: UNIQUE(project_id, service, error_pattern) → ON CONFLICT cập nhật.
     """
-    if not state.verdict or state.verdict.confidence != "high":
+    if not state.verdict or state.verdict.confidence not in ("high", "medium"):
         return
 
     # Trích error_pattern từ root_cause (tối đa 80 ký tự)

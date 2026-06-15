@@ -123,6 +123,20 @@ class InvestigationState:
                     h.evidence_ids.append(ev_id)
                 return
 
+    def resolve_conflicting_hypotheses(self) -> "Optional[Hypothesis]":
+        """Ngày 33: Khi nhiều hypothesis được confirmed, chọn winner theo confidence + evidence count.
+
+        Rank: high=3 > medium=2 > low=1 > None=0. Tiebreaker: số evidence_ids nhiều hơn.
+        Trả None nếu không có hypothesis nào confirmed.
+        """
+        confirmed = [h for h in self.hypotheses if h.status == "confirmed"]
+        if not confirmed:
+            return None
+        if len(confirmed) == 1:
+            return confirmed[0]
+        _rank = {"high": 3, "medium": 2, "low": 1}
+        return max(confirmed, key=lambda h: (_rank.get(h.confidence or "", 0), len(h.evidence_ids)))
+
     def is_looping(self) -> bool:
         """E4: Phát hiện lặp — bắt 2 liên tiếp giống hệt + dao động chu kỳ A→B→A→B.
 

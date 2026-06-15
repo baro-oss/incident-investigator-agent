@@ -214,3 +214,62 @@ class TestEvidenceLinking:
         ev = sample_state.add_evidence(1, "get_recent_deploys", {}, sample_observation)
         sample_state.link_evidence_to_hypothesis("nonexistent-id", ev.id)
         # Không crash
+
+
+# ── Multi-agent conflict resolution (Ngày 33) ────────────────────────────────
+
+class TestConflictResolution:
+    def test_no_confirmed_returns_none(self, sample_state):
+        sample_state.add_hypothesis("H1")
+        sample_state.add_hypothesis("H2")
+        assert sample_state.resolve_conflicting_hypotheses() is None
+
+    def test_single_confirmed_returns_it(self, sample_state):
+        h = sample_state.add_hypothesis("H1")
+        h.status = "confirmed"
+        h.confidence = "medium"
+        result = sample_state.resolve_conflicting_hypotheses()
+        assert result is h
+
+    def test_high_beats_medium(self, sample_state):
+        h_med = sample_state.add_hypothesis("H medium")
+        h_med.status = "confirmed"
+        h_med.confidence = "medium"
+
+        h_high = sample_state.add_hypothesis("H high")
+        h_high.status = "confirmed"
+        h_high.confidence = "high"
+
+        winner = sample_state.resolve_conflicting_hypotheses()
+        assert winner is h_high
+
+    def test_evidence_count_tiebreaker(self, sample_state, sample_observation):
+        h1 = sample_state.add_hypothesis("H1 same conf")
+        h1.status = "confirmed"
+        h1.confidence = "medium"
+
+        h2 = sample_state.add_hypothesis("H2 more evidence")
+        h2.status = "confirmed"
+        h2.confidence = "medium"
+
+        # h2 có 2 evidence, h1 có 1
+        ev1 = sample_state.add_evidence(1, "get_metrics", {}, sample_observation)
+        ev2 = sample_state.add_evidence(2, "get_metrics", {}, sample_observation)
+        ev3 = sample_state.add_evidence(3, "get_metrics", {}, sample_observation)
+        h1.evidence_ids.append(ev1.id)
+        h2.evidence_ids.extend([ev2.id, ev3.id])
+
+        winner = sample_state.resolve_conflicting_hypotheses()
+        assert winner is h2
+
+    def test_ruled_out_not_eligible(self, sample_state):
+        h_out = sample_state.add_hypothesis("ruled out")
+        h_out.status = "ruled_out"
+        h_out.confidence = "high"
+
+        h_conf = sample_state.add_hypothesis("confirmed medium")
+        h_conf.status = "confirmed"
+        h_conf.confidence = "medium"
+
+        winner = sample_state.resolve_conflicting_hypotheses()
+        assert winner is h_conf

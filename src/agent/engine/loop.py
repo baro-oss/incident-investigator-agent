@@ -694,6 +694,22 @@ class InvestigationEngine:
             # E2: Kiểm tra root_cause có neo vào bằng chứng không; hạ confidence nếu không
             state.verdict = _check_evidence_grounding(state.verdict, state.evidence)
 
+        # Ngày 33: Multi-agent conflict resolution — annotate khi nhiều hypothesis confirmed
+        winner = state.resolve_conflicting_hypotheses()
+        n_confirmed = sum(1 for h in state.hypotheses if h.status == "confirmed")
+        if winner and state.verdict and n_confirmed > 1:
+            conflict_note = (
+                f" [Conflict resolved: {n_confirmed} confirmed; winner={winner.id}"
+                f" conf={winner.confidence} ev={len(winner.evidence_ids)}]"
+            )
+            state.verdict.competing_hypotheses = (
+                (state.verdict.competing_hypotheses or "") + conflict_note
+            )
+            logger.info(
+                "[%s] Conflict resolution: %d confirmed → winner=%s (%s)",
+                investigation_id, n_confirmed, winner.id, winner.confidence,
+            )
+
         _emit_trace(investigation_id, state.steps_taken, "verdict", {
             "stop_reason": state.stop_reason,
             "root_cause": state.verdict.root_cause if state.verdict else "N/A",
