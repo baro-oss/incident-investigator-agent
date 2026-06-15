@@ -73,6 +73,32 @@ def save_pattern(state: "InvestigationState") -> None:
         logger.warning("[memory] Không lưu được pattern: %s", exc)
 
 
+def get_service_priors(
+    project_id: str,
+    service: str,
+    *,
+    limit: int = 3,
+) -> List[dict]:
+    """E11: Trả top-N root_cause_type đã gặp cho (project, service), sorted by count DESC.
+
+    Mỗi phần tử: {"root_cause_type": str, "count": int, "avg_steps": float}
+    Trả [] nếu không có dữ liệu.
+    """
+    try:
+        conn = open_db()
+        rows = conn.execute("""
+            SELECT root_cause_type, count, avg_steps
+            FROM investigation_patterns
+            WHERE project_id=? AND service=? AND root_cause_type != 'unknown'
+            ORDER BY count DESC LIMIT ?
+        """, (project_id, service, limit)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+    except Exception as exc:
+        logger.debug("[memory] get_service_priors lỗi: %s", exc)
+        return []
+
+
 def get_warm_start_hint(
     project_id: str,
     service: str,
@@ -127,14 +153,29 @@ def _format_hint(row: dict) -> str:
 
 def _classify_root_cause(root_cause: str) -> str:
     rc = root_cause.lower()
+    # Microservice types
     if "deploy" in rc or "version" in rc:
         return "deploy_bug"
-    if "pool" in rc or "connection" in rc or "exhaustion" in rc:
+    if "pool" in rc or "exhaustion" in rc:
         return "pool_exhaustion"
     if "traffic" in rc or "surge" in rc or "ratelimit" in rc:
         return "traffic_surge"
     if "provider" in rc or "sập" in rc or "unavailable" in rc:
         return "provider_down"
+    # Fintech types
+    if "processor" in rc and "timeout" in rc:
+        return "processor_timeout"
+    if "price" in rc or "refund" in rc:
+        return "price_configuration_error"
+    if "fraud" in rc or "breach" in rc:
+        return "merchant_fraud"
+    if "settlement" in rc or "lag" in rc:
+        return "settlement_lag"
+    # Generic fallback — keep ordering: latency_spike before timeout to be specific
+    if "spike" in rc:
+        return "latency_spike"
+    if "timeout" in rc or "latency" in rc or "connection" in rc:
+        return "timeout"
     return "unknown"
 
 

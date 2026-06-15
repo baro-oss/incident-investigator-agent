@@ -588,6 +588,41 @@ def _check_stop_conditions(state: "InvestigationState") -> Optional[str]:
     return None
 
 
+def _preseed_hypotheses(
+    project_id: str,
+    service: str,
+    rct_index: Dict[str, Any],
+) -> List[Hypothesis]:
+    """E11: Tạo Hypothesis open từ investigation_patterns của service này.
+
+    Trả [] nếu service rỗng, DB chưa có dữ liệu, hoặc lỗi.
+    Hypothesis được tạo với id = catalog.tag để _upsert_hypothesis merge đúng sau này.
+    """
+    if not service or not rct_index:
+        return []
+    try:
+        from agent.memory.patterns import get_service_priors
+        priors = get_service_priors(project_id, service)
+    except Exception:
+        return []
+
+    result: List[Hypothesis] = []
+    for prior in priors:
+        rct = prior.get("root_cause_type", "")
+        entry = rct_index.get(rct)
+        if not entry:
+            continue
+        h = Hypothesis(
+            id=entry.tag,
+            content=entry.content,
+            status="open",
+            keywords=list(entry.keywords),
+            prior_seen_count=prior.get("count", 0),
+        )
+        result.append(h)
+    return result
+
+
 def _emit_trace(
     investigation_id: str,
     step: int,
@@ -637,10 +672,12 @@ class InvestigationEngine:
         self.tools = tools
         self.step_budget = step_budget
         # E6: build catalog index cho domain (default microservice)
-        from agent.engine.hypothesis_catalog import MICROSERVICE_CATALOG, build_catalog_index
-        self._catalog_index = build_catalog_index(
-            hypothesis_catalog if hypothesis_catalog is not None else MICROSERVICE_CATALOG
+        from agent.engine.hypothesis_catalog import (
+            MICROSERVICE_CATALOG, build_catalog_index, build_rct_index,
         )
+        _catalog = hypothesis_catalog if hypothesis_catalog is not None else MICROSERVICE_CATALOG
+        self._catalog_index = build_catalog_index(_catalog)
+        self._rct_index = build_rct_index(_catalog)  # E11: root_cause_type → entry
         # Try compile LangGraph (lazy — lỗi import thì fallback)
         self._graph = None
         try:
@@ -659,6 +696,7 @@ class InvestigationEngine:
         available_services: Optional[List[str]] = None,
         warm_start_hint: Optional[str] = None,
         investigation_id: Optional[str] = None,
+        service: Optional[str] = None,   # E11: service name cho prior lookup
     ) -> InvestigationState:
         investigation_id = investigation_id or str(uuid.uuid4())[:12]
         state = InvestigationState(
@@ -673,6 +711,15 @@ class InvestigationEngine:
             warm_start_hint=warm_start_hint,
             hypothesis_catalog_index=self._catalog_index,  # E6: domain catalog
         )
+
+        # E11: Pre-seed hypothesis open từ investigation_patterns của service này
+        _svc = service or (symptom.split(":")[0].strip() if ":" in symptom else "")
+        prior_hyps = _preseed_hypotheses(project_id, _svc, self._rct_index)
+        state.hypotheses.extend(prior_hyps)
+        if prior_hyps:
+            logger.info("[%s] E11 pre-seed %d hypothesis(es) cho service='%s': %s",
+                        investigation_id, len(prior_hyps), _svc,
+                        [h.id for h in prior_hyps])
 
         logger.info("[%s] [%s] Bắt đầu điều tra (via %s): %s",
                     investigation_id, project_id,

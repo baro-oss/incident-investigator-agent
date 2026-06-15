@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45, 10/10 ngày). **Tất cả Phase 1–8 hoàn tất: 45/45 ngày.** **Phase 9 📋 ĐÃ LÊN KẾ HOẠCH (46–50, CHƯA CODE) — `docs/14-roadmap-phase-9.md`.**
-**Cổng kiểm gần nhất:** Ngày 45 — security audit · SESSION_SECRET_KEY warning · dep audit · 173 tests · eval 4/4 · Cổng Phase 8 PASS + Python 3.9 → 3.14 upgrade PASS
-**Kế hoạch kế tiếp:** Phase 9 (E10 tool-sequencing · E11 service prior · E12 specificity gate) — 100% engine-core, regression gate mỗi ngày engine.
+**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45). **Phase 9 🔨 ĐANG CODE — Ngày 46 ✅ (E11 service prior + CVE fix).**
+**Cổng kiểm gần nhất:** Ngày 46 — E11 pre-seed hypothesis · get_service_priors · _classify_root_cause fintech · 200/200 tests · python-multipart 0.0.32 + starlette 1.3.1 + venv Python 3.14.
+**Kế hoạch kế tiếp:** Ngày 47 (E10 tool-sequencing hint trong `_build_user_message`).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -109,7 +109,7 @@
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
-| 46 | E11 — Service prior | Pre-seed `Hypothesis` open theo `investigation_patterns` (map root_cause_type→catalog tag); `Hypothesis.prior_seen_count`; confirm vẫn cần bằng chứng thật | ☐ |
+| 46 | E11 — Service prior | Pre-seed `Hypothesis` open theo `investigation_patterns` (map root_cause_type→catalog tag); `Hypothesis.prior_seen_count`; confirm vẫn cần bằng chứng thật | ✅ |
 | 47 | E10 — Tool sequencing | `_tool_sequencing_hint(state)` nối vào `_build_user_message` (parity loop↔graph free); reuse catalog `relevant_tools`; advisory only | ☐ |
 | 48 | E12 — Specificity gate (lõi) | `engine/specificity.py:compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph; `Verdict.specificity_score` | ☐ |
 | 49 | E12 — Multi-agent + đo | Downgrade/annotate trong `_synthesize_verdict` · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ☐ |
@@ -144,7 +144,33 @@
 
 **Đã sửa (follow-up cùng session):** đồng bộ version Python trong docs hiện-trạng → **3.14**: `CLAUDE.md` (bảng Stack + ghi chú MCP SDK), `README.md` (dòng Stack), `docs/10` (ghi chú MCP SDK + upgrade path). Giữ nguyên các entry nhật ký lịch sử (ghi đúng thời điểm) và file code (đã pin 3.14 ở commit upgrade). `AGENTS.md` đã version-agnostic ("Python" không kèm số) — không cần sửa.
 
-**Chưa làm:** chưa bắt đầu code Ngày 46 (chờ session sau xác nhận khởi động).
+**Chưa làm:** ~~chưa bắt đầu code Ngày 46~~ → đã xong (session 48 bên dưới).
+
+### [Session 48 — 2026-06-15] — Ngày 46: E11 service prior + CVE fix + venv rebuild
+
+**Bối cảnh:** Session này bắt đầu Phase 9 code. Commit trước đó là plan + Python docs sync. Người dùng yêu cầu commit plan, gộp CVE task vào Ngày 46, bắt đầu code.
+
+**E11 service prior — đã làm:**
+- `hypothesis_catalog.py`: thêm field `root_cause_type: str = ""` vào `HypothesisCatalogEntry`; gán đầy đủ cho mọi entry microservice + fintech; thêm helper `build_rct_index(catalog)` → `{root_cause_type → entry}`.
+- `state.py`: thêm `prior_seen_count: int = 0` vào `Hypothesis`; cập nhật `summarize_for_llm()` → hiện `[prior: gặp N lần]` khi N>0.
+- `memory/patterns.py`: thêm `get_service_priors(project_id, service, *, limit=3)` trả top-N từ `investigation_patterns` sorted by count DESC (bỏ `unknown`); mở rộng `_classify_root_cause` bao phủ fintech (processor_timeout · price_configuration_error · merchant_fraud · settlement_lag · latency_spike · timeout generic).
+- `engine/loop.py`: thêm `_preseed_hypotheses(project_id, service, rct_index)` — hàm pure, tạo `Hypothesis(id=catalog.tag, prior_seen_count=count)`; thêm `service: Optional[str]` vào `InvestigationEngine.run()`; pre-seed vào `state.hypotheses` trước loop; build `self._rct_index` trong `__init__`.
+- `engine/multi_agent.py`: thêm `service: Optional[str]` vào `run()` và `_run_specialist()`; thread xuống `engine.run()`.
+- `intake/runner.py`: pass `service=req.service` vào `engine_obj.run()`.
+
+**CVE fix:**
+- `pyproject.toml`: `python-multipart>=0.0.9` → `>=0.0.27`; thêm `starlette>=0.50.0`; `fastapi>=0.100.0` → `>=0.115.0`.
+- Rebuild `.venv` bằng `python3 -m venv .venv --clear` (Python 3.14.6).
+- Kết quả: python-multipart 0.0.32 · starlette 1.3.1 · fastapi 0.137.0.
+
+**Tests:** 200/200 (173 cũ + 27 mới trong `tests/test_e11_service_prior.py`):
+- TestCatalogRootCauseType (5): root_cause_type đầy đủ + không trùng + mapping đúng
+- TestClassifyRootCause (10): microservice + fintech types
+- TestGetServicePriors (5): sort · filter unknown · limit · DB error
+- TestPreseedHypotheses (5): empty service · no data · prior_seen_count · skip unknown · multiple
+- TestEnginePreseedIntegration (2): pre-seed xuất hiện trong state · không pre-seed khi DB trống
+
+**Kiến trúc:** `_upsert_hypothesis` lookup theo `tag` (h.id == tag) → hypothesis pre-seed với `id=catalog.tag` sẽ được cập nhật lifecycle `open→confirmed/ruled_out` bởi evidence sau một cách **tự động, không cần code đặc biệt**. ✓ Principle #3 (confirm vẫn cần bằng chứng thật, prior chỉ đổi thứ tự khám phá). ✓ Principle #2 (mapping `root_cause_type↔tag` nằm trong catalog, engine đọc via `build_rct_index`).
 
 ### [Session 46 — 2026-06-15] — Ngày 45: Hardening + Cổng Phase 8
 

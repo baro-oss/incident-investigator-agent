@@ -23,6 +23,8 @@ class HypothesisCatalogEntry:
     confirm_kws: Set[str]     # Từ khóa trong observation summary → xác nhận hypothesis
     rule_out_kws: Set[str]    # Từ khóa trong observation summary → loại trừ hypothesis
     confirm_conf: str         # Confidence khi confirm: "high" | "medium" | "low"
+    # E11: khóa liên kết với investigation_patterns.root_cause_type
+    root_cause_type: str = ""
 
 
 # ── Domain: Microservice Ops ──────────────────────────────────────────────────
@@ -36,6 +38,7 @@ MICROSERVICE_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"deployment", "deploy", "version", "release", "tìm thấy"},
         rule_out_kws={"không tìm thấy", "0 deployment", "no deployment"},
         confirm_conf="medium",
+        root_cause_type="deploy_bug",
     ),
     HypothesisCatalogEntry(
         tag="timeout",
@@ -45,6 +48,7 @@ MICROSERVICE_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"timeoutexception", "timeout", "latency", "deadline", "chậm"},
         rule_out_kws={"không có timeout", "latency bình thường"},
         confirm_conf="medium",
+        root_cause_type="timeout",
     ),
     HypothesisCatalogEntry(
         tag="latency_spike",
@@ -54,6 +58,7 @@ MICROSERVICE_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"lệch", "x baseline", "spike", "tăng", "cao hơn"},
         rule_out_kws={"bình thường", "không lệch", "normal"},
         confirm_conf="medium",
+        root_cause_type="latency_spike",
     ),
     HypothesisCatalogEntry(
         tag="pool_exhaustion",
@@ -63,6 +68,7 @@ MICROSERVICE_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"pool", "exhaustion", "connection", "wait_time", "queue"},
         rule_out_kws={"pool bình thường"},
         confirm_conf="high",
+        root_cause_type="pool_exhaustion",
     ),
     HypothesisCatalogEntry(
         tag="provider_down",
@@ -72,6 +78,7 @@ MICROSERVICE_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"provider", "unavailable", "serviceunavailable", "503", "sập"},
         rule_out_kws={"provider ok", "bình thường"},
         confirm_conf="high",
+        root_cause_type="provider_down",
     ),
 ]
 
@@ -88,6 +95,7 @@ FINTECH_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"processortimeout", "processor_timeout", "fail_rate", "timeout", "degraded"},
         rule_out_kws={"bình thường", "không phát hiện", "đang active"},
         confirm_conf="medium",
+        root_cause_type="processor_timeout",
     ),
     HypothesisCatalogEntry(
         tag="price_configuration_error",
@@ -97,6 +105,7 @@ FINTECH_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"price_bug", "price", "refund_rate", "bug"},
         rule_out_kws={"bình thường", "không phát hiện", "đang active"},
         confirm_conf="high",
+        root_cause_type="price_configuration_error",
     ),
     HypothesisCatalogEntry(
         tag="merchant_fraud",
@@ -106,6 +115,7 @@ FINTECH_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"fraud", "breach", "bị khóa", "blocked"},
         rule_out_kws={"bình thường", "đang active"},
         confirm_conf="medium",
+        root_cause_type="merchant_fraud",
     ),
     HypothesisCatalogEntry(
         tag="settlement_lag",
@@ -115,6 +125,7 @@ FINTECH_CATALOG: List[HypothesisCatalogEntry] = [
         confirm_kws={"x baseline", "chậm", "processing_time", "lệch", "lag"},
         rule_out_kws={"bình thường", "không lệch"},
         confirm_conf="medium",
+        root_cause_type="settlement_lag",
     ),
 ]
 
@@ -133,3 +144,10 @@ def build_catalog_index(
 ) -> Dict[str, HypothesisCatalogEntry]:
     """Build dict{tag → entry} cho lookup O(1). Dùng trong _update_hypotheses."""
     return {entry.tag: entry for entry in catalog}
+
+
+def build_rct_index(
+    catalog: List[HypothesisCatalogEntry],
+) -> Dict[str, HypothesisCatalogEntry]:
+    """Build dict{root_cause_type → entry} cho E11 pre-seed. Bỏ qua entry không có root_cause_type."""
+    return {entry.root_cause_type: entry for entry in catalog if entry.root_cause_type}

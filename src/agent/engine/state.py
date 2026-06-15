@@ -36,6 +36,7 @@ class Hypothesis:
     # medium = chỉ tương quan thời gian
     # low = suy đoán
     keywords: List[str] = field(default_factory=list)  # E1: từ khóa để match evidence có liên quan
+    prior_seen_count: int = 0  # E11: số lần sự cố kiểu này đã gặp (0 = không có prior)
 
 
 @dataclass
@@ -208,7 +209,8 @@ class InvestigationState:
                         ev_refs.append(f"[{ev.tool_name}: {ev.summary[:80]}]")
                 status_mark = {"open": "🔍", "confirmed": "✅", "ruled_out": "❌"}.get(h.status, "?")
                 conf_note = f" (độ tin: {h.confidence})" if h.confidence else ""
-                lines.append(f"  {status_mark} [{h.id}] {h.content}{conf_note}")
+                prior_note = f" [prior: gặp {h.prior_seen_count} lần]" if h.prior_seen_count > 0 else ""
+                lines.append(f"  {status_mark} [{h.id}] {h.content}{conf_note}{prior_note}")
                 for ref in ev_refs:
                     lines.append(f"      ↳ {ref}")
             if len(ruled_out) > 2:

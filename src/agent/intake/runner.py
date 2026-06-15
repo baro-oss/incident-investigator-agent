@@ -208,6 +208,7 @@ async def run_investigation_background(
                     available_services=available_services or None,
                     warm_start_hint=warm_hint,
                     investigation_id=key,
+                    service=req.service,   # E11: dùng cho prior lookup
                 ),
                 timeout=300.0,
             )

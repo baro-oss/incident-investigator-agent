@@ -91,6 +91,7 @@ class MultiAgentEngine:
         available_services: Optional[List[str]] = None,
         warm_start_hint: Optional[str] = None,
         investigation_id: Optional[str] = None,
+        service: Optional[str] = None,   # E11
     ) -> InvestigationState:
         investigation_id = investigation_id or str(uuid.uuid4())[:12]
 
@@ -121,12 +122,12 @@ class MultiAgentEngine:
         log_state_fut = self._run_specialist(
             "LogAnalystAgent", self.log_tools, log_id,
             symptom, time_window, scenario, date, project_id,
-            available_services, warm_start_hint,
+            available_services, warm_start_hint, service,
         )
         metric_state_fut = self._run_specialist(
             "MetricAnalystAgent", self.metric_tools, metric_id,
             symptom, time_window, scenario, date, project_id,
-            available_services, warm_start_hint,
+            available_services, warm_start_hint, service,
         )
 
         log_state, metric_state = await asyncio.gather(log_state_fut, metric_state_fut)
@@ -185,6 +186,7 @@ class MultiAgentEngine:
         project_id: str,
         available_services: Optional[List[str]],
         warm_start_hint: Optional[str],
+        service: Optional[str] = None,  # E11
     ) -> InvestigationState:
         """Chạy một specialist engine với tool set giới hạn."""
         logger.info("[%s] %s bắt đầu (%d tools)",
@@ -202,6 +204,7 @@ class MultiAgentEngine:
             available_services=available_services,
             warm_start_hint=warm_start_hint,
             investigation_id=sub_id,
+            service=service,  # E11
         )
         logger.info("[%s] %s xong: %d bằng chứng, stop=%s",
                     sub_id, role, len(state.evidence), state.stop_reason)
