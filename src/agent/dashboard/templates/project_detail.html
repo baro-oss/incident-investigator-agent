@@ -19,12 +19,12 @@
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
 
-  <!-- LLM Config -->
+  <!-- LLM Config (A28-D: per-project custom endpoint) -->
   <div class="card">
     <h3 style="margin-bottom:12px">LLM Config</h3>
-    <table style="width:100%;font-size:13px">
+    <table style="width:100%;font-size:13px;margin-bottom:10px">
       <tr>
-        <td style="color:var(--muted);padding:4px 0;width:40%">Provider</td>
+        <td style="color:var(--muted);padding:4px 0;width:40%">Provider hiện tại</td>
         <td><code>{{ proj.llm_provider }}</code></td>
       </tr>
       {% if proj.llm_model %}
@@ -34,10 +34,49 @@
       </tr>
       {% endif %}
     </table>
-    <a href="/projects/{{ proj.id }}/llm"
-       style="font-size:11px;color:var(--muted);text-decoration:none;display:inline-block;margin-top:8px">
-      Chỉnh qua API: PATCH /projects/{{ proj.id }}/llm →
-    </a>
+    <details>
+      <summary style="font-size:12px;color:var(--accent);cursor:pointer;margin-bottom:8px">
+        ⚙ Cài đặt endpoint riêng (per-project override)
+      </summary>
+      {% if llm_save_ok %}<div style="color:var(--success,#22c55e);font-size:12px;margin-bottom:6px">✓ Đã lưu</div>{% endif %}
+      {% if llm_save_err %}<div style="color:var(--danger,#ef4444);font-size:12px;margin-bottom:6px">{{ llm_save_err }}</div>{% endif %}
+      <form method="post" action="/dashboard/projects/{{ proj.id }}/llm"
+            style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+        <div>
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Provider <span style="font-size:10px">(để trống = dùng default)</span></label>
+          <input type="text" name="provider" value="{{ proj.llm_config_raw.provider if proj.llm_config_raw else '' }}"
+                 placeholder="anthropic / openai / groq"
+                 style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+        </div>
+        <div>
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Model <span style="font-size:10px">(để trống = dùng default)</span></label>
+          <input type="text" name="model" value="{{ proj.llm_config_raw.model if proj.llm_config_raw else '' }}"
+                 placeholder="claude-sonnet-4-6"
+                 style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+        </div>
+        <div>
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Base URL <span style="font-size:10px">(để trống = mặc định provider)</span></label>
+          <input type="text" name="base_url" value="{{ proj.llm_config_raw.base_url if proj.llm_config_raw else '' }}"
+                 placeholder="https://api.groq.com/openai/v1"
+                 style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+        </div>
+        <div>
+          <label style="color:var(--muted);display:block;margin-bottom:3px">API Key <span style="font-size:10px">(để trống = dùng env key)</span></label>
+          <input type="password" name="api_key" value="{{ proj.llm_config_raw.api_key if proj.llm_config_raw else '' }}"
+                 placeholder="sk-..."
+                 style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+        </div>
+        <div>
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Extra Headers <span style="font-size:10px">(JSON: {"X-Header":"value"})</span></label>
+          <textarea name="headers_json" rows="2"
+                    style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:11px;font-family:monospace;resize:vertical">{{ proj.llm_config_raw.headers | tojson if proj.llm_config_raw and proj.llm_config_raw.headers else '{}' }}</textarea>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button type="submit" class="btn btn-primary" style="font-size:12px;padding:5px 14px">💾 Lưu LLM config</button>
+          <button type="submit" name="clear" value="1" class="btn btn-ghost" style="font-size:12px;padding:5px 10px">✕ Xóa override</button>
+        </div>
+      </form>
+    </details>
   </div>
 
   <!-- Services -->

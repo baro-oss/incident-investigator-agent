@@ -432,6 +432,18 @@ def revoke_token(token_id: str) -> bool:
     return cursor.rowcount > 0
 
 
+def list_all_tokens() -> List[Dict[str, Any]]:
+    """Admin view: tất cả tokens kèm username."""
+    conn = open_db()
+    rows = conn.execute(
+        "SELECT at.id, at.name, at.user_id, u.username, at.created_at, at.last_used "
+        "FROM api_tokens at JOIN users u ON u.id=at.user_id "
+        "ORDER BY at.created_at DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def verify_token(raw_token: str) -> Optional[Dict[str, Any]]:
     token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     conn = open_db()

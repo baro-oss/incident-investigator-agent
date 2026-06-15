@@ -158,9 +158,9 @@ Day 30  Ecosystem + close     — C1 PagerDuty/OpsGenie + C3 deploy hook + C4 ca
 
 ---
 
-## Ngày 29 — Reliability Infra *(in-process, KHÔNG Kafka)*
+## Ngày 29 — Reliability Infra + UI Polish *(in-process, KHÔNG Kafka)*
 
-**Mục tiêu:** không mất investigation khi restart + chịu được alert storm.
+**Mục tiêu:** không mất investigation khi restart + chịu được alert storm + cải thiện UX dashboard.
 
 ### A. B3 — Investigation queue *(thay fire-and-forget)*
 - `runner.py`: thay `asyncio.Task` fire-and-forget → **internal priority queue** (asyncio.Queue / heap) + worker pool (dùng lại `ConcurrencyLimiter` max=3 từ D16).
@@ -175,10 +175,22 @@ Day 30  Ecosystem + close     — C1 PagerDuty/OpsGenie + C3 deploy hook + C4 ca
 - Per-project throttle `/trigger`: max N investigations/giờ (config qua project hoặc env).
 - Vượt ngưỡng → 429 + thông báo, không tạo investigation → chống tự-DDoS khi alert storm.
 
+### D. UI — Gom nhóm sidebar navigation theo chức năng
+- Sidebar hiện có 11 link phẳng → chia thành nhóm ngữ nghĩa (ví dụ: **Điều tra** · **Cấu hình** · **Quan sát** · **Admin**).
+- Mỗi nhóm có label section nhỏ; collapsible tùy chọn (JS toggle, lưu state `localStorage`).
+- Không thay đổi routes hay logic — chỉ thay đổi `base.html` nav template + CSS.
+
+### E. UI — Đổi default theme sang Light mode
+- `base.html`: bỏ `body.theme-dark` là mặc định; default không có class → Light mode.
+- JS `_applyTheme()`: đọc `localStorage` key `ia-theme`; nếu chưa set → mặc định `light`.
+- Toggle button label và logic cập nhật tương ứng.
+
 **Cổng Ngày 29:**
 - Kill -TERM giữa lúc điều tra → partial verdict được push, pending persist, restart đọc lại không mất ✅
 - Burst 20 trigger → queue xử lý tuần tự (limiter max=3), không sập ✅
 - Vượt rate limit → 429 ✅
+- Sidebar có nhóm chức năng rõ ràng ✅
+- Default theme Light mode khi vào lần đầu (chưa set localStorage) ✅
 
 ---
 

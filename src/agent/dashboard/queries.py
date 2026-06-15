@@ -484,6 +484,15 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
             "confidence": verdict.get("confidence", ""),
         })
 
+    # Decrypt llm_config for display in form
+    from agent.security import decrypt_secret
+    import json as _json
+    raw_cfg_str = decrypt_secret(p["llm_config"]) if p.get("llm_config") else None
+    try:
+        llm_config_raw = _json.loads(raw_cfg_str) if raw_cfg_str else None
+    except Exception:
+        llm_config_raw = None
+
     conn.close()
     return {
         "id": p["id"],
@@ -491,6 +500,7 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
         "description": p["description"] or "",
         "llm_provider": p["llm_provider"] or "anthropic (env)",
         "llm_model": p["llm_model"] or "",
+        "llm_config_raw": llm_config_raw,
         "services": services,
         "mcp_servers": mcp_servers,
         "channels": channels,

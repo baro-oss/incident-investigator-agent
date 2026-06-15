@@ -51,15 +51,17 @@ def add_server(
     auth_type: 'none' | 'bearer' | 'api_key'
     auth_config: JSON string — {"token":"..."} hoặc {"header":"X-API-Key","value":"..."}
     """
+    from agent.security import encrypt_secret
     now = _now()
     url = url.rstrip("/")
+    encrypted_auth = encrypt_secret(auth_config) if auth_type != "none" else auth_config
     conn = open_db()
     try:
         cursor = conn.execute(
             "INSERT INTO mcp_servers "
             "(name, url, description, enabled, project_id, auth_type, auth_config, created_at, updated_at) "
             "VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?)",
-            (name, url, description, project_id, auth_type, auth_config, now, now),
+            (name, url, description, project_id, auth_type, encrypted_auth, now, now),
         )
         conn.commit()
         row = conn.execute(
@@ -145,7 +147,10 @@ def get_enabled_urls(project_id: str = "default") -> List[str]:
 
 
 def get_enabled_servers(project_id: str = "default") -> List[Dict[str, Any]]:
-    """Trả full record (url + auth_type + auth_config) của servers enabled trong project."""
+    """Trả full record (url + auth_type + auth_config) của servers enabled trong project.
+    auth_config được giải mã at-rest (A2).
+    """
+    from agent.security import decrypt_secret
     conn = open_db()
     rows = conn.execute(
         "SELECT url, auth_type, auth_config FROM mcp_servers "
@@ -153,7 +158,13 @@ def get_enabled_servers(project_id: str = "default") -> List[Dict[str, Any]]:
         (project_id,),
     ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    result = []
+    for r in rows:
+        d = dict(r)
+        if d.get("auth_type") != "none" and d.get("auth_config"):
+            d["auth_config"] = decrypt_secret(d["auth_config"]) or d["auth_config"]
+        result.append(d)
+    return result
 
 
 def get_server_by_id(

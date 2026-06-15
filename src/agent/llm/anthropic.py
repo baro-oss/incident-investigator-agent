@@ -18,10 +18,15 @@ class AnthropicClient:
         api_key: Optional[str] = None,
         model: Optional[str] = None,
         max_tokens: int = 4096,
+        base_url: Optional[str] = None,
+        default_headers: Optional[dict] = None,
     ) -> None:
-        self._client = anthropic.AsyncAnthropic(
-            api_key=api_key or os.environ["ANTHROPIC_API_KEY"]
-        )
+        kwargs: dict = {"api_key": api_key or os.environ["ANTHROPIC_API_KEY"]}
+        if base_url:
+            kwargs["base_url"] = base_url
+        if default_headers:
+            kwargs["default_headers"] = default_headers
+        self._client = anthropic.AsyncAnthropic(**kwargs)
         self._model = model or os.environ.get("LLM_MODEL", "claude-sonnet-4-6")
         self._max_tokens = max_tokens
 

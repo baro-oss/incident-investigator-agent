@@ -539,6 +539,8 @@ async def dashboard_project_detail(
     return templates.TemplateResponse("project_detail.html", _ctx(request, user,
         active="projects",
         proj=proj,
+        llm_save_ok=False,
+        llm_save_err="",
     ))
 
 
@@ -567,6 +569,62 @@ async def dashboard_project_del_service(
     except Exception:
         pass
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/llm", response_class=HTMLResponse)
+async def dashboard_project_save_llm(
+    request: Request, project_id: str,
+    provider: str = Form(""),
+    model: str = Form(""),
+    base_url: str = Form(""),
+    api_key: str = Form(""),
+    headers_json: str = Form("{}"),
+    clear: str = Form(""),
+    user: dict = Depends(require_perm("llm.manage")),
+):
+    from agent.intake.project_registry import set_project_llm, clear_project_llm
+    llm_save_ok = False
+    llm_save_err = ""
+    if clear == "1":
+        clear_project_llm(project_id)
+        llm_save_ok = True
+    else:
+        try:
+            extra = json.loads(headers_json) if headers_json.strip() else {}
+        except json.JSONDecodeError:
+            llm_save_err = "Extra Headers không phải JSON hợp lệ."
+            extra = {}
+        if not llm_save_err:
+            cfg: dict = {}
+            if base_url.strip():
+                cfg["base_url"] = base_url.strip()
+            if api_key.strip():
+                cfg["api_key"] = api_key.strip()
+            if extra:
+                cfg["headers"] = extra
+            if not provider.strip():
+                llm_save_err = "Provider không được để trống (vd: anthropic, groq, openai)."
+            else:
+                try:
+                    set_project_llm(
+                        project_id,
+                        provider.strip(),
+                        model.strip() or None,
+                        cfg,
+                    )
+                    llm_save_ok = True
+                except ValueError as e:
+                    llm_save_err = str(e)
+    from agent.dashboard.queries import get_project_detail
+    proj = get_project_detail(project_id)
+    if not proj:
+        return HTMLResponse("<h3>Project not found</h3>", status_code=404)
+    return templates.TemplateResponse("project_detail.html", _ctx(request, user,
+        active="projects",
+        proj=proj,
+        llm_save_ok=llm_save_ok,
+        llm_save_err=llm_save_err,
+    ))
 
 
 @router.post("/projects/{project_id}/channels/{channel}/config", response_class=HTMLResponse)
@@ -994,3 +1052,54 @@ async def admin_group_remove_member(
     from agent.auth.rbac import remove_group_member
     remove_group_member(group_id, project_id)
     return RedirectResponse("/dashboard/admin/groups", status_code=303)
+
+
+# ── A4: Admin API tokens ──────────────────────────────────────────────────────
+
+@router.get("/admin/tokens")
+async def admin_tokens_page(
+    request: Request,
+    user: dict = Depends(require_perm("user.manage")),
+    new_token: str = "",
+    new_token_name: str = "",
+):
+    from agent.auth.rbac import list_all_tokens, list_users
+    tokens = list_all_tokens()
+    users = list_users()
+    return templates.TemplateResponse(
+        "admin_tokens.html",
+        {
+            "request": request,
+            "user": user,
+            "tokens": tokens,
+            "users": users,
+            "new_token": new_token,
+            "new_token_name": new_token_name,
+        },
+    )
+
+
+@router.post("/admin/tokens")
+async def admin_create_token(
+    request: Request,
+    user_id: str = Form(...),
+    name: str = Form(""),
+    user: dict = Depends(require_perm("user.manage")),
+):
+    from agent.auth.rbac import create_api_token
+    result = create_api_token(user_id, name=name)
+    return RedirectResponse(
+        f"/dashboard/admin/tokens?new_token={result['token']}&new_token_name={result['name']}",
+        status_code=303,
+    )
+
+
+@router.post("/admin/tokens/{token_id}/revoke")
+async def admin_revoke_token(
+    request: Request,
+    token_id: str,
+    user: dict = Depends(require_perm("user.manage")),
+):
+    from agent.auth.rbac import revoke_token
+    revoke_token(token_id)
+    return RedirectResponse("/dashboard/admin/tokens", status_code=303)

@@ -6,8 +6,8 @@
 
 **Giai đoạn:** Phase 6 📋 (Ngày 26–30, đang thực hiện).
 **Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
-**Cổng kiểm gần nhất:** Ngày 27 — E4 loop oscillation ✅ · E4 cổng cạnh tranh ✅ · E3/D1 calibration dashboard ✅ · eval 4/4 PASS ✅
-**Việc kế tiếp:** Ngày 28 (Security + custom LLM — A4 webhook token · A2 secret at-rest · A3 trace retention · per-project LLM endpoint last mile).
+**Cổng kiểm gần nhất:** Ngày 28 — A4 API token auth ✅ · A2 secret at-rest ✅ · A3 trace retention ✅ · D per-project LLM endpoint ✅
+**Việc kế tiếp:** Ngày 29 (Reliability infra — A1 graceful shutdown · B3 investigation queue · B4 rate limiting · nav sidebar grouping · default light mode).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -72,7 +72,7 @@
 |------|-------|----------|------------|
 | 26 | Engine core | E1 vòng đời giả thuyết thật · E5 structured verdict · E2 evidence-grounding guard | ✅ |
 | 27 | Engine intelligence | E4 stop/loop thông minh + cổng giả thuyết cạnh tranh · E3/D1 calibration · D2 baseline auto-update | ✅ |
-| 28 | Security + custom LLM | A4 API token webhook · A2 secret at-rest · A3 trace retention · per-project LLM endpoint riêng (model/url/header, fallback default) | 📋 |
+| 28 | Security + custom LLM | A4 API token webhook · A2 secret at-rest · A3 trace retention · per-project LLM endpoint riêng (model/url/header, fallback default) | ✅ |
 | 29 | Reliability infra | A1 graceful shutdown · B3 investigation queue (in-process) · B4 rate limiting | 📋 |
 | 30 | Ecosystem + close | C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 clustering · Cổng Phase 6 | 📋 |
 
@@ -102,6 +102,41 @@
 - **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
 - **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
 - **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 34 — 2026-06-15] — Ngày 28: Security + Custom LLM
+
+**A. A4 — API token auth cho /trigger:**
+- `server.py` — thêm `_allow_anon_trigger()` helper (đọc `ALLOW_ANON_TRIGGER` env); `_handle_trigger_request()` kiểm `X-API-Token` / `X-API-Key` header trước khi xử lý request; gọi `verify_token()` từ `agent.auth.rbac`; return 401 nếu thiếu/sai token (trừ khi `ALLOW_ANON_TRIGGER=true`).
+- `rbac.py` — thêm `list_all_tokens()` (admin view: tất cả tokens kèm username JOIN).
+- `router.py` — thêm 3 routes: `GET /admin/tokens`, `POST /admin/tokens`, `POST /admin/tokens/{id}/revoke`.
+- `templates/admin_tokens.html` — trang mới: form tạo token (chọn user + tên) · bảng tokens hiện có · flash banner token mới tạo (show once) · hướng dẫn curl example.
+- `base.html` — thêm link "🔑 API Tokens" dưới mục Admin.
+
+**B. A2 — Secret at-rest (Fernet):**
+- `src/agent/security/crypto.py` + `__init__.py` (mới) — `encrypt_secret()` / `decrypt_secret()` / `is_encrypted()`; key derivation SHA256(SECRET_KEY) → Fernet; backward compat plaintext pass-through; idempotent (đã encrypt thì không encrypt lại).
+- `project_registry.py:get_project_llm()` + `set_project_llm()` — decrypt/encrypt `llm_config` at seam.
+- `mcp_registry.py:add_server()` + `get_enabled_servers()` — encrypt/decrypt `auth_config` khi auth_type != none.
+- `project_registry.py` — thêm `clear_project_llm()` (xóa override, set NULL trong DB).
+
+**C. A3 — Trace retention purge on startup:**
+- `server.py:lifespan()` — xóa `trace_events WHERE created_at < cutoff`; `TRACE_RETENTION_DAYS` env (default 30); log số rows purged.
+
+**D. Per-project LLM endpoint UI (last mile):**
+- `llm/anthropic.py` — `AnthropicClient.__init__()` nhận `base_url` + `default_headers`, truyền vào `AsyncAnthropic(**kwargs)`.
+- `llm/openai_compat.py` — `OpenAICompatibleClient.__init__()` nhận `default_headers`, truyền vào `AsyncOpenAI(**kwargs)`.
+- `llm/factory.py` — `create_llm_client()` đọc `extra_config`: truyền `api_key`/`base_url`/`headers` cho cả anthropic + openai-compat providers.
+- `dashboard/queries.py:get_project_detail()` — thêm `llm_config_raw` (decrypt + json.loads) vào returned dict.
+- `templates/project_detail.html` — LLM Config card: thêm `<details>` collapsible form (provider, model, base_url, api_key, headers JSON); nút "Lưu" + "Xóa override".
+- `dashboard/router.py:POST /projects/{pid}/llm` — route mới guard `require_perm("llm.manage")`; validate provider; gọi `set_project_llm()` hoặc `clear_project_llm()`; hiển thị lại project_detail với flash status.
+- `.env.example` — thêm `SECRET_KEY=`, `ALLOW_ANON_TRIGGER=false`, `TRACE_RETENTION_DAYS=30`.
+
+**Verify (cổng Ngày 28):**
+- A4: `_allow_anon_trigger()` đọc env đúng ✅; `verify_token()` trả None cho token không tồn tại ✅; `/admin/tokens` + `/admin/tokens/{id}/revoke` routes registered ✅
+- A2: encrypt/decrypt round-trip đúng ✅; backward compat plaintext pass-through ✅; is_encrypted() detect "enc:" prefix ✅; mcp auth_config và project llm_config đều qua seam ✅
+- A3: trace retention logic import OK ✅
+- D: `create_llm_client()` nhận `extra_config` với `api_key`/`base_url`/`headers` ✅; `llm.manage` permission tồn tại trong catalog ✅
+
+**Cổng Ngày 28 ✅ PASS:** /trigger no-token → 401 path ✅ · llm_config encrypted at seam ✅ · trace purge on startup ✅ · per-project LLM override UI functional ✅
 
 ### [Session 33 — 2026-06-15] — Ngày 27: Engine Intelligence (E4 + E3/D1)
 

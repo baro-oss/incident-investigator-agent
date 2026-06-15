@@ -203,7 +203,9 @@ def remove_project_channel(project_id: str, channel: str) -> bool:
 # ── Per-project LLM config ────────────────────────────────────────────────────
 
 def get_project_llm(project_id: str) -> Optional[Dict[str, Any]]:
-    """Trả cấu hình LLM của project, hoặc None nếu chưa set."""
+    """Trả cấu hình LLM của project. llm_config được giải mã at-rest (A2)."""
+    from agent.security import decrypt_secret
+
     conn = open_db()
     row = conn.execute(
         "SELECT llm_provider, llm_model, llm_config FROM projects WHERE id=?",
@@ -212,10 +214,11 @@ def get_project_llm(project_id: str) -> Optional[Dict[str, Any]]:
     conn.close()
     if not row or not row["llm_provider"]:
         return None
+    raw_cfg = decrypt_secret(row["llm_config"]) if row["llm_config"] else "{}"
     return {
         "provider": row["llm_provider"],
         "model": row["llm_model"],
-        "config": json.loads(row["llm_config"] or "{}"),
+        "config": json.loads(raw_cfg or "{}"),
     }
 
 
@@ -225,20 +228,34 @@ def set_project_llm(
     model: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Cập nhật cấu hình LLM cho project. Raise ValueError nếu project không tồn tại."""
+    """Cập nhật cấu hình LLM cho project. llm_config mã hóa at-rest nếu SECRET_KEY set (A2)."""
+    from agent.security import encrypt_secret
+
     SUPPORTED_PROVIDERS = {"anthropic", "openai", "gemini", "groq", "mistral", "ollama"}
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(
             f"Provider '{provider}' không hỗ trợ. Hỗ trợ: {sorted(SUPPORTED_PROVIDERS)}"
         )
-    config_str = json.dumps(config or {})
+    raw_cfg = json.dumps(config or {})
+    encrypted_cfg = encrypt_secret(raw_cfg)
     conn = open_db()
     cursor = conn.execute(
         "UPDATE projects SET llm_provider=?, llm_model=?, llm_config=?, updated_at=? WHERE id=?",
-        (provider, model, config_str, _now(), project_id),
+        (provider, model, encrypted_cfg, _now(), project_id),
     )
     conn.commit()
     conn.close()
     if cursor.rowcount == 0:
         raise ValueError(f"Project '{project_id}' không tồn tại")
     return {"provider": provider, "model": model, "config": config or {}}
+
+
+def clear_project_llm(project_id: str) -> None:
+    """Xóa per-project LLM override — project sẽ dùng default từ env."""
+    conn = open_db()
+    conn.execute(
+        "UPDATE projects SET llm_provider=NULL, llm_model=NULL, llm_config=NULL, updated_at=? WHERE id=?",
+        (_now(), project_id),
+    )
+    conn.commit()
+    conn.close()

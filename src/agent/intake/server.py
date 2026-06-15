@@ -120,6 +120,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("bootstrap_root failed (migration not run yet?): %s", e)
 
+    # A3: Trace retention purge on startup
+    try:
+        retention_days = int(os.environ.get("TRACE_RETENTION_DAYS", "30"))
+        from agent.storage.db import open_db
+        _conn = open_db()
+        cutoff_ts = (
+            __import__("datetime").datetime.now(__import__("datetime").timezone.utc)
+            - __import__("datetime").timedelta(days=retention_days)
+        ).isoformat()
+        result = _conn.execute(
+            "DELETE FROM trace_events WHERE created_at < ?", (cutoff_ts,)
+        )
+        _conn.commit()
+        _conn.close()
+        if result.rowcount:
+            logger.info("A3 trace retention: purged %d events older than %d days", result.rowcount, retention_days)
+    except Exception as e:
+        logger.warning("A3 trace retention purge failed: %s", e)
+
     projects = list_projects()
     for p in projects:
         servers = list_servers(project_id=p["id"])
@@ -488,10 +507,33 @@ app.include_router(project_router)
 
 # ── Shared implementation ─────────────────────────────────────────────────────
 
+def _allow_anon_trigger() -> bool:
+    """A4: Cho phép trigger không cần token khi ALLOW_ANON_TRIGGER=true (dev-only)."""
+    return os.environ.get("ALLOW_ANON_TRIGGER", "false").lower() in ("1", "true", "yes")
+
+
 async def _handle_trigger_request(request: Request, project_id: str) -> JSONResponse:
-    """Đọc raw body → verify webhook signature → parse JSON → dispatch."""
+    """Đọc raw body → A4 token auth → verify webhook signature → parse JSON → dispatch."""
     import json as _json
     from agent.intake.adapters._shared import verify_webhook_signature
+
+    # A4: API token auth — validate X-API-Token trước khi xử lý
+    if not _allow_anon_trigger():
+        raw_token = (
+            request.headers.get("x-api-token")
+            or request.headers.get("x-api-key")
+        )
+        if not raw_token:
+            raise HTTPException(
+                status_code=401,
+                detail="Yêu cầu header X-API-Token. Set ALLOW_ANON_TRIGGER=true để bỏ qua (dev).",
+            )
+        from agent.auth.rbac import verify_token
+        token_user = verify_token(raw_token)
+        if not token_user:
+            raise HTTPException(status_code=401, detail="API token không hợp lệ hoặc đã thu hồi.")
+        if not token_user.get("is_active"):
+            raise HTTPException(status_code=403, detail="Tài khoản bị vô hiệu hóa.")
 
     raw_body = await request.body()
     source = request.headers.get("x-alert-source")

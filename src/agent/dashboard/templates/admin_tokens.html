@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Admin · API Tokens — Investigation Agent{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>API Tokens (Webhook Auth)</h2>
+  <div style="display:flex;gap:.5rem">
+    <a href="/dashboard/admin/users" class="btn btn-secondary">← Users</a>
+  </div>
+</div>
+
+{% if new_token %}
+<div class="alert alert-success" style="word-break:break-all">
+  <strong>Token vừa tạo (copy ngay — chỉ hiện một lần):</strong><br>
+  <code style="font-size:.9em;background:var(--bg-secondary);padding:.3rem .6rem;border-radius:4px;display:inline-block;margin-top:.4rem">{{ new_token }}</code>
+  <div style="margin-top:.4rem;font-size:.85em;color:var(--text-secondary)">
+    Tên: <strong>{{ new_token_name or "(không tên)" }}</strong> &mdash;
+    Dùng header <code>X-API-Token: &lt;token&gt;</code> khi gọi <code>POST /trigger</code>
+  </div>
+</div>
+{% endif %}
+
+<!-- Tạo token mới -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">Tạo API token mới</div>
+  <div class="card-body">
+    <form method="post" action="/dashboard/admin/tokens" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
+      <div>
+        <label class="form-label">User</label>
+        <select class="form-input" name="user_id" required>
+          {% for u in users %}
+          <option value="{{ u.id }}">{{ u.username }}{% if u.is_root %} (root){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Tên gợi nhớ</label>
+        <input class="form-input" type="text" name="name" placeholder="vd: ci-prod-webhook">
+      </div>
+      <button type="submit" class="btn btn-primary">Tạo token</button>
+    </form>
+  </div>
+</div>
+
+<!-- Danh sách tokens -->
+<div class="card">
+  <div class="card-header">Tất cả API tokens ({{ tokens|length }})</div>
+  {% if tokens %}
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Tên</th>
+        <th>User</th>
+        <th>Tạo lúc</th>
+        <th>Dùng lần cuối</th>
+        <th>Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tokens %}
+      <tr>
+        <td><code>{{ t.name or "(không tên)" }}</code></td>
+        <td>{{ t.username }}</td>
+        <td style="font-size:.85em;color:var(--text-secondary)">{{ t.created_at[:16] if t.created_at else "—" }}</td>
+        <td style="font-size:.85em;color:var(--text-secondary)">{{ t.last_used[:16] if t.last_used else "chưa dùng" }}</td>
+        <td>
+          <form method="post" action="/dashboard/admin/tokens/{{ t.id }}/revoke"
+                onsubmit="return confirm('Thu hồi token {{ t.name or t.id[:8] }}?')">
+            <button type="submit" class="btn btn-danger" style="padding:.2rem .7rem;font-size:.82em">Thu hồi</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="card-body" style="color:var(--text-secondary)">Chưa có token nào. Tạo token để dùng cho webhook trigger.</div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:1.5rem">
+  <div class="card-header">Hướng dẫn sử dụng</div>
+  <div class="card-body">
+    <p style="margin:0 0 .5rem">Sau khi tạo token, dùng header <code>X-API-Token</code> khi gọi <code>POST /trigger</code>:</p>
+    <pre style="background:var(--bg-secondary);padding:.8rem 1rem;border-radius:6px;font-size:.85em;overflow-x:auto">curl -X POST http://localhost:8000/trigger \
+  -H "Content-Type: application/json" \
+  -H "X-API-Token: &lt;token&gt;" \
+  -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'</pre>
+    <p style="margin:.5rem 0 0;font-size:.85em;color:var(--text-secondary)">
+      Để tắt auth (dev only): đặt <code>ALLOW_ANON_TRIGGER=true</code> trong <code>.env</code>.
+    </p>
+  </div>
+</div>
+{% endblock %}

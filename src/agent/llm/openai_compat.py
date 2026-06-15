@@ -22,11 +22,15 @@ class OpenAICompatibleClient:
         base_url: Optional[str] = None,
         model: Optional[str] = None,
         max_tokens: int = 4096,
+        default_headers: Optional[dict] = None,
     ) -> None:
-        self._client = openai.AsyncOpenAI(
-            api_key=api_key or os.environ.get("OPENAI_API_KEY", ""),
-            base_url=base_url or os.environ.get("OPENAI_BASE_URL") or None,
-        )
+        kwargs: dict = {
+            "api_key": api_key or os.environ.get("OPENAI_API_KEY", ""),
+            "base_url": base_url or os.environ.get("OPENAI_BASE_URL") or None,
+        }
+        if default_headers:
+            kwargs["default_headers"] = default_headers
+        self._client = openai.AsyncOpenAI(**kwargs)
         self._model = model or os.environ.get("LLM_MODEL", "gpt-4o-mini")
         self._max_tokens = max_tokens
 

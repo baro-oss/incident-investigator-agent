@@ -26,11 +26,23 @@ def create_llm_client(
     provider = provider or os.environ.get("LLM_PROVIDER", "anthropic")
     model = model or os.environ.get("LLM_MODEL")
 
+    cfg = extra_config or {}
+
     if provider == "anthropic":
-        return AnthropicClient(model=model)
+        return AnthropicClient(
+            model=model,
+            api_key=cfg.get("api_key") or None,
+            base_url=cfg.get("base_url") or None,
+            default_headers=cfg.get("headers") or None,
+        )
 
     if provider == "gemini":
         from .gemini import GeminiClient
         return GeminiClient(model=model, extra_config=extra_config)
 
-    return OpenAICompatibleClient(model=model)
+    return OpenAICompatibleClient(
+        model=model,
+        api_key=cfg.get("api_key") or None,
+        base_url=cfg.get("base_url") or None,
+        default_headers=cfg.get("headers") or None,
+    )
