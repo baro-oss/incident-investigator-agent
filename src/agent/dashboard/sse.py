@@ -23,9 +23,8 @@ def publish_sync(investigation_id: str, event_type: str, payload: dict) -> None:
     Dùng call_soon_threadsafe để đẩy vào event loop đang chạy.
     """
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            loop.call_soon_threadsafe(_do_publish, investigation_id, event_type, payload)
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(_do_publish, investigation_id, event_type, payload)
     except Exception as e:
         logger.debug("SSE publish_sync lỗi: %s", e)
 

@@ -189,5 +189,5 @@ async def push_verdict_to_email(
     config: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """Gửi verdict qua email. config["to"] override SMTP_TO env var."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _send_sync, state, config or {})

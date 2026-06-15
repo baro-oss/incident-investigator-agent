@@ -58,9 +58,8 @@ class InMemorySSEBroker(SSEBroker):
     def publish_sync(self, investigation_id: str, event_type: str, payload: dict) -> None:
         """Gọi từ sync context — đẩy vào running event loop."""
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.call_soon_threadsafe(self.publish, investigation_id, event_type, payload)
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(self.publish, investigation_id, event_type, payload)
         except Exception as e:
             logger.debug("SSE publish_sync error: %s", e)
 

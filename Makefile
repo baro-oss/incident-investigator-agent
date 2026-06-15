@@ -1,4 +1,4 @@
-PYTHON := .venv/bin/python3
+PYTHON := .venv314/bin/python3
 PORT   := 8000
 MCP_PORT := 9000
 
@@ -27,15 +27,15 @@ help:
 	@echo "  make chat           CLI REPL chat với agent"
 	@echo "  make trigger sc=1   Trigger scenario (sc=1|2|3|4|f1|f2)"
 	@echo ""
-	@echo "  make test           Chạy pytest (166 tests)"
+	@echo "  make test           Chạy pytest (173 tests)"
 	@echo "  make ci             pytest + eval gate (cổng CI)"
 	@echo ""
 	@echo "  make clean          Xóa __pycache__ và file tạm"
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 install:
-	python3 -m venv .venv
-	.venv/bin/pip install -e ".[dev]"
+	python3.14 -m venv .venv314
+	.venv314/bin/pip install -e ".[dev]"
 
 setup: install db seed
 	@echo "✅ Sẵn sàng — chạy: make server"

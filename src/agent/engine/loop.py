@@ -365,7 +365,7 @@ async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
 
     if inspect.iscoroutinefunction(tool.run):
         return await tool.run(tool_call.arguments)
-    return await asyncio.get_event_loop().run_in_executor(None, tool.run, tool_call.arguments)
+    return await asyncio.get_running_loop().run_in_executor(None, tool.run, tool_call.arguments)
 
 
 def update_state(

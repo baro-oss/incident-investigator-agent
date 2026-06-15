@@ -5,7 +5,7 @@
 ## Trạng thái hiện tại
 
 **Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45, 10/10 ngày). **Tất cả Phase 1–8 hoàn tất: 45/45 ngày.**
-**Cổng kiểm gần nhất:** Ngày 45 — security audit · SESSION_SECRET_KEY warning · dep audit · 173 tests · eval 4/4 · Cổng Phase 8 PASS
+**Cổng kiểm gần nhất:** Ngày 45 — security audit · SESSION_SECRET_KEY warning · dep audit · 173 tests · eval 4/4 · Cổng Phase 8 PASS + Python 3.9 → 3.14 upgrade PASS
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -131,6 +131,15 @@
 - DX (D44): README.md + docs/api.md + Makefile aliases ✅
 - Regression: eval 4/4 + 173 tests PASS ✅
 - Security: startup warnings, .gitignore, no plaintext secrets in repo ✅
+
+**Ngày 45 — Bổ sung: Nâng cấp Python 3.9 → 3.14 ✅ HOÀN TẤT**
+- **Config/CI đã pin 3.14**: `pyproject.toml` (requires-python ≥3.14 + ruff py314) · `Dockerfile` (3.14-slim) · `ci.yml` · `eval.yml`
+- **5 `asyncio.get_event_loop()` → `get_running_loop()`**: `loop.py:368` · `email.py:192` · `sse.py:26` · `sse_backends.py:61` · `router.py:788`
+- **4 sync test methods → `async def`**: `test_adapters.py:397,431,499,532` (Slack/Teams/Callback/Email push tests)
+- **Makefile**: venv path → `.venv314`, install cmd → `python3.14 -m venv .venv314`
+- **Deps**: pydantic-core + cryptography wheel 3.14 tồn tại — `pip install -e ".[dev]"` thành công
+- **Bonus fixes** (`router.py:788` cũng dùng `get_event_loop` — fixed cùng lúc)
+- **Cổng**: 173/173 tests PASS trên Python 3.14.6 · không có known DeprecationWarning asyncio
 
 ### [Session 45 — 2026-06-15] — Ngày 44: DX + docs
 

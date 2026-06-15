@@ -389,14 +389,11 @@ class TestSlackOutput:
         # No verdict → insufficient (gray)
         assert payload["attachments"][0]["color"] == "#808080"
 
-    def test_push_without_url_does_not_raise(self):
-        import asyncio
+    async def test_push_without_url_does_not_raise(self):
         from agent.output.slack import push_verdict_to_slack
         state = _make_state(with_verdict=True)
         # No URL set — should log warning and return silently
-        asyncio.get_event_loop().run_until_complete(
-            push_verdict_to_slack(state, config={})
-        )
+        await push_verdict_to_slack(state, config={})
 
     def test_medium_confidence_uses_orange_color(self):
         from agent.output.slack import _render_slack_payload
@@ -424,13 +421,10 @@ class TestTeamsOutput:
         assert card["@type"] == "MessageCard"
         assert card["themeColor"] == "808080"  # gray
 
-    def test_push_without_url_returns_false(self):
-        import asyncio
+    async def test_push_without_url_returns_false(self):
         from agent.output.teams import push_verdict_to_teams
         state = _make_state(with_verdict=True)
-        result = asyncio.get_event_loop().run_until_complete(
-            push_verdict_to_teams(state, config={})
-        )
+        result = await push_verdict_to_teams(state, config={})
         assert result is False
 
     def test_render_facts_contain_root_cause(self):
@@ -491,14 +485,11 @@ class TestCallbackOutput:
         assert payload["verdict"] is None
         assert payload["stop_reason"] == "timeout"
 
-    def test_push_to_bad_url_does_not_raise(self):
-        import asyncio
+    async def test_push_to_bad_url_does_not_raise(self):
         from agent.output.callback import push_callback
         state = _make_state(with_verdict=True)
         # Connect to localhost:1 should fail gracefully
-        result = asyncio.get_event_loop().run_until_complete(
-            push_callback(state, "http://localhost:1/callback")
-        )
+        result = await push_callback(state, "http://localhost:1/callback")
         assert result is False  # connection error → False, no exception
 
     def test_speculative_flag_included(self):
@@ -524,11 +515,8 @@ class TestEmailOutput:
         assert isinstance(html, str)
         assert len(html) > 0
 
-    def test_push_without_smtp_config_does_not_raise(self):
-        import asyncio
+    async def test_push_without_smtp_config_does_not_raise(self):
         from agent.output.email import push_verdict_to_email
         state = _make_state(with_verdict=True)
         # No SMTP_HOST configured → should log and return without crashing
-        asyncio.get_event_loop().run_until_complete(
-            push_verdict_to_email(state, config={})
-        )
+        await push_verdict_to_email(state, config={})

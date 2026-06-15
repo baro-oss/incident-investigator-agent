@@ -785,7 +785,7 @@ async def run_tool_testrun(
         if inspect.iscoroutinefunction(tool.run):
             obs = await tool.run(args)
         else:
-            obs = await asyncio.get_event_loop().run_in_executor(None, tool.run, args)
+            obs = await asyncio.get_running_loop().run_in_executor(None, tool.run, args)
 
         return JSONResponse({
             "summary": obs.summary,
