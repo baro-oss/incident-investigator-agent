@@ -34,6 +34,7 @@ POST   /auth/logout
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import time
@@ -109,6 +110,35 @@ def _resolve_request(source: Optional[str], payload: Dict[str, Any], project_id:
     return req
 
 
+def _purge_old_traces(retention_days: int) -> int:
+    """Xóa trace_events cũ hơn retention_days. Trả về số hàng đã xóa."""
+    import datetime as _datetime
+    from agent.storage.db import open_db
+    try:
+        cutoff = (
+            _datetime.datetime.now(_datetime.timezone.utc)
+            - _datetime.timedelta(days=retention_days)
+        ).isoformat()
+        conn = open_db()
+        result = conn.execute("DELETE FROM trace_events WHERE timestamp < ?", (cutoff,))
+        conn.commit()
+        conn.close()
+        return result.rowcount or 0
+    except Exception as e:
+        logger.warning("Trace retention purge failed: %s", e)
+        return 0
+
+
+async def _run_retention_loop() -> None:
+    """Chạy purge trace_events mỗi 24h trong nền."""
+    retention_days = int(os.environ.get("TRACE_RETENTION_DAYS", "30"))
+    while True:
+        await asyncio.sleep(86400)  # 24h
+        n = _purge_old_traces(retention_days)
+        if n:
+            logger.info("Trace retention periodic: purged %d events older than %d days", n, retention_days)
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
@@ -169,6 +199,7 @@ async def lifespan(app: FastAPI):
         )
 
     # B3: Khởi động investigation queue + worker pool
+    # Restart semantics: items status='running' được reset về 'pending' (xem investigation_queue.py:_reload_pending)
     from agent.intake.investigation_queue import start_workers, drain_and_stop
     try:
         start_workers()
@@ -182,20 +213,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Scheduler start failed: %s", e)
 
+    # D59: Trace retention periodic task (chạy mỗi 24h, bổ sung purge ở startup)
+    _retention_task = asyncio.create_task(_run_retention_loop(), name="trace-retention")
+
     yield
 
     # A1: Graceful shutdown — dừng scheduler + drain queue
+    # SIGTERM → uvicorn → lifespan cleanup (đây). In-flight investigations được drain trong 60s.
+    _retention_task.cancel()
+    try:
+        await _retention_task
+    except (asyncio.CancelledError, Exception):
+        pass
+
     try:
         await stop_scheduler()
     except Exception as e:
         logger.warning("Scheduler stop error: %s", e)
 
-    logger.info("Server shutting down — draining investigation queue …")
+    logger.info("SIGTERM received — draining in-flight investigations (timeout=60s) …")
     try:
         await drain_and_stop(timeout=60.0)
     except Exception as e:
         logger.warning("Queue drain error: %s", e)
-    logger.info("Graceful shutdown complete")
+    logger.info("Graceful shutdown complete — all in-flight investigations finished or timed out")
 
 
 app = FastAPI(title="Investigation Agent", version="0.8.0", docs_url="/docs", lifespan=lifespan)
@@ -334,11 +375,24 @@ async def ping_mcp_server_global(server_id: int) -> Dict[str, Any]:
 @app.get("/health")
 def health() -> Dict[str, Any]:
     """Liveness probe — trả 200 ngay (không block, không IO)."""
+    from agent.storage.db import BACKEND_NAME
+    from agent.intake.investigation_queue import _queue, _draining
+    llm_provider = os.environ.get("LLM_PROVIDER", "anthropic")
+    llm_key_set = bool(
+        os.environ.get("ANTHROPIC_API_KEY")
+        or os.environ.get("OPENAI_API_KEY")
+        or os.environ.get("GEMINI_API_KEY")
+    )
     return {
         "status": "ok",
         "uptime_seconds": round(time.time() - _start_time, 1),
         "active_investigations": len(_active_investigations),
         "active_ids": list(_active_investigations),
+        "db_backend": BACKEND_NAME,
+        "llm_provider": llm_provider,
+        "llm_key_set": llm_key_set,
+        "queue_depth": _queue.qsize() if _queue is not None else 0,
+        "draining": _draining,
     }
 
 

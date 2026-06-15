@@ -4,7 +4,7 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 58 ✅ XONG** — Port 8080 + Dockerfile prod + /health/ready + secrets fail-fast + B1. 444/444 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
+**Giai đoạn:** Phase 11 🔄 ĐANG LÀM (56–60). **Ngày 59 ✅ XONG** — SIGTERM drain logging + JSON log opt-in + /health sâu hơn + trace retention periodic + B2 emit_trace project_id. 461/461 tests SQLite xanh. **Phase 11 target:** Postgres Tier-2 + deploy lên **GreenNode AgentBase** (`docs/16-roadmap-phase-11.md`).
 **Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
 **Kế hoạch kế tiếp:** Phase 11 (Ngày 56–60) — kích hoạt Tier-2 Postgres (lệnh người dùng 2026-06-15) **+ deploy lên GreenNode AgentBase** (skills: `greennode-agentbase-skills/`). Nền tảng ràng buộc: **port 8080**, build **amd64**, deploy qua managed CR + `runtime.sh` (KHÔNG k8s/kubectl), single-instance `min=max=1`, **disk ephemeral → Postgres bắt buộc** (không PVC, SQLite không bền). Deploy fresh + docker-compose PG local. Bao gồm bug fix B1/B2 + trace retention. Future: MySQL backend · bidirectional output · horizontal scale (multi-replica) · k8s self-managed · LLM qua MaaS · real-LLM eval (chờ credit).
 
@@ -143,6 +143,34 @@
 **Chốt Phase 11 (đã xác nhận với người dùng — 2026-06-15):** ① **Postgres ngay** (Tier-2 kích hoạt) — PG backend prod, SQLite vẫn default dev, seam giữ cả 2; **bắt buộc vì AgentBase disk ephemeral (không PVC) → SQLite không bền qua deploy** · ② **single-instance** = AgentBase `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · ③ **deploy fresh** (chỉ init+seed PG, không migrate data SQLite cũ) · ④ **docker-compose chạy PG local** trước khi đẩy cloud · ⑤ không giới hạn khối lượng/ngày · ⑥ **nền tảng = GreenNode AgentBase**: port 8080 + build amd64 + deploy qua CR/`runtime.sh` + 4 biến `GREENNODE_*` auto-inject không set tay (skills: `greennode-agentbase-skills/`).
 **Xương sống KHÔNG cắt:** D56+D57 (PG parity + 444 tests xanh trên PG + đóng rò seam) · D58 (**port 8080** + container+secrets+B1) · D59 B2. Cắt nếu hụt giờ: deploy AgentBase thật → giữ runbook+compose.prod smoke (D60) → JSON logging (D59) → retention qua scheduler (D59, giữ script). **Port 8080/amd64 = hợp đồng cứng, không cắt.**
 **Bất biến:** DB swap chỉ dưới seam (`open_db()`/`IntegrityError` trung lập, không rò `import sqlite3` ngoài `sqlite_backend.py`) · READ-ONLY · 4 nguyên tắc · regression gate mỗi ngày (444 tests + eval 4/4 + 2 KB E2E + Telegram; từ D57 trên cả 2 backend).
+
+### [Session 63 — 2026-06-15] — Ngày 59: SIGTERM drain + JSON log + /health sâu + retention + B2
+
+**Đã làm:**
+- `src/agent/engine/loop.py`: **B2 fix** — 2 `_emit_trace` cho `tool_call`/`tool_result` thêm `project_id=state.project_id`. Trước: trace bước tool ghi vào "default", không vào project đúng. Parity với graph.py.
+- `scripts/start_server.py`: JSON log opt-in — `_setup_logging()` kiểm tra `LOG_FORMAT=json` → cấu hình `_JsonFormatter` (output JSON một dòng: `ts`, `level`, `logger`, `msg`, `exc` nếu có). Default `text` → `basicConfig` thường.
+- `src/agent/intake/server.py`:
+  - Thêm `import asyncio` (cần cho `asyncio.create_task`).
+  - `_purge_old_traces(retention_days)` — helper pure: xóa `trace_events WHERE timestamp < cutoff`, trả rowcount, degrade-safe.
+  - `_run_retention_loop()` — async loop: sleep 24h rồi gọi `_purge_old_traces()`. Chạy trong nền suốt lifetime server.
+  - Lifespan: tạo `_retention_task = asyncio.create_task(_run_retention_loop())` sau start_workers. Shutdown: cancel task + drain + log rõ "SIGTERM received — draining in-flight investigations (timeout=60s)".
+  - `/health` extended: thêm `db_backend`, `llm_provider`, `llm_key_set`, `queue_depth`, `draining` (không block, đọc từ env/module state).
+  - Comment restart semantics: items status='running' được reset về 'pending' khi khởi động (xem `investigation_queue._reload_pending`).
+- `.env.example`: thêm `LOG_FORMAT=`.
+- `tests/test_day59.py` (mới, 17 tests): TestB2EmitTraceProjectId (4) · TestJsonLogFormatting (2) · TestHealthDeepEndpoint (5) · TestTraceRetention (4) · TestQueueRestartSemantics (2). Teardown reset `_draining` sau TestClient lifespan.
+
+**Cổng Ngày 59 PASS:**
+- B2: `_emit_trace` tool_call/tool_result có `project_id= kwarg` (AST check) · ghi đúng project_id vào DB · default="default" ✅
+- JSON log: formatter output JSON hợp lệ · text mode không crash ✅
+- `/health`: trả `db_backend`, `llm_key_set`, `queue_depth`, `draining` ✅
+- `_purge_old_traces`: xóa đúng cũ, giữ mới, degrade-safe, honor retention_days ✅
+- restart semantics: `_reload_pending` xử lý 'running' status ✅
+- **461/461 tests SQLite xanh** ✅
+
+**Ghi chú kỹ thuật:**
+- `_run_retention_loop` sleep trước khi purge (startup purge đã có trong lifespan ngay trên) → tránh double-purge khi khởi động
+- JSON formatter override `logging.root.handlers` → clear mọi handler cũ trước khi thêm JSON handler
+- `TestHealthDeepEndpoint.teardown_method` reset `investigation_queue._draining=False` sau mỗi test → tránh contaminate trigger tests (draining=True → 503)
 
 ### [Session 62 — 2026-06-15] — Ngày 58: Port 8080 + Dockerfile prod + /health/ready + B1
 

@@ -1068,7 +1068,7 @@ class InvestigationEngine:
 
             _emit_trace(investigation_id, current_step, "tool_call", {
                 "tool": tool_call.name, "args": tool_call.arguments,
-            })
+            }, project_id=state.project_id)
             logger.info("[%s] Bước %d → %s(%s)",
                         investigation_id, current_step + 1,
                         tool_call.name, tool_call.arguments)
@@ -1089,7 +1089,7 @@ class InvestigationEngine:
 
             _emit_trace(investigation_id, current_step, "tool_result", {
                 "tool": tool_call.name, "summary": obs.summary,
-            })
+            }, project_id=state.project_id)
             tracer.record_tool_call(
                 tool_name=tool_call.name,
                 args=tool_call.arguments,
