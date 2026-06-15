@@ -678,6 +678,9 @@ class InvestigationEngine:
             state.verdict = _parse_verdict(verdict_text, state)
             # E2: Kiểm tra root_cause có neo vào bằng chứng không; hạ confidence nếu không
             state.verdict = _check_evidence_grounding(state.verdict, state.evidence)
+            # E8: Calibration — hạ confidence nếu historical accuracy < threshold
+            from agent.engine.calibration import apply_calibration
+            state.verdict = apply_calibration(state.verdict)
 
         # Ngày 33: Multi-agent conflict resolution — annotate khi nhiều hypothesis confirmed
         winner = state.resolve_conflicting_hypotheses()

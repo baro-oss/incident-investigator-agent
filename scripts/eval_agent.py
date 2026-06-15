@@ -387,6 +387,13 @@ async def main() -> None:
         print_summary(sc, results)
         _save_eval_results_to_db(run_id, sc, results, provider=provider_label, model=model_label)
 
+    # E8: Invalidate calibration cache so next investigation uses fresh data
+    try:
+        from agent.engine.calibration import invalidate_cache
+        invalidate_cache()
+    except Exception:
+        pass
+
     if len(scenarios_to_run) > 1:
         total_runs = sum(len(r) for r in all_results.values())
         total_correct = sum(sum(1 for x in r if x["correct"]) for r in all_results.values())

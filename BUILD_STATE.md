@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36 (E6) + Ngày 37 (E7).
-**Cổng kiểm gần nhất:** Ngày 36–37 — 75/75 tests PASS · eval 4/4 PASS · E6 fintech catalog · E7 shared stop
+**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–40.
+**Cổng kiểm gần nhất:** Ngày 38–40 — 166/166 tests PASS · E8 calibration loop · T1 adapters/output/infra · contract guard
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -92,9 +92,9 @@
 |------|-------|----------|------------|
 | 36 | E6 — Engine domain-agnostic | Rút `_HYPOTHESIS_RELEVANCE` khỏi engine → catalog theo miền (cạnh tool registry) + catalog fintech | ✅ |
 | 37 | E7 — Hợp nhất path + parity | 1 nguồn stop/gate cho loop+graph · multi-agent ngang hàng (grounding+conflict+merge evidence_id) | ✅ |
-| 38 | E8 — Real-LLM eval + calib | Smoke mở rộng (~$2) · feed ngưỡng calibration ngược vào engine (đóng vòng E3) | ☐ |
-| 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer (mỗi cái ≥3 ca) | ☐ |
-| 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ☐ |
+| 38 | E8 — Real-LLM eval + calib | Smoke mở rộng (~$2) · feed ngưỡng calibration ngược vào engine (đóng vòng E3) | ✅ |
+| 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer (mỗi cái ≥3 ca) | ✅ |
+| 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ✅ |
 | 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ☐ |
 | 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ☐ |
 | 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ☐ |
@@ -105,6 +105,31 @@
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 41 — 2026-06-15] — Ngày 38–40: E8 calibration + T1 adapter/infra tests
+
+**Ngày 38 — E8: Calibration closure:**
+- `src/agent/engine/calibration.py` (mới) — `CALIBRATION_THRESHOLDS` · `load_calibration_stats()` (5-min TTL cache) · `get_calibration_adjustment()` · `apply_calibration()` · `get_calibration_summary()` · `invalidate_cache()`
+- `src/agent/engine/state.py` — thêm `calibrated_confidence: Optional[str]` vào `Verdict`
+- `src/agent/engine/loop.py` + `multi_agent.py` — hook `apply_calibration(state.verdict)` sau `_check_evidence_grounding`
+- `src/agent/dashboard/router.py` + `eval.html` — E8 calibration before/after table
+- `scripts/eval_agent.py` — `invalidate_cache()` sau khi save eval results
+- Smoke thật ($2): SKIP — ANTHROPIC_API_KEY chưa set; calibration logic test đầy đủ bằng seeded DB
+- `tests/test_calibration.py` (mới, 18 tests): TestGetCalibrationAdjustment · TestApplyCalibration · TestLoadCalibrationStats · TestCalibrationPipeline
+
+**Ngày 39 — T1: Test adapters + output:**
+- `tests/test_adapters.py` (mới, 46 tests): 7 intake adapters (Prometheus/Grafana/Sentry/PagerDuty/OpsGenie/GitHub/GitLab) + router + 5 output renderers (Slack/Teams/Telegram/Callback/Email)
+- Pattern: happy path · non-trigger→None · malformed→no crash (intake) · shape validation · graceful without URL (output)
+
+**Ngày 40 — T1: Test infra + contract guard:**
+- `tests/test_infra.py` (mới, 27 tests): TestInvestigationQueue (4) · TestSchedulerCRUD (3) · TestProjectRegistryCRUD (4) · TestMCPRegistryCRUD (3) · TestCrypto (7) · TestContractGuard (6)
+- `validate_observation()` contract guard enforce Nguyên tắc #1
+- **Bug fix:** `src/agent/intake/scheduler.py::_build_request()` thiếu `raw_payload={}` → `InvestigationRequest.__init__()` error khi fire scheduled trigger — đã sửa
+
+**Cổng Ngày 38–40:**
+- **166/166 tests PASS** (75 cũ + 18 calibration + 46 adapters + 27 infra)
+- Contract guard bắt được violation (>5 samples, empty summary, null total_count)
+- Tất cả local tools (`get_error_breakdown`, `get_metrics`, `get_recent_deploys`, `get_dependencies`) pass contract guard
 
 ### [Session 40 — 2026-06-15] — Ngày 36–37: E6 domain-agnostic catalog + E7 unified stop/parity
 

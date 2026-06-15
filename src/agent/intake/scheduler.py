@@ -123,6 +123,7 @@ def _build_request(row: Dict[str, Any]) -> Any:
         time_window=time_window,
         symptom=f"Scheduled investigation: {row['service']} ({row['scenario']})",
         date=date_str,
+        raw_payload={},
         project_id=row["project_id"],
         dedup_key=key,
     )

@@ -344,6 +344,9 @@ class MultiAgentEngine:
         # E2: kiểm evidence grounding cho multi-agent verdict
         from agent.engine.loop import _check_evidence_grounding
         merged.verdict = _check_evidence_grounding(merged.verdict, merged.evidence)
+        # E8: Calibration
+        from agent.engine.calibration import apply_calibration
+        merged.verdict = apply_calibration(merged.verdict)
 
         # E7: conflict resolution — ngang hàng single-agent path
         winner = merged.resolve_conflicting_hypotheses()

@@ -48,6 +48,7 @@ class Verdict:
     competing_hypotheses: str  # có loại trừ giả thuyết cạnh tranh chưa
     raw_text: str              # toàn văn LLM trả về
     speculative: bool = False  # E2: True khi root cause không neo được vào bằng chứng thu thập
+    calibrated_confidence: Optional[str] = None  # E8: set khi calibration hạ bậc confidence
 
 
 @dataclass

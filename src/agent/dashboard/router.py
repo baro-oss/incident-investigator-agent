@@ -819,6 +819,11 @@ async def dashboard_eval(
     eval_calibration = get_eval_calibration()
     calib_feedback = get_calibration_with_feedback()
 
+    # E8: calibration adjustments — what engine would auto-adjust
+    from agent.engine.calibration import load_calibration_stats, get_calibration_summary
+    calib_stats = load_calibration_stats()
+    calib_adjustments = get_calibration_summary(calib_stats)
+
     return templates.TemplateResponse("eval.html", _ctx(request, user,
         active="eval",
         eval_rows=eval_rows,
@@ -831,6 +836,7 @@ async def dashboard_eval(
         eval_recall=eval_recall,
         eval_calibration=eval_calibration,
         calib_feedback=calib_feedback,
+        calib_adjustments=calib_adjustments,
     ))
 
 

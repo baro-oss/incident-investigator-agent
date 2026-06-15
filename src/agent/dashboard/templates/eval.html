@@ -129,6 +129,42 @@
     {% endif %}
   </div>
 
+  <!-- E8: Engine auto-calibration before/after -->
+  <div class="card" style="grid-column:1/-1;margin-bottom:16px">
+    <h3 style="margin-bottom:12px">E8 — Engine Auto-Calibration (before → after)</h3>
+    {% if calib_adjustments %}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tier (LLM claimed)</th><th>Data points</th><th>Historical accuracy</th><th>Threshold</th><th>Engine adjustment</th></tr></thead>
+        <tbody>
+          {% for a in calib_adjustments %}
+          <tr>
+            <td><span class="tag">{{ a.tier }}</span></td>
+            <td style="text-align:center">{{ a.count }}</td>
+            <td style="text-align:center">
+              {% if a.accuracy_pct is not none %}
+                <span class="{{ 'eval-rate pass' if a.accuracy_pct >= (a.threshold_pct) else 'eval-rate fail' }}">{{ a.accuracy_pct }}%</span>
+              {% else %}—{% endif %}
+            </td>
+            <td style="text-align:center"><span class="meta">≥{{ a.threshold_pct }}%</span></td>
+            <td style="text-align:center">
+              {% if not a.has_data %}
+                <span class="meta">chưa đủ dữ liệu (cần ≥5 runs)</span>
+              {% elif a.adjusted_to %}
+                <span style="color:var(--medium)">{{ a.tier }} → <b>{{ a.adjusted_to }}</b></span>
+              {% else %}
+                <span style="color:var(--high)">✓ giữ nguyên</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="meta" style="margin-top:8px">Engine tự hạ bậc confidence khi accuracy lịch sử &lt; ngưỡng. Cần real-LLM eval để có dữ liệu có ý nghĩa (mock thường 100%).</div>
+    {% endif %}
+  </div>
+
   <!-- Combined calibration (E3/D1) -->
   <div class="card">
     <h3 style="margin-bottom:12px">Calibration — Kết hợp (eval + 👍👎)</h3>
