@@ -28,7 +28,7 @@
 - `parse_alert_time()` chuẩn hóa ISO timestamp → (time_window, date)
 
 **Ngày 8 — MCP Hot-plug ✅**
-- `src/agent/tools/mcp_client.py` — MCPClient (JSON-RPC 2.0 over HTTP, không dùng mcp SDK vì Python 3.9)
+- `src/agent/tools/mcp_client.py` — MCPClient (JSON-RPC 2.0 over HTTP trực tiếp, không dùng mcp SDK — xem ghi chú cuối Ngày 8)
 - `src/agent/tools/registry.py` — `build_tool_registry(mcp_clients)` merge local + MCP
 - `mcp_server/server.py` — demo MCP server, expose 5 tool nội bộ qua JSON-RPC
 - `scripts/start_mcp_server.py`
@@ -146,7 +146,7 @@ def map_grafana(payload: dict) -> Optional[InvestigationRequest]: ...
 
 **Mục tiêu thực (cập nhật):** Agent là **MCP consumer** — nhận tool từ bất kỳ MCP server bên ngoài nào. Dữ liệu không phải chỉ từ SQLite nội bộ; bất kỳ team nào có hệ thống monitoring riêng đều có thể expose qua MCP để agent dùng.
 
-**Vì sao không dùng `mcp` Python SDK:** Python 3.9 không tương thích (SDK yêu cầu ≥3.10). Thay vào đó implement **MCP Streamable HTTP transport trực tiếp** (JSON-RPC 2.0 over HTTP) — đây chính là chuẩn giao thức mà mọi MCP server đều theo. Khi upgrade lên Python 3.10+: swap client → `mcp.ClientSession`, server → `FastMCP`, không đổi engine.
+**Vì sao không dùng `mcp` Python SDK:** ban đầu Python 3.9 không tương thích (SDK yêu cầu ≥3.10). Thay vào đó implement **MCP Streamable HTTP transport trực tiếp** (JSON-RPC 2.0 over HTTP) — đây chính là chuẩn giao thức mà mọi MCP server đều theo. *(Cập nhật Ngày 45: đã nâng lên Python 3.14 → SDK giờ khả dụng; client vẫn giữ JSON-RPC trực tiếp vì đã chạy ổn, có thể swap → `mcp.ClientSession` / server → `FastMCP` mà không đổi engine.)*
 
 **Kiến trúc:**
 ```

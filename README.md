@@ -122,4 +122,4 @@ src/agent/
 
 ## Stack
 
-Python 3.9 · FastAPI · SQLite WAL · Anthropic API (OpenAI-compat: Groq, Mistral) · asyncio background task · MCP JSON-RPC 2.0 over HTTP
+Python 3.14 · FastAPI · SQLite WAL · Anthropic API (OpenAI-compat: Groq, Mistral) · asyncio background task · MCP JSON-RPC 2.0 over HTTP

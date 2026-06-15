@@ -15,9 +15,9 @@ Kiến trúc là **platform 4 cạnh pluggable** (intake · tool · output · mo
 
 ## Giai đoạn hiện tại
 
-**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests).**
+**Phase 1–4 ✅ HOÀN TẤT (20/20 ngày). Phase 5 ✅ HOÀN TẤT (25/25 ngày). Phase 6 ✅ HOÀN TẤT (26–30). Phase 7 ✅ HOÀN TẤT (31–35 — 63/63 tests). Phase 8 ✅ HOÀN TẤT (36–45 — 173/173 tests). Phase 9 📋 ĐÃ LÊN KẾ HOẠCH (46–50, CHƯA CODE) — engine lõi thông minh hơn: E10 tool-sequencing · E11 service prior · E12 specificity gate.**
 
-Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. **Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`.**
+Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadmap-phase-5.md`. Plan Phase 6: `docs/12-roadmap-phase-6.md`. Plan Phase 8 (ĐÃ XONG): `docs/13-roadmap-phase-8.md`. **Plan Phase 9 (CHƯA CODE): `docs/14-roadmap-phase-9.md`.**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
@@ -58,6 +58,18 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 
 **Cổng Phase 8 PASS:** engine domain-agnostic · parity loop↔graph · calibration đóng vòng · CI xanh · 173 tests · prompt caching · E9 structured verdict · README+Makefile+API docs · security audit + startup warnings. Chi tiết: `docs/13-roadmap-phase-8.md`.
 
+**Phase 9 📋 ĐÃ LÊN KẾ HOẠCH (46–50, CHƯA CODE) — engine-core round 3 (`docs/14-roadmap-phase-9.md`):**
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|-----------|
+| 46 | E11 — Service prior | Pre-seed giả thuyết theo lịch sử service (`investigation_patterns` → catalog tag); confirm vẫn cần bằng chứng thật | ☐ |
+| 47 | E10 — Tool sequencing | Hint `relevant_tools` cho giả thuyết open vào prompt (advisory) · parity loop↔graph miễn phí qua `_build_user_message` | ☐ |
+| 48 | E12 — Specificity gate (lõi) | `compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph (idempotent, budget-guard) | ☐ |
+| 49 | E12 — Multi-agent + đo | Downgrade/annotate multi-agent · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ☐ |
+| 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · đóng pha | ☐ |
+
+**Bất biến Phase 9:** 100% engine-core · KHÔNG phá 4 nguyên tắc (nhất là #2 — tri thức miền sống trong catalog, KHÔNG hardcode keyword vào engine) · regression gate mỗi ngày engine (eval 4/4 + 2 KB E2E + Telegram).
+
 **Trạng thái chi tiết hơn:** xem `BUILD_STATE.md`.
 
 ---
@@ -77,7 +89,7 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 ### Đã làm (do người dùng yêu cầu rõ — KHÔNG làm lại từ đầu, không thay thế):
 - ✅ FastAPI webhook server (POST /trigger, GET /health, v0.4.0)
 - ✅ 3 adapter intake: Prometheus, Grafana, Sentry (routing qua X-Alert-Source)
-- ✅ MCP hot-plug: agent là MCP consumer (JSON-RPC 2.0 over HTTP, không dùng mcp SDK vì Python 3.9)
+- ✅ MCP hot-plug: agent là MCP consumer (JSON-RPC 2.0 over HTTP trực tiếp, không dùng mcp SDK — nay đã lên Python 3.14, SDK khả dụng nhưng giữ JSON-RPC vì đã chạy ổn)
 - ✅ MCP Registry lưu DB (SQLite), CRUD API, /ping test live
 - ✅ Project Isolation: multi-tenant qua projects + project_services, MCP scoped per project
 - ✅ 4 kịch bản: deploy bug · provider sập · DB pool exhaustion · traffic surge
@@ -88,8 +100,9 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 **Phase 5** ✅ (xem `docs/11-roadmap-phase-5.md`): RBAC/auth · cost dashboard · Slack output · webhook signature · real MCP pack · storage seam.
 **Phase 6** ✅ (xem `docs/12-roadmap-phase-6.md`): engine quality (hypothesis lifecycle · evidence-grounding verdict · calibration) · webhook auth + secret at-rest · graceful shutdown + in-process queue · PagerDuty/deploy-hook intake.
 **Phase 7** ✅ (Ngày 31–35): proactive monitoring scheduler · multi-agent conflict resolution · Docker + export · Redis SSE seam · 63/63 tests.
-**Phase 8** 📋 (Ngày 36–45, `docs/13`): engine domain-agnostic (hypothesis catalog theo miền) · hợp nhất loop/graph path + multi-agent parity · real-LLM calibration đóng vòng · test adapters/output/infra + CI gate · prompt caching · DX/docs.
-**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration (phá READ-ONLY, cần duyệt) · horizontal scale seam (hoàn thiện Redis SSE stub).
+**Phase 8** ✅ (Ngày 36–45, `docs/13`): engine domain-agnostic (hypothesis catalog theo miền) · hợp nhất loop/graph path + multi-agent parity · real-LLM calibration đóng vòng · test adapters/output/infra + CI gate · prompt caching · DX/docs.
+**Phase 9** 📋 (Ngày 46–50, `docs/14`): engine lõi thông minh hơn — E10 hypothesis-guided tool sequencing · E11 cross-investigation service prior · E12 verdict specificity gate. 100% engine-core, không cạnh mới.
+**Future:** DB migration Tier-2 (Postgres/MySQL chạy thật, cần lệnh rõ) · bidirectional integration (phá READ-ONLY, cần duyệt) · horizontal scale seam (hoàn thiện Redis SSE stub) · catalog editor UI.
 
 ---
 
@@ -97,7 +110,7 @@ Bạn (Claude) sẽ có xu hướng tự thêm thứ "chuyên nghiệp hơn". **
 
 | Thành phần | Hiện thực |
 |------------|-----------|
-| Ngôn ngữ | Python 3.9 |
+| Ngôn ngữ | Python 3.14 (nâng từ 3.9 ở Ngày 45) |
 | Agent loop | Tự viết (loop adaptive, hàm pure) |
 | LLM | Anthropic API (factory hỗ trợ OpenAI-compat: Groq, Mistral, ...) |
 | Storage | SQLite WAL — logs, metrics, deploys, trace_events, mcp_servers, projects, project_services |
@@ -189,7 +202,8 @@ Chỉ synthetic data, tool **READ-ONLY**, không PII, không kết nối hệ th
 │   ├── 10-roadmap-20-ngay.md  ← Phase 1–4 (đã xong)
 │   ├── 11-roadmap-phase-5.md  ← Phase 5 (đã xong)
 │   ├── 12-roadmap-phase-6.md  ← Phase 6 (đã xong)
-│   └── 13-roadmap-phase-8.md  ← KẾ HOẠCH TIẾP THEO (Phase 8, Ngày 36–45, chưa code)
+│   ├── 13-roadmap-phase-8.md  ← Phase 8 (đã xong)
+│   └── 14-roadmap-phase-9.md  ← KẾ HOẠCH TIẾP THEO (Phase 9, Ngày 46–50, chưa code)
 ├── data/
 │   ├── schema.sql              ← DDL đầy đủ (có projects, project_services, mcp_servers)
 │   ├── init_db.py

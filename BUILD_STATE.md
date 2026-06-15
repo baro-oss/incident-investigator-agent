@@ -4,8 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45, 10/10 ngày). **Tất cả Phase 1–8 hoàn tất: 45/45 ngày.**
+**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45, 10/10 ngày). **Tất cả Phase 1–8 hoàn tất: 45/45 ngày.** **Phase 9 📋 ĐÃ LÊN KẾ HOẠCH (46–50, CHƯA CODE) — `docs/14-roadmap-phase-9.md`.**
 **Cổng kiểm gần nhất:** Ngày 45 — security audit · SESSION_SECRET_KEY warning · dep audit · 173 tests · eval 4/4 · Cổng Phase 8 PASS + Python 3.9 → 3.14 upgrade PASS
+**Kế hoạch kế tiếp:** Phase 9 (E10 tool-sequencing · E11 service prior · E12 specificity gate) — 100% engine-core, regression gate mỗi ngày engine.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -86,7 +87,7 @@
 | 34 | Deployment & DX | Docker + docker-compose · Investigation export JSON/CSV · Tool unit tests (63/63) | ✅ |
 | 35 | Production bridge + close | Redis SSE seam (stub+factory) · Phase 7 gate PASS | ✅ |
 
-## Tiến độ Phase 8 (docs/13-roadmap-phase-8.md) — ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+## Tiến độ Phase 8 (docs/13-roadmap-phase-8.md) — ✅ HOÀN TẤT
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
@@ -104,7 +105,46 @@
 **Chốt Phase 8:** Day 38 = smoke mở rộng ~$2 (KHÔNG full N=10) · horizontal scale seam vẫn Future (Redis SSE giữ stub) · Tier-2/bidirectional vẫn Future.
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
+## Tiến độ Phase 9 (docs/14-roadmap-phase-9.md) — 📋 ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 46 | E11 — Service prior | Pre-seed `Hypothesis` open theo `investigation_patterns` (map root_cause_type→catalog tag); `Hypothesis.prior_seen_count`; confirm vẫn cần bằng chứng thật | ☐ |
+| 47 | E10 — Tool sequencing | `_tool_sequencing_hint(state)` nối vào `_build_user_message` (parity loop↔graph free); reuse catalog `relevant_tools`; advisory only | ☐ |
+| 48 | E12 — Specificity gate (lõi) | `engine/specificity.py:compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph; `Verdict.specificity_score` | ☐ |
+| 49 | E12 — Multi-agent + đo | Downgrade/annotate trong `_synthesize_verdict` · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ☐ |
+| 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
+
+**Chốt Phase 9 (đề xuất — chờ xác nhận khi khởi động code):** E11 = pre-seed hypothesis (không chỉ text hint) · E12 = nudge trong loop + downgrade trong multi-agent · Day 49 real-LLM = smoke ~$2 (KHÔNG full N=10) · gate dùng helper chung loop+graph (bài học E7).
+**Xương sống KHÔNG cắt:** D46 · D47 (mục A+B) · D48 (mục B) · D50.
+**Bất biến:** 100% engine-core · giữ nguyên tắc #2 (tri thức miền trong catalog, không hardcode keyword engine) · regression gate mỗi ngày engine (46–49).
+
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 47 — 2026-06-15] — Lập kế hoạch Phase 9 (Ngày 46–50)
+
+**Bối cảnh:** 45/45 ngày + Phase 8 xong (173/173 tests, Python 3.14). Session này **KHÔNG code** — đọc kỹ toàn bộ engine (`loop.py`, `state.py`, `graph.py`, `multi_agent.py`, `hypothesis_catalog.py`, `calibration.py`, `memory/patterns.py`, `runner.py`, `schema.sql`) để đánh giá + chốt Phase 9. Người dùng yêu cầu: viết Product Brief + đề xuất 3 hướng → chọn cả 3 (E10/E11/E12) → lập plan 5 ngày.
+
+**3 hướng đã chốt (đều engine-core, không cạnh mới):**
+- **E10 — Hypothesis-guided tool sequencing:** catalog đã có `relevant_tools` nhưng tri thức này không vào prompt → engine hint "giả thuyết open → tool nào kiểm" vào `_build_user_message`. **Parity loop↔graph miễn phí** (cả 2 path + specialist multi-agent đều gọi `decide_next_action`→`_build_user_message`).
+- **E11 — Cross-investigation service prior:** `investigation_patterns` chỉ dùng làm text `warm_start_hint`, chưa seed giả thuyết → pre-seed `Hypothesis` open theo lịch sử service. Lazy `_upsert_hypothesis` lookup theo tag → evidence sau cập nhật lifecycle sạch. Confirm vẫn cần bằng chứng thật (giữ #3).
+- **E12 — Verdict specificity gate:** grounding guard (E2) chỉ chặn verdict bịa, không phân biệt mờ/cụ thể → `compute_verdict_specificity` + gate nudge (loop/graph, helper dùng chung — bài học E7) + downgrade (multi-agent, VerdictAgent không loop được).
+
+**Đã làm (3 file, không động code):**
+- `docs/14-roadmap-phase-9.md` (mới) — kế hoạch Ngày 46–50, format Làm/Cổng như docs/11–13; bảng kiểm 4 nguyên tắc cho từng hướng; thứ tự cắt nếu hụt giờ.
+- `CLAUDE.md` — header giai đoạn + bảng Phase 9 + roadmap pitch (Phase 8 📋→✅, thêm Phase 9) + cấu trúc file (docs/13 đã xong, thêm docs/14).
+- `BUILD_STATE.md` — header trạng thái + bảng Tiến độ Phase 9 + entry này.
+
+**Quyết định mặc định (đề xuất — người dùng có thể veto khi khởi động code):**
+- E11 = **pre-seed hypothesis** (không chỉ text hint) — mạnh + demo rõ hơn; tận dụng tag-lookup sẵn có.
+- E12 = **nudge trong loop + downgrade trong multi-agent** — một metric chung, hai consumer.
+- Day 49 real-LLM = **smoke ~$2** (KHÔNG full N=10) — khớp pattern Day 21/38; đây là ngày "chứng minh" giảm bước + nâng specificity (mock không đo được).
+- Gate E12 = **helper dùng chung loop+graph** (không viết logic 2 lần — bài học E7).
+- Thứ tự ưu tiên rủi ro tăng dần: E11 → E10 → E12.
+
+**Đã sửa (follow-up cùng session):** đồng bộ version Python trong docs hiện-trạng → **3.14**: `CLAUDE.md` (bảng Stack + ghi chú MCP SDK), `README.md` (dòng Stack), `docs/10` (ghi chú MCP SDK + upgrade path). Giữ nguyên các entry nhật ký lịch sử (ghi đúng thời điểm) và file code (đã pin 3.14 ở commit upgrade). `AGENTS.md` đã version-agnostic ("Python" không kèm số) — không cần sửa.
+
+**Chưa làm:** chưa bắt đầu code Ngày 46 (chờ session sau xác nhận khởi động).
 
 ### [Session 46 — 2026-06-15] — Ngày 45: Hardening + Cổng Phase 8
 
