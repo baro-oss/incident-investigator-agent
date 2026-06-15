@@ -130,7 +130,7 @@ async def lifespan(app: FastAPI):
             - __import__("datetime").timedelta(days=retention_days)
         ).isoformat()
         result = _conn.execute(
-            "DELETE FROM trace_events WHERE created_at < ?", (cutoff_ts,)
+            "DELETE FROM trace_events WHERE timestamp < ?", (cutoff_ts,)
         )
         _conn.commit()
         _conn.close()
