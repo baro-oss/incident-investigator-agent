@@ -404,7 +404,9 @@ async def main() -> None:
             sum(1 for x in r if x["correct"]) * 100 // len(r) >= 70
             for r in all_results.values()
         )
-        print(f"CỔNG NGÀY 12: {'✅ PASS — tất cả kịch bản ≥70%' if all_pass else '❌ FAIL — có kịch bản <70%'}")
+        print(f"CỔNG EVAL: {'✅ PASS — tất cả kịch bản ≥70%' if all_pass else '❌ FAIL — có kịch bản <70%'}")
+        if not all_pass:
+            sys.exit(1)
     print(f"\n[run_id={run_id}] Kết quả đã lưu vào data/investigation.db (bảng eval_results)")
 
 

@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–40.
-**Cổng kiểm gần nhất:** Ngày 38–40 — 166/166 tests PASS · E8 calibration loop · T1 adapters/output/infra · contract guard
+**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–41.
+**Cổng kiểm gần nhất:** Ngày 41 — CI workflow xanh · syntax 107 files · import check · 166 tests · eval gate 4/4
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -95,7 +95,7 @@
 | 38 | E8 — Real-LLM eval + calib | Smoke mở rộng (~$2) · feed ngưỡng calibration ngược vào engine (đóng vòng E3) | ✅ |
 | 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer (mỗi cái ≥3 ca) | ✅ |
 | 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ✅ |
-| 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ☐ |
+| 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ✅ |
 | 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ☐ |
 | 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ☐ |
 | 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ☐ |
@@ -105,6 +105,22 @@
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 42 — 2026-06-15] — Ngày 41: T2 CI gate tự động
+
+**Ngày 41 — T2: CI gate:**
+- `.github/workflows/ci.yml` (mới) — 6 bước: checkout → setup-python 3.9 + pip cache → install `.[dev]` → syntax check (107 .py) → import check → init DB + seed → pytest -q → coverage report (continue-on-error) → eval gate 4/4
+- `scripts/eval_agent.py` — thêm `sys.exit(1)` khi gate fail (`all_pass=False`) → CI đỏ đúng
+- `pyproject.toml` — thêm `pytest-cov>=4.0.0` vào dev deps
+- `Makefile` — thêm `test` (pytest -q) và `ci` (test + eval gate) targets; cập nhật `.PHONY` và help
+
+**Cổng Ngày 41:**
+- Syntax check: 107 files OK
+- Core imports: 7 module OK
+- pytest: 166/166 PASS
+- Coverage report: 29% tổng (display only, không có threshold)
+- Eval gate: 4/4 PASS (12/12 runs đúng, 100%)
+- Exit code 1 khi gate fail: xác nhận ✅
 
 ### [Session 41 — 2026-06-15] — Ngày 38–40: E8 calibration + T1 adapter/infra tests
 

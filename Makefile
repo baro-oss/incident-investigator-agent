@@ -3,7 +3,7 @@ PORT   := 8000
 MCP_PORT := 9000
 
 .PHONY: help install setup db seed server server-reload mcp chat eval eval-fintech eval-all \
-        trigger trigger-fintech clean reset
+        trigger trigger-fintech test ci clean reset
 
 # ── Default ────────────────────────────────────────────────────────────────────
 help:
@@ -26,6 +26,9 @@ help:
 	@echo ""
 	@echo "  make chat           CLI REPL chat với agent"
 	@echo "  make trigger sc=1   Trigger scenario (sc=1|2|3|4|f1|f2)"
+	@echo ""
+	@echo "  make test           Chạy pytest (166 tests)"
+	@echo "  make ci             pytest + eval gate (cổng CI)"
 	@echo ""
 	@echo "  make clean          Xóa __pycache__ và file tạm"
 
@@ -93,6 +96,14 @@ eval-fintech:
 eval-all:
 	$(PYTHON) scripts/eval_agent.py --mock --n 10
 	$(PYTHON) scripts/eval_fintech.py --n 10
+
+# ── Test / CI ──────────────────────────────────────────────────────────────────
+test:
+	$(PYTHON) -m pytest --tb=short -q
+
+ci: test
+	$(PYTHON) scripts/eval_agent.py --mock --n 3 --scenario all
+	@echo "✅ CI gate PASS"
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 clean:

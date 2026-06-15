@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test suite + eval gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      # ── Syntax check ───────────────────────────────────────────────────────
+      - name: Syntax check — py_compile all .py files
+        run: |
+          find src scripts tests data mcp_server -name "*.py" \
+            | xargs python -m py_compile
+          echo "Syntax OK"
+
+      # ── Import smoke ───────────────────────────────────────────────────────
+      - name: Core import check
+        run: |
+          python -c "
+          import agent.engine.loop
+          import agent.engine.state
+          import agent.engine.calibration
+          import agent.engine.hypothesis_catalog
+          import agent.tools.registry
+          import agent.intake.server
+          import agent.output.telegram
+          print('Core imports OK')
+          "
+
+      # ── Database setup ─────────────────────────────────────────────────────
+      - name: Init DB + seed data
+        run: |
+          python data/init_db.py
+          python data/migrate_projects.py
+          python data/migrate_fintech.py
+          python data/seed_scenario1.py
+          python data/seed_scenario2.py
+          python data/seed_scenario3.py
+          python data/seed_scenario4.py
+
+      # ── pytest ─────────────────────────────────────────────────────────────
+      - name: pytest
+        run: pytest --tb=short -q
+
+      # ── Coverage (display only — no threshold gate) ────────────────────────
+      - name: Coverage report
+        run: pytest --cov=agent --cov-report=term-missing -q
+        continue-on-error: true
+
+      # ── Eval gate ─────────────────────────────────────────────────────────
+      - name: Mock eval gate — all scenarios PASS
+        run: python scripts/eval_agent.py --mock --n 3 --scenario all
