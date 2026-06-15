@@ -81,6 +81,67 @@
 </div></div>
 {% endif %}
 
+<!-- P1: Prompt caching before/after -->
+<div class="card" style="margin-bottom:1.5rem">
+  <div class="card-header">P1 — Prompt Caching (before → after)</div>
+  <div class="card-body">
+    {% if cache_reads > 0 or cache_writes > 0 %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1rem">
+      <div style="text-align:center">
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Cache writes</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--text);margin:.2rem 0">{{ "{:,}".format(cache_writes) }}</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">tokens (~+25% billed)</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Cache reads</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--severity-high);margin:.2rem 0">{{ "{:,}".format(cache_reads) }}</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">tokens (~-90% vs no-cache)</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Net savings</div>
+        {% set net = cache_net_savings %}
+        <div style="font-size:1.4rem;font-weight:700;color:{% if net > 0 %}var(--severity-high){% else %}var(--text-muted){% endif %};margin:.2rem 0">
+          ${{ "%.5f"|format(net|abs) }}{% if net > 0 %} saved{% elif net < 0 %} overhead{% else %}—{% endif %}
+        </div>
+        <div style="font-size:.75rem;color:var(--text-muted)">trên {{ cache_n_inv }} investigation</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Overhead cost</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--text-muted);margin:.2rem 0">${{ "%.5f"|format(cache_extra_cost) }}</div>
+        <div style="font-size:.75rem;color:var(--text-muted)">write premium</div>
+      </div>
+    </div>
+    <table class="table" style="font-size:.82rem">
+      <thead><tr><th>Metric</th><th style="text-align:right">Without caching</th><th style="text-align:right">With caching</th><th style="text-align:right">Delta</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Input tokens billed</td>
+          <td style="text-align:right">{{ "{:,}".format(cache_reads + cache_writes + live_total_tokens) }}</td>
+          <td style="text-align:right">{{ "{:,}".format(live_total_tokens) }} + {{ "{:,}".format(cache_writes) }}×1.25 + {{ "{:,}".format(cache_reads) }}×0.10</td>
+          <td style="text-align:right;color:var(--severity-high)">-{{ "{:,}".format(cache_reads) }} effective</td>
+        </tr>
+        <tr>
+          <td>Estimated cost</td>
+          <td style="text-align:right">${{ "%.5f"|format((cache_reads + cache_writes + live_total_tokens) * 3.0 / 1000000) }}</td>
+          <td style="text-align:right">${{ "%.5f"|format(live_total_cost + cache_extra_cost + cache_reads * 3.0 * 0.1 / 1000000) }}</td>
+          <td style="text-align:right;color:{% if cache_net_savings > 0 %}var(--severity-high){% else %}var(--text-muted){% endif %}">
+            {% if cache_net_savings > 0 %}-${{ "%.5f"|format(cache_net_savings) }}{% else %}${{ "%.5f"|format(cache_extra_cost) }} overhead{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+    <div style="font-size:.75rem;color:var(--text-muted);margin-top:.5rem">
+      Caching tiết kiệm tối đa khi prefix (system+tools ~1700 tok) được đọc nhiều lần trên cùng một model. Savings thực tế sẽ có sau khi chạy real-LLM investigation với <code>ANTHROPIC_API_KEY</code>.
+    </div>
+    {% else %}
+    <div style="color:var(--text-muted);font-size:.85rem">
+      Chưa có dữ liệu cache. Chạy investigation thật (real LLM) để thấy before/after.<br>
+      Mock LLM không gọi Anthropic API nên không có cache token data.
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 <!-- Pricing reference -->
 <div class="card">
   <div class="card-header">Bảng giá tham chiếu (USD / 1M tokens)</div>

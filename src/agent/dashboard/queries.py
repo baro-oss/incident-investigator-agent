@@ -76,6 +76,18 @@ def get_cost_data() -> Dict[str, Any]:
           AND json_extract(payload,'$.total_tokens') > 0
     """).fetchone()
 
+    # P1: Cache savings — sum cache_read/write tokens from verdict events
+    cache_row = conn.execute("""
+        SELECT
+            COUNT(DISTINCT investigation_id) AS n_cached,
+            SUM(COALESCE(CAST(json_extract(payload,'$.cache_read_tokens') AS INTEGER), 0))
+                AS total_cache_reads,
+            SUM(COALESCE(CAST(json_extract(payload,'$.cache_creation_tokens') AS INTEGER), 0))
+                AS total_cache_writes
+        FROM trace_events
+        WHERE event_type='verdict'
+    """).fetchone()
+
     conn.close()
 
     scenarios = []
@@ -101,6 +113,15 @@ def get_cost_data() -> Dict[str, Any]:
 
     live_d = dict(live) if live else {}
     live_tokens = int(live_d.get("total_tokens") or 0)
+
+    cache_reads  = int((cache_row["total_cache_reads"]  or 0) if cache_row else 0)
+    cache_writes = int((cache_row["total_cache_writes"] or 0) if cache_row else 0)
+    n_cached     = int((cache_row["n_cached"]           or 0) if cache_row else 0)
+    # Anthropic pricing: cache_read = 10% of standard input; cache_write = 125%
+    in_price_per_tok = 3.00 / 1_000_000  # claude-sonnet standard input
+    cache_savings_usd = round(cache_reads * in_price_per_tok * 0.90, 5)  # discount vs no-cache
+    cache_extra_cost  = round(cache_writes * in_price_per_tok * 0.25, 5) # write overhead
+
     return {
         "scenarios": scenarios,
         "grand_total_tokens": grand_tokens,
@@ -108,6 +129,13 @@ def get_cost_data() -> Dict[str, Any]:
         "live_n_inv":         int(live_d.get("n_inv") or 0),
         "live_total_tokens":  live_tokens,
         "live_total_cost":    round(_cost_usd(live_tokens, "anthropic", "claude-sonnet"), 4),
+        # P1: Prompt caching stats
+        "cache_n_inv":        n_cached,
+        "cache_reads":        cache_reads,
+        "cache_writes":       cache_writes,
+        "cache_savings_usd":  cache_savings_usd,
+        "cache_extra_cost":   cache_extra_cost,
+        "cache_net_savings":  round(cache_savings_usd - cache_extra_cost, 5),
     }
 
 

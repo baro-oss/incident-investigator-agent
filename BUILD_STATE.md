@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–41.
-**Cổng kiểm gần nhất:** Ngày 41 — CI workflow xanh · syntax 107 files · import check · 166 tests · eval gate 4/4
+**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36–42.
+**Cổng kiểm gần nhất:** Ngày 42 — 166 tests · eval 4/4 · prompt caching hooked · before/after trên cost dashboard
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -96,7 +96,7 @@
 | 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer (mỗi cái ≥3 ca) | ✅ |
 | 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ✅ |
 | 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ✅ |
-| 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ☐ |
+| 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ✅ |
 | 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ☐ |
 | 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ☐ |
 | 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ☐ |
@@ -105,6 +105,23 @@
 **Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
 
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 43 — 2026-06-15] — Ngày 42: P1 Prompt caching + context trim
+
+**Ngày 42 — P1: Cost + perf:**
+- `src/agent/llm/anthropic.py` — `cache_control: {"type": "ephemeral"}` trên system (ổn định) + last tool (stable per investigation); capture `cache_creation_input_tokens` + `cache_read_input_tokens` trong usage dict
+- `src/agent/engine/state.py` — thêm `cache_creation_tokens: int = 0` + `cache_read_tokens: int = 0` vào `InvestigationState`; `summarize_for_llm` capped: hypotheses tối đa 6 (open/confirmed ưu tiên, chỉ 2 ruled_out gần nhất), evidence/hypothesis tối đa 2 ref gần nhất
+- `src/agent/engine/loop.py` — accumulate `cache_creation_tokens` + `cache_read_tokens` từ `llm_resp.usage`; thêm cả 2 field vào verdict trace event payload
+- `src/agent/engine/multi_agent.py` — tương tự: accumulate + emit trong verdict; merge các specialist state
+- `src/agent/dashboard/queries.py` — thêm cache query trong `get_cost_data()`: `cache_reads`, `cache_writes`, `cache_savings_usd`, `cache_extra_cost`, `cache_net_savings`
+- `src/agent/dashboard/templates/cost.html` — thêm "P1 — Prompt Caching before→after" section: 4 stat cards + before/after comparison table + note
+
+**Cổng Ngày 42:**
+- 166/166 tests PASS (regression OK)
+- Eval gate: 4/4 PASS (12/12 runs, 100%)
+- `get_cost_data()` trả đủ cache fields (0 khi mock, thật khi có ANTHROPIC_API_KEY + real LLM investigation)
+- Template render không lỗi; "before/after" section hiển thị đúng khi cache_reads/writes > 0
+- Prompt caching silently no-op khi prefix < minimum (API ignores cache_control gracefully)
 
 ### [Session 42 — 2026-06-15] — Ngày 41: T2 CI gate tự động
 

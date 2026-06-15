@@ -704,6 +704,9 @@ class InvestigationEngine:
             "confidence": state.verdict.confidence if state.verdict else "N/A",
             "speculative": state.verdict.speculative if state.verdict else False,
             "total_tokens": state.total_tokens,
+            # P1: prompt caching stats
+            "cache_creation_tokens": state.cache_creation_tokens,
+            "cache_read_tokens": state.cache_read_tokens,
         }, project_id=project_id)
         tracer.record_verdict(state.stop_reason, state.verdict)
         tracer.flush()
@@ -806,6 +809,9 @@ class InvestigationEngine:
                     llm_resp.usage.get("input_tokens", 0)
                     + llm_resp.usage.get("output_tokens", 0)
                 )
+                # P1: accumulate cache stats for cost dashboard
+                state.cache_creation_tokens += llm_resp.usage.get("cache_creation_input_tokens", 0)
+                state.cache_read_tokens += llm_resp.usage.get("cache_read_input_tokens", 0)
 
             output_desc = (f"tool:{tool_call.name}" if tool_call
                            else ("verdict" if vtext else "no_action"))

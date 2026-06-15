@@ -156,6 +156,9 @@ class MultiAgentEngine:
             "root_cause": merged.verdict.root_cause if merged.verdict else "N/A",
             "confidence": merged.verdict.confidence if merged.verdict else "N/A",
             "multi_agent": True,
+            "total_tokens": merged.total_tokens,
+            "cache_creation_tokens": merged.cache_creation_tokens,
+            "cache_read_tokens": merged.cache_read_tokens,
         }, project_id=project_id)
         tracer.record_verdict(merged.stop_reason, merged.verdict)
         tracer.flush()
@@ -266,8 +269,10 @@ class MultiAgentEngine:
             log_state.tool_call_history + metric_state.tool_call_history
         )
 
-        # Tổng tokens
+        # Tổng tokens + cache stats
         merged.total_tokens = log_state.total_tokens + metric_state.total_tokens
+        merged.cache_creation_tokens = log_state.cache_creation_tokens + metric_state.cache_creation_tokens
+        merged.cache_read_tokens = log_state.cache_read_tokens + metric_state.cache_read_tokens
 
         return merged
 
@@ -322,6 +327,8 @@ class MultiAgentEngine:
                     response.usage.get("input_tokens", 0)
                     + response.usage.get("output_tokens", 0)
                 )
+                merged.cache_creation_tokens += response.usage.get("cache_creation_input_tokens", 0)
+                merged.cache_read_tokens += response.usage.get("cache_read_input_tokens", 0)
 
             tracer.record_llm_call(
                 input_summary=merged.symptom[:200],

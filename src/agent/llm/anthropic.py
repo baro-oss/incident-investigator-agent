@@ -48,10 +48,17 @@ class AnthropicClient:
             "max_tokens": self._max_tokens,
             "messages": anthropic_messages,
         }
+
+        # P1: Prompt caching — stable prefix (system + tools) cached per investigation step.
+        # cache_control is silently ignored if the prefix is below the minimum cacheable size.
         if system:
-            kwargs["system"] = system
+            kwargs["system"] = [
+                {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}
+            ]
         if tools:
-            kwargs["tools"] = [self._to_anthropic_tool(t) for t in tools]
+            tools_api = [self._to_anthropic_tool(t) for t in tools]
+            tools_api[-1]["cache_control"] = {"type": "ephemeral"}
+            kwargs["tools"] = tools_api
 
         response = await self._client.messages.create(**kwargs)
 
@@ -70,13 +77,22 @@ class AnthropicClient:
             elif block.type == "text":
                 text_parts.append(block.text)
 
+        usage: dict = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
+        # Cache hit/write counts (0 when caching doesn't apply or prefix too short)
+        usage["cache_creation_input_tokens"] = getattr(
+            response.usage, "cache_creation_input_tokens", 0
+        ) or 0
+        usage["cache_read_input_tokens"] = getattr(
+            response.usage, "cache_read_input_tokens", 0
+        ) or 0
+
         return LLMResponse(
             text="\n".join(text_parts) if text_parts else None,
             tool_calls=tool_calls,
-            usage={
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-            },
+            usage=usage,
         )
 
     @staticmethod

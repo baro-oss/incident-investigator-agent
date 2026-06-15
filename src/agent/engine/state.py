@@ -78,6 +78,9 @@ class InvestigationState:
 
     # Token tracking (accumulate từ llm_resp.usage)
     total_tokens: int = 0
+    # P1: Prompt caching stats — accumulate per investigation
+    cache_creation_tokens: int = 0   # tokens written to cache (billed at 1.25×)
+    cache_read_tokens: int = 0       # tokens read from cache (billed at 0.10×)
 
     # Long-term memory: gợi ý warm-start từ investigation_patterns trước
     warm_start_hint: Optional[str] = None
@@ -188,12 +191,17 @@ class InvestigationState:
             lines.append(f"  {', '.join(self.available_services)}")
             lines.append("")
 
-        # Giả thuyết + bằng chứng liên kết
+        # Giả thuyết + bằng chứng liên kết — cap để gọn context (P1)
         if self.hypotheses:
             lines.append("## Giả thuyết đang theo dõi")
-            for h in self.hypotheses:
+            # Ưu tiên open/confirmed; chỉ giữ tối đa 2 ruled_out gần nhất
+            active = [h for h in self.hypotheses if h.status in ("open", "confirmed")]
+            ruled_out = [h for h in self.hypotheses if h.status == "ruled_out"]
+            # Tối đa 6 giả thuyết tổng (tránh context phình khi điều tra dài)
+            show = (active + ruled_out[-2:])[:6]
+            for h in show:
                 ev_refs = []
-                for ev_id in h.evidence_ids:
+                for ev_id in h.evidence_ids[-2:]:  # chỉ 2 evidence gần nhất / hypothesis
                     ev = next((e for e in self.evidence if e.id == ev_id), None)
                     if ev:
                         ev_refs.append(f"[{ev.tool_name}: {ev.summary[:80]}]")
@@ -202,6 +210,8 @@ class InvestigationState:
                 lines.append(f"  {status_mark} [{h.id}] {h.content}{conf_note}")
                 for ref in ev_refs:
                     lines.append(f"      ↳ {ref}")
+            if len(ruled_out) > 2:
+                lines.append(f"  ❌ (+{len(ruled_out) - 2} giả thuyết đã loại trừ trước đó)")
 
         # Bằng chứng mới nhất (chỉ 3 gần nhất)
         if self.evidence:
