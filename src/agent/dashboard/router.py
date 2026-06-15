@@ -29,6 +29,7 @@ from agent.dashboard.queries import (
     get_mcp_servers_for_dashboard,
     get_project_detail,
     get_all_tools_for_dashboard,
+    get_specificity_data,
 )
 
 _HERE = Path(__file__).parent
@@ -824,6 +825,9 @@ async def dashboard_eval(
     calib_stats = load_calibration_stats()
     calib_adjustments = get_calibration_summary(calib_stats)
 
+    # E12: specificity stats từ trace_events
+    specificity_data = get_specificity_data()
+
     return templates.TemplateResponse("eval.html", _ctx(request, user,
         active="eval",
         eval_rows=eval_rows,
@@ -837,6 +841,7 @@ async def dashboard_eval(
         eval_calibration=eval_calibration,
         calib_feedback=calib_feedback,
         calib_adjustments=calib_adjustments,
+        specificity_data=specificity_data,
     ))
 
 

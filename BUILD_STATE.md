@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45). **Phase 9 🔨 ĐANG CODE — Ngày 46 ✅ · Ngày 47 ✅ (E10 tool sequencing).**
-**Cổng kiểm gần nhất:** Ngày 47 — _tool_sequencing_hint advisory · prior sort · cap 3 · parity loop↔graph · 221/221 tests.
-**Kế hoạch kế tiếp:** Ngày 48 (E12 specificity gate lõi — `engine/specificity.py` + `_apply_specificity_gate` dùng chung loop+graph).
+**Giai đoạn:** Phase 8 ✅ HOÀN TẤT (36–45). **Phase 9 🔨 ĐANG CODE — Ngày 46 ✅ · Ngày 47 ✅ · Ngày 48 ✅ · Ngày 49 ✅ (E12 multi-agent + đo).**
+**Cổng kiểm gần nhất:** Ngày 49 — multi-agent downgrade mờ · dashboard specificity (eval.html) · mock eval 4/4 · 262/262 tests. Real-LLM smoke chờ top-up credit.
+**Kế hoạch kế tiếp:** Ngày 50 (Tests + CI + Cổng Phase 9 — thêm tests · CI xanh · audit · đóng pha).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -111,9 +111,33 @@
 |------|-------|----------|------------|
 | 46 | E11 — Service prior | Pre-seed `Hypothesis` open theo `investigation_patterns` (map root_cause_type→catalog tag); `Hypothesis.prior_seen_count`; confirm vẫn cần bằng chứng thật | ✅ |
 | 47 | E10 — Tool sequencing | `_tool_sequencing_hint(state)` nối vào `_build_user_message` (parity loop↔graph free); reuse catalog `relevant_tools`; advisory only | ✅ |
-| 48 | E12 — Specificity gate (lõi) | `engine/specificity.py:compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph; `Verdict.specificity_score` | ☐ |
-| 49 | E12 — Multi-agent + đo | Downgrade/annotate trong `_synthesize_verdict` · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ☐ |
+| 48 | E12 — Specificity gate (lõi) | `engine/specificity.py:compute_verdict_specificity` + `_apply_specificity_gate` nudge dùng chung loop+graph; `Verdict.specificity_score` | ✅ |
+| 49 | E12 — Multi-agent + đo | Downgrade/annotate trong `_synthesize_verdict` · dashboard specificity + avg-steps before/after · real-LLM smoke ~$2 | ✅ |
 | 50 | Tests + CI + Cổng P9 | Test cả 3 (~195–200) · CI xanh · audit degrade an toàn · cập nhật BUILD_STATE/CLAUDE · đóng pha | ☐ |
+
+### [Session 51 — 2026-06-15] — Ngày 49: E12 multi-agent + đo
+
+**Đã làm:**
+- `engine/multi_agent.py:_synthesize_verdict`: sau calibration, gọi `compute_verdict_specificity`; nếu score < 0.40 và conf in {high, medium} → hạ 1 bậc confidence + annotate `evidence_summary` với `[⚠ E12 specificity=... — reasons]`; set `verdict.specificity_score`.
+- `dashboard/queries.py`: thêm `get_specificity_data()` — đọc trace_events verdict gần nhất (≤200), tính avg_specificity, phân bố high/med/low.
+- `dashboard/router.py`: import + call `get_specificity_data()` trong `/eval` route, pass vào template.
+- `dashboard/templates/eval.html`: thêm panel "E12 — Verdict Specificity" với stats-row (n, avg, high/med/low counts) + metadata về threshold + cách gate hoạt động.
+- `tests/test_e12_specificity.py` (+3 tests): TestMultiAgentSpecificityDowngrade (2 async tests) + TestSpecificityScoreInFinalize (1 sync test).
+
+**Không làm (blocked):** Real-LLM smoke ~$2 — API credit cạn kiệt (`credit balance too low`). Cần top-up trước khi chạy.
+
+**Tests:** 259 + 3 = 262/262.
+
+### [Session 50 — 2026-06-15] — Ngày 48: E12 specificity gate lõi
+
+**Đã làm:**
+- `engine/specificity.py` (mới): `SPECIFICITY_THRESHOLD=0.40` · `compute_verdict_specificity(verdict, state) -> (float, reasons)` với 3 tín hiệu: (a) root_cause có số/service, (b) evidence_summary ≥2 số phân biệt, (c) propagation_note không rỗng + có số/service · `_has_specific_token` · `_count_distinct_numbers` dùng regex `r'\d+(?:[.,]\d+)?'` (bắt cả `5x`, `8ms`, `87%`).
+- `engine/state.py`: thêm `Verdict.specificity_score: Optional[float] = None` · `InvestigationState._specificity_gate_fired: bool = False` · filter `_specificity_gate` trong `is_looping()`.
+- `engine/loop.py`: thêm `_SPECIFICITY_GATE_NAME = "_specificity_gate"` · `_apply_specificity_gate()` (mirrors competing gate: idempotent, budget-guard, chỉ high/medium) · handler trong `run_tool()` · wiring trong `_run_loop` (v_obj path + vtext path, sau competing gate) · set `verdict.specificity_score` trong finalize + emit trace.
+- `engine/graph.py`: wiring `_apply_specificity_gate` sau `_apply_competing_gate` trong `decide_node` (parity loop↔graph).
+- `tests/test_e12_specificity.py` (38 tests mới): TestHasSpecificToken (8) · TestCountDistinctNumbers (6) · TestComputeVerdictSpecificity (9) · TestApplySpecificityGate (9) · TestRunToolSpecificityGate (2) · TestSpecificityGateWiringInLoop (2) · TestSpecificityScoreInFinalize (1). Bao gồm integration test xác nhận gate fires on vague → continues → passes on specific.
+
+**Tests:** 221 + 38 = 259/259.
 
 ### [Session 49 — 2026-06-15] — Ngày 47: E10 hypothesis-guided tool sequencing
 

@@ -31,6 +31,10 @@ VERDICT_TOOL_NAME = "submit_verdict"
 
 _NUDGE_TOOL_NAME = "_competing_gate"
 
+# ── E12: Specificity gate — nudge tool name ─────────────────────────────────
+
+_SPECIFICITY_GATE_NAME = "_specificity_gate"
+
 # ── E6: Hypothesis catalog — loaded from hypothesis_catalog.py, NOT hardcoded here ──────
 
 # E2: Từ ngữ chức năng loại khỏi kiểm tra overlap bằng chứng
@@ -340,6 +344,53 @@ def _apply_competing_gate(
     return nudge, None
 
 
+def _apply_specificity_gate(
+    state: "InvestigationState",
+    vtext: Optional[str] = None,
+    *,
+    verdict_obj: Optional["Verdict"] = None,
+) -> Optional[ToolCall]:
+    """E12: Nudge khi verdict mờ (specificity thấp) + còn budget + chưa fired.
+
+    Mirrors _apply_competing_gate: idempotent (1 lần), budget-guard, chỉ high/medium.
+    Trả ToolCall(name=_SPECIFICITY_GATE_NAME) nếu gate fires, None nếu pass.
+    """
+    if state._specificity_gate_fired:
+        return None
+
+    if verdict_obj is not None:
+        conf = verdict_obj.confidence
+        v = verdict_obj
+    elif vtext:
+        conf = _quick_parse_confidence(vtext)
+        v = _parse_verdict(vtext, state)
+    else:
+        return None
+
+    if conf not in ("high", "medium"):
+        return None
+
+    budget_remaining = state.step_budget - state.steps_taken
+    if budget_remaining <= 1:
+        return None
+
+    from agent.engine.specificity import SPECIFICITY_THRESHOLD, compute_verdict_specificity
+    score, reasons = compute_verdict_specificity(v, state)
+    if score >= SPECIFICITY_THRESHOLD:
+        return None
+
+    state._specificity_gate_fired = True
+    logger.info(
+        "[%s] E12 specificity gate: score=%.2f < %.2f — %s",
+        state.investigation_id, score, SPECIFICITY_THRESHOLD, reasons,
+    )
+    return ToolCall(
+        id="specificity_nudge",
+        name=_SPECIFICITY_GATE_NAME,
+        arguments={"score": round(score, 2), "reasons": reasons},
+    )
+
+
 async def decide_next_action(
     state: InvestigationState,
     llm: LLMClient,
@@ -396,6 +447,22 @@ async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
             total_count=0,
             truncated=False,
             metadata={"tool_name": _NUDGE_TOOL_NAME, "gate": "competing"},
+        )
+
+    if tool_call.name == _SPECIFICITY_GATE_NAME:
+        reasons = tool_call.arguments.get("reasons", [])
+        score = tool_call.arguments.get("score", 0.0)
+        return Observation(
+            summary=(
+                f"⚠️ Verdict còn mờ (specificity={score:.2f}): "
+                + ("; ".join(reasons) if reasons else "thiếu chi tiết cụ thể") + ". "
+                "Hãy bổ sung số liệu cụ thể (version/timestamp/%, so baseline) vào verdict."
+            ),
+            aggregates={"gate": "specificity", "score": score},
+            samples=[],
+            total_count=0,
+            truncated=False,
+            metadata={"tool_name": _SPECIFICITY_GATE_NAME, "gate": "specificity"},
         )
 
     tool = next((t for t in tools if t.name == tool_call.name), None)
@@ -801,6 +868,12 @@ class InvestigationEngine:
             # E8: Calibration — hạ confidence nếu historical accuracy < threshold
             state.verdict = apply_calibration(state.verdict)
 
+        # E12: compute + store specificity score trên verdict cuối
+        if state.verdict:
+            from agent.engine.specificity import compute_verdict_specificity
+            spec_score, _ = compute_verdict_specificity(state.verdict, state)
+            state.verdict.specificity_score = spec_score
+
         # Ngày 33: Multi-agent conflict resolution — annotate khi nhiều hypothesis confirmed
         winner = state.resolve_conflicting_hypotheses()
         n_confirmed = sum(1 for h in state.hypotheses if h.status == "confirmed")
@@ -823,6 +896,7 @@ class InvestigationEngine:
             "confidence": state.verdict.confidence if state.verdict else "N/A",
             "speculative": state.verdict.speculative if state.verdict else False,
             "parse_degraded": state.verdict.parse_degraded if state.verdict else False,
+            "specificity_score": state.verdict.specificity_score if state.verdict else None,
             "total_tokens": state.total_tokens,
             # P1: prompt caching stats
             "cache_creation_tokens": state.cache_creation_tokens,
@@ -947,17 +1021,23 @@ class InvestigationEngine:
             )
 
             if v_obj is not None:
-                # E9: structured path — check competing gate bằng confidence trực tiếp
+                # E9: structured path — cổng cạnh tranh rồi cổng specificity
                 nudge_tc, _ = _apply_competing_gate(state, conf_override=v_obj.confidence)
                 if nudge_tc:
                     tool_call = nudge_tc
                     v_obj = None
                 else:
-                    verdict_obj = v_obj
-                    state.stop_reason = "verdict"
-                    state.finished = True
-                    tracer.end_step()
-                    break
+                    # E12: specificity gate
+                    spec_tc = _apply_specificity_gate(state, verdict_obj=v_obj)
+                    if spec_tc:
+                        tool_call = spec_tc
+                        v_obj = None
+                    else:
+                        verdict_obj = v_obj
+                        state.stop_reason = "verdict"
+                        state.finished = True
+                        tracer.end_step()
+                        break
 
             if vtext:
                 # E4: cổng cạnh tranh — chặn verdict high/medium nếu còn hypothesis open
@@ -966,11 +1046,16 @@ class InvestigationEngine:
                     # Gate fires: inject nudge như một tool call, tiếp tục vòng
                     tool_call = nudge_tc
                 else:
-                    verdict_text = accepted_vtext
-                    state.stop_reason = "verdict"
-                    state.finished = True
-                    tracer.end_step()
-                    break
+                    # E12: specificity gate
+                    spec_tc = _apply_specificity_gate(state, accepted_vtext)
+                    if spec_tc:
+                        tool_call = spec_tc
+                    else:
+                        verdict_text = accepted_vtext
+                        state.stop_reason = "verdict"
+                        state.finished = True
+                        tracer.end_step()
+                        break
 
             if tool_call is None:
                 logger.warning("[%s] Không có tool_call lẫn verdict", investigation_id)

@@ -51,6 +51,7 @@ class Verdict:
     speculative: bool = False  # E2: True khi root cause không neo được vào bằng chứng thu thập
     calibrated_confidence: Optional[str] = None  # E8: set khi calibration hạ bậc confidence
     parse_degraded: bool = False  # E9: True khi verdict đến từ text-parse fallback (không qua structured tool call)
+    specificity_score: Optional[float] = None  # E12: set khi finalize [0.0, 1.0]
 
 
 @dataclass
@@ -89,6 +90,9 @@ class InvestigationState:
 
     # E4: Gate cạnh tranh — chỉ nudge 1 lần; tránh vòng lặp vô hạn
     _competing_gate_fired: bool = False
+
+    # E12: Gate specificity — chỉ nudge 1 lần; tránh vòng lặp vô hạn
+    _specificity_gate_fired: bool = False
 
     # E6: Catalog giả thuyết theo domain — set bởi engine khi khởi tạo investigation.
     # Dict[tag, HypothesisCatalogEntry]; để Dict plain tránh circular import với hypothesis_catalog.py
@@ -155,7 +159,8 @@ class InvestigationState:
         Nudge call (_competing_gate) bị lọc ra để không làm nhiễu phát hiện lặp.
         """
         # Lọc nudge calls khỏi lịch sử kiểm tra
-        hist = [c for c in self.tool_call_history if c.get("name") != "_competing_gate"]
+        hist = [c for c in self.tool_call_history
+                if c.get("name") not in ("_competing_gate", "_specificity_gate")]
         if len(hist) < 2:
             return False
 

@@ -216,6 +216,40 @@
     {% endif %}
   </div>
 
+  <!-- E12: Verdict Specificity Stats -->
+  <div class="card" style="grid-column:1/-1">
+    <h3 style="margin-bottom:12px">E12 — Verdict Specificity (từ trace_events)</h3>
+    {% if specificity_data and specificity_data.n > 0 %}
+    <div class="stats-row" style="margin-bottom:12px">
+      <div class="stat-box">
+        <div class="sv">{{ specificity_data.n }}</div>
+        <div class="sl">Verdicts</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:{{ 'var(--high)' if specificity_data.avg_specificity >= 0.67 else ('var(--medium)' if specificity_data.avg_specificity >= 0.40 else 'var(--low)') }}">
+          {{ "%.2f"|format(specificity_data.avg_specificity) }}
+        </div>
+        <div class="sl">Avg specificity</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--high)">{{ specificity_data.high_n }}</div>
+        <div class="sl">Cao ≥0.67</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--medium)">{{ specificity_data.med_n }}</div>
+        <div class="sl">Trung 0.40–0.67</div>
+      </div>
+      <div class="stat-box">
+        <div class="sv" style="color:var(--low)">{{ specificity_data.low_n }}</div>
+        <div class="sl">Mờ &lt;0.40 (gate)</div>
+      </div>
+    </div>
+    <div class="meta">Ngưỡng gate: <b>{{ specificity_data.threshold }}</b>. Verdict mờ (score &lt; ngưỡng) → loop/graph nudge thêm 1 bước; multi-agent downgrade confidence.</div>
+    {% else %}
+    <div class="meta">Chưa có dữ liệu specificity (cần chạy investigation qua loop/graph).</div>
+    {% endif %}
+  </div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>

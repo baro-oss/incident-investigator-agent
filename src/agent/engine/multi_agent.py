@@ -357,6 +357,20 @@ class MultiAgentEngine:
         # E8: Calibration
         from agent.engine.calibration import apply_calibration
         merged.verdict = apply_calibration(merged.verdict)
+        # E12: specificity — multi-agent không loop được → downgrade trực tiếp nếu mờ
+        from agent.engine.specificity import SPECIFICITY_THRESHOLD, compute_verdict_specificity
+        spec_score, spec_reasons = compute_verdict_specificity(merged.verdict, merged)
+        merged.verdict.specificity_score = spec_score
+        if spec_score < SPECIFICITY_THRESHOLD and merged.verdict.confidence in ("high", "medium"):
+            _dg = {"high": "medium", "medium": "low"}
+            orig_conf = merged.verdict.confidence
+            merged.verdict.confidence = _dg.get(orig_conf, orig_conf)
+            warn = f" [⚠ E12 specificity={spec_score:.2f} — {'; '.join(spec_reasons[:2])}]"
+            merged.verdict.evidence_summary = (merged.verdict.evidence_summary or "") + warn
+            logger.info(
+                "[%s] E12 multi-agent specificity downgrade: score=%.2f → %s→%s",
+                investigation_id, spec_score, orig_conf, merged.verdict.confidence,
+            )
 
         # E7: conflict resolution — ngang hàng single-agent path
         winner = merged.resolve_conflicting_hypotheses()

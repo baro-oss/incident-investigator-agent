@@ -102,16 +102,25 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
         latency_ms=llm_ms,
     )
 
-    from agent.engine.loop import _apply_competing_gate, _emit_trace
+    from agent.engine.loop import (
+        _apply_competing_gate, _apply_specificity_gate, _emit_trace,
+    )
 
     if v_obj is not None:
-        # E9: structured path — check competing gate bằng confidence trực tiếp
+        # E9: structured path — cổng cạnh tranh rồi cổng specificity
         nudge_tc, _ = _apply_competing_gate(inv, conf_override=v_obj.confidence)
         if nudge_tc:
             _emit_trace(investigation_id, current_step, "tool_call", {
                 "tool": nudge_tc.name, "args": nudge_tc.arguments,
             }, project_id=inv.project_id)
             return {"inv": inv, "tool_call": nudge_tc, "verdict_text": None, "verdict_obj": None}
+        # E12: specificity gate
+        spec_tc = _apply_specificity_gate(inv, verdict_obj=v_obj)
+        if spec_tc:
+            _emit_trace(investigation_id, current_step, "tool_call", {
+                "tool": spec_tc.name, "args": spec_tc.arguments,
+            }, project_id=inv.project_id)
+            return {"inv": inv, "tool_call": spec_tc, "verdict_text": None, "verdict_obj": None}
         inv.stop_reason = "verdict"
         inv.finished = True
         tracer.end_step()
@@ -121,12 +130,17 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
         # E4: cổng cạnh tranh — chặn verdict high/medium nếu còn hypothesis open
         nudge_tc, accepted_vtext = _apply_competing_gate(inv, vtext)
         if nudge_tc:
-            # Gate fires: inject nudge như tool call, tiếp tục điều tra
             _emit_trace(investigation_id, current_step, "tool_call", {
                 "tool": nudge_tc.name, "args": nudge_tc.arguments,
             }, project_id=inv.project_id)
             return {"inv": inv, "tool_call": nudge_tc, "verdict_text": None, "verdict_obj": None}
-
+        # E12: specificity gate
+        spec_tc = _apply_specificity_gate(inv, accepted_vtext)
+        if spec_tc:
+            _emit_trace(investigation_id, current_step, "tool_call", {
+                "tool": spec_tc.name, "args": spec_tc.arguments,
+            }, project_id=inv.project_id)
+            return {"inv": inv, "tool_call": spec_tc, "verdict_text": None, "verdict_obj": None}
         inv.stop_reason = "verdict"
         inv.finished = True
         tracer.end_step()

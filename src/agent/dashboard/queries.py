@@ -705,3 +705,40 @@ def get_recurring_incidents(
         ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_specificity_data() -> Dict[str, Any]:
+    """E12: Thống kê specificity từ trace_events verdict gần nhất (≤200 rows)."""
+    conn = open_db()
+    try:
+        rows = conn.execute("""
+            SELECT payload
+            FROM trace_events
+            WHERE event_type = 'verdict'
+            ORDER BY id DESC
+            LIMIT 200
+        """).fetchall()
+    except Exception:
+        rows = []
+    conn.close()
+
+    scores: list = []
+    steps_list: list = []
+    for row in rows:
+        try:
+            payload = json.loads(row["payload"] if hasattr(row, "__getitem__") else row[0])
+            score = payload.get("specificity_score")
+            if score is not None:
+                scores.append(float(score))
+        except Exception:
+            continue
+
+    avg = round(sum(scores) / len(scores), 2) if scores else 0.0
+    return {
+        "n": len(scores),
+        "avg_specificity": avg,
+        "high_n": sum(1 for s in scores if s >= 0.67),
+        "med_n":  sum(1 for s in scores if 0.40 <= s < 0.67),
+        "low_n":  sum(1 for s in scores if s < 0.40),
+        "threshold": 0.40,
+    }
