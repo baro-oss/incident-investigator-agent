@@ -31,40 +31,7 @@ VERDICT_TOOL_NAME = "submit_verdict"
 
 _NUDGE_TOOL_NAME = "_competing_gate"
 
-# ── E1: Hypothesis lifecycle — relevance config per tag ──────────────────────
-
-_HYPOTHESIS_RELEVANCE: Dict[str, Dict] = {
-    "deploy": {
-        "tools": {"get_recent_deploys"},
-        "confirm_kws": {"deployment", "deploy", "version", "release", "tìm thấy"},
-        "rule_out_kws": {"không tìm thấy", "0 deployment", "no deployment"},
-        "confirm_conf": "medium",
-    },
-    "timeout": {
-        "tools": {"get_error_breakdown", "trace_request"},
-        "confirm_kws": {"timeoutexception", "timeout", "latency", "deadline", "chậm"},
-        "rule_out_kws": {"không có timeout", "latency bình thường"},
-        "confirm_conf": "medium",
-    },
-    "latency_spike": {
-        "tools": {"get_metrics"},
-        "confirm_kws": {"lệch", "x baseline", "spike", "tăng", "cao hơn"},
-        "rule_out_kws": {"bình thường", "không lệch", "normal"},
-        "confirm_conf": "medium",
-    },
-    "pool_exhaustion": {
-        "tools": {"get_metrics", "get_error_breakdown"},
-        "confirm_kws": {"pool", "exhaustion", "connection", "wait_time", "queue"},
-        "rule_out_kws": {"pool bình thường"},
-        "confirm_conf": "high",
-    },
-    "provider_down": {
-        "tools": {"get_dependencies", "get_error_breakdown"},
-        "confirm_kws": {"provider", "unavailable", "serviceunavailable", "503", "sập"},
-        "rule_out_kws": {"provider ok", "bình thường"},
-        "confirm_conf": "high",
-    },
-}
+# ── E6: Hypothesis catalog — loaded from hypothesis_catalog.py, NOT hardcoded here ──────
 
 # E2: Từ ngữ chức năng loại khỏi kiểm tra overlap bằng chứng
 _STOP_WORDS = {
@@ -404,70 +371,51 @@ def update_state(
 
 
 def _update_hypotheses(state: InvestigationState, ev: Evidence) -> None:
-    """E1: Cập nhật vòng đời giả thuyết dựa trên bằng chứng mới.
+    """E6: Cập nhật vòng đời giả thuyết dựa trên bằng chứng mới — catalog-driven.
 
-    Thay heuristic cũ (append mù vào mọi open hypothesis):
-    - Tạo hypothesis khi evidence signal rõ
-    - Chỉ gắn evidence vào hypothesis CÓ LIÊN QUAN (tool/keyword match)
-    - Chuyển open→confirmed khi bằng chứng xác nhận
-    - Chuyển open→ruled_out khi bằng chứng mâu thuẫn
-    - Set confidence trên hypothesis theo loại bằng chứng
+    Đọc catalog từ state.hypothesis_catalog_index (set bởi engine khi khởi tạo).
+    Fallback về MICROSERVICE_CATALOG nếu chưa set (backward compat với test/script cũ).
+
+    Phase 1: Tạo hypothesis mới khi evidence có signal từ tool liên quan.
+    Phase 2: Cập nhật lifecycle hypothesis đã có (open→confirmed/ruled_out).
     """
     import re
+    from agent.engine.hypothesis_catalog import MICROSERVICE_CATALOG, build_catalog_index
+
+    catalog_index = state.hypothesis_catalog_index
+    if not catalog_index:
+        catalog_index = build_catalog_index(MICROSERVICE_CATALOG)
+
     summary_lower = ev.summary.lower()
     tool = ev.tool_name
 
-    # --- Tạo hypothesis mới từ signal trong evidence ---
-    if tool == "get_recent_deploys":
-        if "tìm thấy" in summary_lower and ("deployment" in summary_lower or "deploy" in summary_lower):
-            _upsert_hypothesis(state, "deploy", ev,
-                               "Deployment gần đây gây ra sự cố",
-                               keywords=["deployment", "deploy", "version"])
-        elif "không tìm thấy" in summary_lower:
-            # Không có deploy → tạo hypothesis với status ruled_out ngay
-            _upsert_hypothesis(state, "deploy", ev,
-                               "Deployment gần đây gây ra sự cố",
-                               keywords=["deployment", "deploy"],
-                               initial_status="ruled_out")
+    # --- Phase 1: Tạo hypothesis mới từ signal trong evidence ---
+    for entry in catalog_index.values():
+        if tool not in entry.relevant_tools:
+            continue
+        # Rule-out kiểm trước (rule_out_kws thường specific hơn confirm_kws)
+        if entry.rule_out_kws and any(kw in summary_lower for kw in entry.rule_out_kws):
+            _upsert_hypothesis(state, entry.tag, ev, entry.content,
+                               keywords=list(entry.keywords), initial_status="ruled_out")
+        elif any(kw in summary_lower for kw in entry.confirm_kws):
+            _upsert_hypothesis(state, entry.tag, ev, entry.content,
+                               keywords=list(entry.keywords))
 
-    if tool == "get_error_breakdown" and "timeoutexception" in summary_lower:
-        _upsert_hypothesis(state, "timeout", ev,
-                           "Downstream service phản hồi chậm gây timeout lan lên",
-                           keywords=["timeout", "latency", "chậm"])
-
-    if tool == "get_metrics" and ("lệch" in summary_lower or "x baseline" in summary_lower):
-        _upsert_hypothesis(state, "latency_spike", ev,
-                           "Latency spike — có thể do code thay đổi hoặc dependency chậm",
-                           keywords=["latency", "spike", "lệch"])
-
-    if tool in ("get_metrics", "get_error_breakdown") and (
-        "pool" in summary_lower or "exhaustion" in summary_lower or "wait_time" in summary_lower
-    ):
-        _upsert_hypothesis(state, "pool_exhaustion", ev,
-                           "Connection pool exhaustion — quá nhiều kết nối đồng thời",
-                           keywords=["pool", "exhaustion", "connection", "wait_time"])
-
-    if tool in ("get_dependencies", "get_error_breakdown") and (
-        "unavailable" in summary_lower or "serviceunavailable" in summary_lower
-        or "503" in summary_lower or "sập" in summary_lower
-    ):
-        _upsert_hypothesis(state, "provider_down", ev,
-                           "Provider/dependency ngoài bị sập",
-                           keywords=["provider", "unavailable", "sập"])
-
-    # --- Cập nhật lifecycle cho hypothesis đã có ---
+    # --- Phase 2: Cập nhật lifecycle cho hypothesis đã có ---
     ev_words = set(re.findall(r'\w+', summary_lower))
     for hyp in state.hypotheses:
         if hyp.status == "ruled_out":
-            continue  # không tái xử lý hypothesis đã loại trừ
+            continue
 
-        rel_cfg = _HYPOTHESIS_RELEVANCE.get(hyp.id, {})
-        rel_tools: set = rel_cfg.get("tools", set())
-        confirm_kws: set = rel_cfg.get("confirm_kws", set())
-        rule_out_kws: set = rel_cfg.get("rule_out_kws", set())
-        confirm_conf: str = rel_cfg.get("confirm_conf", "medium")
+        entry = catalog_index.get(hyp.id)
+        if not entry:
+            continue  # hypothesis không có trong catalog → bỏ qua lifecycle update
 
-        # Kiểm liên quan: tool match HOẶC keyword overlap với hyp.keywords
+        rel_tools = entry.relevant_tools
+        confirm_kws = entry.confirm_kws
+        rule_out_kws = entry.rule_out_kws
+        confirm_conf = entry.confirm_conf
+
         hyp_kw_set = set(hyp.keywords)
         is_relevant = (
             tool in rel_tools
@@ -475,19 +423,16 @@ def _update_hypotheses(state: InvestigationState, ev: Evidence) -> None:
             or bool(confirm_kws & ev_words)
         )
         if not is_relevant:
-            continue  # bằng chứng không liên quan → bỏ qua
+            continue
 
-        # Gắn evidence vào hypothesis
         if ev.id not in hyp.evidence_ids:
             hyp.evidence_ids.append(ev.id)
 
-        # Rule-out: bằng chứng mâu thuẫn
         if rule_out_kws and any(kw in summary_lower for kw in rule_out_kws):
             hyp.status = "ruled_out"
             logger.debug("Hypothesis '%s' ruled_out bởi evidence: %s", hyp.id, ev.summary[:60])
             continue
 
-        # Confirm: bằng chứng xác nhận mạnh
         if hyp.status == "open" and confirm_kws and any(kw in summary_lower for kw in confirm_kws):
             hyp.status = "confirmed"
             hyp.confidence = confirm_conf
@@ -593,6 +538,34 @@ def _parse_verdict(text: str, state: InvestigationState) -> Verdict:
     )
 
 
+def _check_stop_conditions(state: "InvestigationState") -> Optional[str]:
+    """E7: Kiểm điều kiện dừng — dùng chung cho cả while-loop path lẫn LangGraph path.
+
+    Trả verdict_text (str) nếu nên dừng, trả None nếu tiếp tục.
+    Mutate state.stop_reason và state.finished khi dừng.
+    """
+    if state.steps_taken >= state.step_budget:
+        state.stop_reason = "budget"
+        state.finished = True
+        return (
+            "VERDICT:\nRoot cause: Chưa xác định được trong ngân sách bước.\n"
+            "Độ tin: CHƯA ĐỦ BẰNG CHỨNG\n"
+            f"Bằng chứng: Đã đi {state.steps_taken} bước, chưa kết luận.\n"
+            "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
+        )
+    if state.is_looping():
+        state.stop_reason = "loop_detected"
+        state.finished = True
+        last_summary = state.evidence[-1].summary if state.evidence else "N/A"
+        return (
+            "VERDICT:\nRoot cause: Phát hiện vòng lặp tool — dừng sớm.\n"
+            "Độ tin: THẤP\n"
+            f"Bằng chứng: {last_summary}\n"
+            "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
+        )
+    return None
+
+
 def _emit_trace(
     investigation_id: str,
     step: int,
@@ -631,10 +604,21 @@ class InvestigationEngine:
     Public interface không đổi: run() → InvestigationState.
     """
 
-    def __init__(self, llm: LLMClient, tools: List[Tool], step_budget: int = 10) -> None:
+    def __init__(
+        self,
+        llm: LLMClient,
+        tools: List[Tool],
+        step_budget: int = 10,
+        hypothesis_catalog=None,
+    ) -> None:
         self.llm = llm
         self.tools = tools
         self.step_budget = step_budget
+        # E6: build catalog index cho domain (default microservice)
+        from agent.engine.hypothesis_catalog import MICROSERVICE_CATALOG, build_catalog_index
+        self._catalog_index = build_catalog_index(
+            hypothesis_catalog if hypothesis_catalog is not None else MICROSERVICE_CATALOG
+        )
         # Try compile LangGraph (lazy — lỗi import thì fallback)
         self._graph = None
         try:
@@ -665,6 +649,7 @@ class InvestigationEngine:
             project_id=project_id,
             available_services=available_services or [],
             warm_start_hint=warm_start_hint,
+            hypothesis_catalog_index=self._catalog_index,  # E6: domain catalog
         )
 
         logger.info("[%s] [%s] Bắt đầu điều tra (via %s): %s",
@@ -786,26 +771,10 @@ class InvestigationEngine:
         verdict_text: Optional[str] = None
 
         while not state.finished:
-            if state.steps_taken >= state.step_budget:
-                state.stop_reason = "budget"
-                state.finished = True
-                verdict_text = (
-                    "VERDICT:\nRoot cause: Chưa xác định được trong ngân sách bước.\n"
-                    "Độ tin: CHƯA ĐỦ BẰNG CHỨNG\n"
-                    f"Bằng chứng: Đã đi {state.steps_taken} bước, chưa kết luận.\n"
-                    "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
-                )
-                break
-
-            if state.is_looping():
-                state.stop_reason = "loop_detected"
-                state.finished = True
-                verdict_text = (
-                    "VERDICT:\nRoot cause: Phát hiện vòng lặp tool — dừng sớm.\n"
-                    "Độ tin: THẤP\n"
-                    f"Bằng chứng: {state.evidence[-1].summary if state.evidence else 'N/A'}\n"
-                    "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
-                )
+            # E7: điều kiện dừng dùng chung với LangGraph path
+            stop_vtext = _check_stop_conditions(state)
+            if stop_vtext:
+                verdict_text = stop_vtext
                 break
 
             current_step = state.steps_taken

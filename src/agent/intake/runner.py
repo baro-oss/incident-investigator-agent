@@ -145,8 +145,12 @@ async def run_investigation_background(
                 logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_servers), mcp_urls)
                 mcp_clients = await _connect_mcp_clients(mcp_servers)
 
-            # Xây tool registry: fintech hoặc local + MCP
-            if getattr(req, "domain", "microservice") == "fintech":
+            # Xây tool registry + hypothesis catalog theo domain
+            domain = getattr(req, "domain", "microservice")
+            from agent.engine.hypothesis_catalog import get_default_catalog
+            hypothesis_catalog = get_default_catalog(domain)
+
+            if domain == "fintech":
                 from agent.tools.registry_fintech import get_fintech_tool_registry
                 tools = get_fintech_tool_registry()
                 logger.info("[%s] Dùng Fintech tool registry (%d tools)", key, len(tools))
@@ -183,10 +187,16 @@ async def run_investigation_background(
 
             # Chọn engine: MultiAgent (parallel) hoặc single-agent (LangGraph)
             if req.multi_agent:
-                engine_obj = MultiAgentEngine(llm=llm, all_tools=tools, step_budget=step_budget)
+                engine_obj = MultiAgentEngine(
+                    llm=llm, all_tools=tools, step_budget=step_budget,
+                    hypothesis_catalog=hypothesis_catalog,
+                )
                 logger.info("[%s] Dùng MultiAgentEngine (parallel specialists)", key)
             else:
-                engine_obj = InvestigationEngine(llm=llm, tools=tools, step_budget=step_budget)
+                engine_obj = InvestigationEngine(
+                    llm=llm, tools=tools, step_budget=step_budget,
+                    hypothesis_catalog=hypothesis_catalog,
+                )
 
             state = await asyncio.wait_for(
                 engine_obj.run(

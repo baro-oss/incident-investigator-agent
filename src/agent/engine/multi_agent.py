@@ -64,10 +64,13 @@ class MultiAgentEngine:
         llm: LLMClient,
         all_tools: List[Tool],
         step_budget: int = 10,
+        hypothesis_catalog=None,
     ) -> None:
         self.llm = llm
         self.all_tools = all_tools
         self.specialist_budget = max(3, step_budget // 2)
+        # E6: catalog cho domain — truyền xuống từng specialist engine
+        self._hypothesis_catalog = hypothesis_catalog
 
         self.log_tools = [t for t in all_tools if t.name in _LOG_TOOLS]
         self.metric_tools = [t for t in all_tools if t.name in _METRIC_TOOLS]
@@ -183,7 +186,10 @@ class MultiAgentEngine:
         """Chạy một specialist engine với tool set giới hạn."""
         logger.info("[%s] %s bắt đầu (%d tools)",
                     sub_id, role, len(tools))
-        engine = InvestigationEngine(self.llm, tools, self.specialist_budget)
+        engine = InvestigationEngine(
+            self.llm, tools, self.specialist_budget,
+            hypothesis_catalog=self._hypothesis_catalog,
+        )
         state = await engine.run(
             symptom=symptom,
             time_window=time_window,
@@ -235,12 +241,25 @@ class MultiAgentEngine:
         merged.evidence = combined
         merged.steps_taken = len(combined)
 
-        # Gộp hypotheses (dedup theo content)
-        seen_contents: set = set()
+        # E7: Gộp hypotheses — dedup theo content, prefer confirmed/higher-confidence/more-evidence
+        _rank = {"high": 3, "medium": 2, "low": 1}
+        content_to_hyp: dict = {}
         for h in log_state.hypotheses + metric_state.hypotheses:
-            if h.content not in seen_contents:
-                seen_contents.add(h.content)
-                merged.hypotheses.append(h)
+            existing = content_to_hyp.get(h.content)
+            if existing is None:
+                content_to_hyp[h.content] = h
+            else:
+                # Prefer confirmed over open; tiebreak: higher confidence then more evidence
+                def _score(x):
+                    status_rank = 2 if x.status == "confirmed" else (1 if x.status == "open" else 0)
+                    return (status_rank, _rank.get(x.confidence or "", 0), len(x.evidence_ids))
+                if _score(h) > _score(existing):
+                    # Merge evidence_ids from both into winner
+                    h.evidence_ids = list(set(existing.evidence_ids + h.evidence_ids))
+                    content_to_hyp[h.content] = h
+                else:
+                    existing.evidence_ids = list(set(existing.evidence_ids + h.evidence_ids))
+        merged.hypotheses = list(content_to_hyp.values())
 
         # Gộp tool call history
         merged.tool_call_history = (
@@ -325,6 +344,23 @@ class MultiAgentEngine:
         # E2: kiểm evidence grounding cho multi-agent verdict
         from agent.engine.loop import _check_evidence_grounding
         merged.verdict = _check_evidence_grounding(merged.verdict, merged.evidence)
+
+        # E7: conflict resolution — ngang hàng single-agent path
+        winner = merged.resolve_conflicting_hypotheses()
+        n_confirmed = sum(1 for h in merged.hypotheses if h.status == "confirmed")
+        if winner and n_confirmed > 1:
+            conflict_note = (
+                f" [Conflict resolved: {n_confirmed} confirmed; winner={winner.id}"
+                f" conf={winner.confidence} ev={len(winner.evidence_ids)}]"
+            )
+            merged.verdict.competing_hypotheses = (
+                (merged.verdict.competing_hypotheses or "") + conflict_note
+            )
+            logger.info(
+                "[%s] Multi-agent conflict resolution: %d confirmed → winner=%s (%s)",
+                investigation_id, n_confirmed, winner.id, winner.confidence,
+            )
+
         merged.stop_reason = "verdict"
         merged.finished = True
 

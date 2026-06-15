@@ -273,3 +273,210 @@ class TestConflictResolution:
 
         winner = sample_state.resolve_conflicting_hypotheses()
         assert winner is h_conf
+
+
+# ── E6: Hypothesis catalog domain-agnostic (Ngày 36) ─────────────────────────
+
+class TestHypothesisCatalog:
+    """Verify catalog-driven _update_hypotheses — engine không hardcode domain knowledge."""
+
+    def _make_obs(self, tool: str, summary: str) -> Observation:
+        return Observation(
+            summary=summary, aggregates={}, samples=[], total_count=1,
+            truncated=False, metadata={"tool_name": tool},
+        )
+
+    def test_microservice_deploy_confirmed(self, sample_state):
+        from agent.engine.hypothesis_catalog import MICROSERVICE_CATALOG, build_catalog_index
+        from agent.engine.loop import _update_hypotheses
+        sample_state.hypothesis_catalog_index = build_catalog_index(MICROSERVICE_CATALOG)
+
+        ev = sample_state.add_evidence(
+            0, "get_recent_deploys", {},
+            self._make_obs("get_recent_deploys",
+                           "Tìm thấy 1 deployment: v2.3.1 tại 14:03 — TimeoutException tăng sau deploy"),
+        )
+        _update_hypotheses(sample_state, ev)
+
+        tags = {h.id for h in sample_state.hypotheses}
+        assert "deploy" in tags
+        deploy_hyp = next(h for h in sample_state.hypotheses if h.id == "deploy")
+        assert deploy_hyp.status in ("open", "confirmed")
+
+    def test_microservice_deploy_ruled_out(self, sample_state):
+        from agent.engine.hypothesis_catalog import MICROSERVICE_CATALOG, build_catalog_index
+        from agent.engine.loop import _update_hypotheses
+        sample_state.hypothesis_catalog_index = build_catalog_index(MICROSERVICE_CATALOG)
+
+        ev = sample_state.add_evidence(
+            0, "get_recent_deploys", {},
+            self._make_obs("get_recent_deploys", "Không tìm thấy deployment nào trong 1 giờ qua."),
+        )
+        _update_hypotheses(sample_state, ev)
+
+        deploy_hyp = next((h for h in sample_state.hypotheses if h.id == "deploy"), None)
+        assert deploy_hyp is not None
+        assert deploy_hyp.status == "ruled_out"
+
+    def test_fintech_processor_timeout_confirmed(self, sample_state):
+        from agent.engine.hypothesis_catalog import FINTECH_CATALOG, build_catalog_index
+        from agent.engine.loop import _update_hypotheses
+        sample_state.hypothesis_catalog_index = build_catalog_index(FINTECH_CATALOG)
+
+        ev = sample_state.add_evidence(
+            0, "get_transaction_anomaly", {},
+            self._make_obs("get_transaction_anomaly",
+                           "proc-alpha: fail_rate 65% (32.5x baseline 2%) trong 10:15-11:00. "
+                           "Kênh credit_card: lỗi chủ đạo là ProcessorTimeout (5200)."),
+        )
+        _update_hypotheses(sample_state, ev)
+
+        tags = {h.id for h in sample_state.hypotheses}
+        assert "processor_timeout" in tags
+        # Không tạo hypothesis microservice
+        assert "deploy" not in tags
+        assert "pool_exhaustion" not in tags
+
+    def test_fintech_price_bug_confirmed(self, sample_state):
+        from agent.engine.hypothesis_catalog import FINTECH_CATALOG, build_catalog_index
+        from agent.engine.loop import _update_hypotheses
+        sample_state.hypothesis_catalog_index = build_catalog_index(FINTECH_CATALOG)
+
+        ev = sample_state.add_evidence(
+            0, "get_merchant_status", {},
+            self._make_obs("get_merchant_status",
+                           "merch-buzz (Buzz Commerce, retail): status=chờ xử lý. "
+                           "Notes: 'price_bug_reported'. Đang điều tra lỗi định giá."),
+        )
+        _update_hypotheses(sample_state, ev)
+
+        tags = {h.id for h in sample_state.hypotheses}
+        assert "price_configuration_error" in tags
+        price_hyp = next(h for h in sample_state.hypotheses if h.id == "price_configuration_error")
+        assert price_hyp.status in ("open", "confirmed")
+
+    def test_fintech_no_anomaly_ruled_out(self, sample_state):
+        from agent.engine.hypothesis_catalog import FINTECH_CATALOG, build_catalog_index
+        from agent.engine.loop import _update_hypotheses
+        sample_state.hypothesis_catalog_index = build_catalog_index(FINTECH_CATALOG)
+
+        ev = sample_state.add_evidence(
+            0, "get_transaction_anomaly", {},
+            self._make_obs("get_transaction_anomaly",
+                           "Không phát hiện merchant bất thường. fail_rate và refund_rate bình thường."),
+        )
+        _update_hypotheses(sample_state, ev)
+
+        # hypothesis tạo ra nhưng phải ruled_out (không phát hiện → rule_out_kws match)
+        for h in sample_state.hypotheses:
+            if h.id in ("processor_timeout", "price_configuration_error"):
+                assert h.status == "ruled_out", f"{h.id} should be ruled_out"
+
+    def test_empty_catalog_no_crash(self, sample_state):
+        from agent.engine.loop import _update_hypotheses
+        sample_state.hypothesis_catalog_index = {}  # empty → fallback microservice, no crash
+
+        ev = sample_state.add_evidence(
+            0, "get_metrics", {},
+            self._make_obs("get_metrics", "latency lệch 9x baseline"),
+        )
+        _update_hypotheses(sample_state, ev)  # must not crash
+
+
+# ── E7: Stop conditions shared helper + multi-agent parity (Ngày 37) ─────────
+
+class TestStopConditionsShared:
+    """Verify _check_stop_conditions được dùng bởi cả 2 path (loop + graph)."""
+
+    def test_budget_exhausted_returns_verdict_text(self, sample_state):
+        from agent.engine.loop import _check_stop_conditions
+        sample_state.steps_taken = sample_state.step_budget  # đúng ngưỡng
+        result = _check_stop_conditions(sample_state)
+        assert result is not None
+        assert "VERDICT" in result
+        assert sample_state.stop_reason == "budget"
+        assert sample_state.finished is True
+
+    def test_budget_not_exhausted_returns_none(self, sample_state):
+        from agent.engine.loop import _check_stop_conditions
+        sample_state.steps_taken = 0
+        result = _check_stop_conditions(sample_state)
+        assert result is None
+        assert sample_state.finished is False
+
+    def test_loop_detected_returns_verdict_text(self, sample_state):
+        from agent.engine.loop import _check_stop_conditions
+        # Tạo ABABAB oscillation
+        for _ in range(3):
+            sample_state.tool_call_history.append({"name": "get_metrics", "params": {"s": "x"}})
+            sample_state.tool_call_history.append({"name": "get_error_breakdown", "params": {"s": "x"}})
+        result = _check_stop_conditions(sample_state)
+        assert result is not None
+        assert "VERDICT" in result
+        assert sample_state.stop_reason == "loop_detected"
+
+    def test_both_conditions_false_returns_none(self, sample_state):
+        from agent.engine.loop import _check_stop_conditions
+        sample_state.steps_taken = 3
+        sample_state.tool_call_history = [{"name": "get_metrics", "params": {}}]
+        result = _check_stop_conditions(sample_state)
+        assert result is None
+
+
+class TestMultiAgentParity:
+    """Multi-agent merge + synthesis ngang hàng single-agent."""
+
+    def test_merge_states_prefers_confirmed_hypothesis(self):
+        from agent.engine.multi_agent import MultiAgentEngine
+        from agent.tools.contracts import Observation as Obs
+
+        def _make_state(inv_id):
+            return InvestigationState(
+                investigation_id=inv_id,
+                symptom="test",
+                time_window="14:00-15:00",
+                scenario="scenario1",
+                date="2024-01-15",
+            )
+
+        # log_state: hypothesis open
+        log_state = _make_state("log_001")
+        h_open = log_state.add_hypothesis("Deploy bug — open")
+        h_open.status = "open"
+        h_open.confidence = None
+
+        # metric_state: same content, confirmed
+        metric_state = _make_state("metric_001")
+        h_conf = metric_state.add_hypothesis("Deploy bug — open")  # same content
+        h_conf.status = "confirmed"
+        h_conf.confidence = "high"
+        obs = Obs(summary="x", aggregates={}, samples=[], total_count=1, truncated=False, metadata={})
+        ev = metric_state.add_evidence(0, "get_recent_deploys", {}, obs)
+        h_conf.evidence_ids.append(ev.id)
+
+        engine = MultiAgentEngine.__new__(MultiAgentEngine)
+        engine._hypothesis_catalog = None
+        merged = engine._merge_states(
+            log_state, metric_state,
+            "test-001", "test", "14:00-15:00", "scenario1", "2024-01-15",
+            "default", [], None,
+        )
+
+        assert len(merged.hypotheses) == 1
+        assert merged.hypotheses[0].status == "confirmed"
+        assert merged.hypotheses[0].confidence == "high"
+
+    def test_conflict_resolution_annotation_in_synthesis(self, sample_state):
+        # Verify resolve_conflicting_hypotheses trả winner khi >1 confirmed
+        h1 = sample_state.add_hypothesis("Hypothesis A")
+        h1.status = "confirmed"
+        h1.confidence = "high"
+        h1.evidence_ids = ["ev1", "ev2"]
+
+        h2 = sample_state.add_hypothesis("Hypothesis B")
+        h2.status = "confirmed"
+        h2.confidence = "medium"
+        h2.evidence_ids = ["ev3"]
+
+        winner = sample_state.resolve_conflicting_hypotheses()
+        assert winner is h1  # high beats medium

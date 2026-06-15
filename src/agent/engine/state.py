@@ -84,6 +84,10 @@ class InvestigationState:
     # E4: Gate cạnh tranh — chỉ nudge 1 lần; tránh vòng lặp vô hạn
     _competing_gate_fired: bool = False
 
+    # E6: Catalog giả thuyết theo domain — set bởi engine khi khởi tạo investigation.
+    # Dict[tag, HypothesisCatalogEntry]; để Dict plain tránh circular import với hypothesis_catalog.py
+    hypothesis_catalog_index: dict = field(default_factory=dict)
+
     def add_evidence(self, step: int, tool_name: str, params: Dict[str, Any],
                      obs: Observation) -> Evidence:
         ev = Evidence(

@@ -4,8 +4,8 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 7 (Ngày 31–35) ✅ HOÀN TẤT.
-**Cổng kiểm gần nhất:** Ngày 35 — 63/63 tests PASS · Engine smoke PASS · SSE seam OK · Docker OK · Gate PASS
+**Giai đoạn:** Phase 8 (Ngày 36–45) 🔄 ĐANG TIẾN HÀNH. Đã xong: Ngày 36 (E6) + Ngày 37 (E7).
+**Cổng kiểm gần nhất:** Ngày 36–37 — 75/75 tests PASS · eval 4/4 PASS · E6 fintech catalog · E7 shared stop
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -86,7 +86,75 @@
 | 34 | Deployment & DX | Docker + docker-compose · Investigation export JSON/CSV · Tool unit tests (63/63) | ✅ |
 | 35 | Production bridge + close | Redis SSE seam (stub+factory) · Phase 7 gate PASS | ✅ |
 
+## Tiến độ Phase 8 (docs/13-roadmap-phase-8.md) — ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 36 | E6 — Engine domain-agnostic | Rút `_HYPOTHESIS_RELEVANCE` khỏi engine → catalog theo miền (cạnh tool registry) + catalog fintech | ✅ |
+| 37 | E7 — Hợp nhất path + parity | 1 nguồn stop/gate cho loop+graph · multi-agent ngang hàng (grounding+conflict+merge evidence_id) | ✅ |
+| 38 | E8 — Real-LLM eval + calib | Smoke mở rộng (~$2) · feed ngưỡng calibration ngược vào engine (đóng vòng E3) | ☐ |
+| 39 | T1 — Test adapters/output | 8 intake adapter + 5 output renderer (mỗi cái ≥3 ca) | ☐ |
+| 40 | T1 — Test infra + contract | queue/scheduler/registry/crypto + guard nguyên tắc #1 (Observation hợp lệ) | ☐ |
+| 41 | T2 — CI gate tự động | GitHub Actions: pytest + mock eval 4/4 + syntax/import + coverage | ☐ |
+| 42 | P1 — Cost + perf | Prompt caching (prefix ổn định) + gọn context | ☐ |
+| 43 | E9 — Structured verdict thẳng | args→Verdict trực tiếp (bỏ vòng args→text→parse) + cờ parse_degraded | ☐ |
+| 44 | DX + docs | README gốc + Makefile + gộp API docs + polish demo 7 phút | ☐ |
+| 45 | Hardening + Cổng Phase 8 | Audit config/security + đóng pha | ☐ |
+
+**Chốt Phase 8:** Day 38 = smoke mở rộng ~$2 (KHÔNG full N=10) · horizontal scale seam vẫn Future (Redis SSE giữ stub) · Tier-2/bidirectional vẫn Future.
+**Xương sống KHÔNG cắt:** D36 · D37 · D39 · D41.
+
 ## Nhật ký session (mới nhất lên đầu)
+
+### [Session 40 — 2026-06-15] — Ngày 36–37: E6 domain-agnostic catalog + E7 unified stop/parity
+
+**Bối cảnh:** Phase 8 khởi động. Tiếp tục từ context tóm tắt — code engine đã xong, chỉ cần thêm tests + verify gates.
+
+**Ngày 36 — E6: Engine domain-agnostic:**
+- `src/agent/engine/hypothesis_catalog.py` (mới) — `HypothesisCatalogEntry` dataclass · `MICROSERVICE_CATALOG` (5 entries, di chuyển từ `_HYPOTHESIS_RELEVANCE`) · `FINTECH_CATALOG` (4 entries: processor_timeout, price_configuration_error, merchant_fraud, settlement_lag) · `get_default_catalog()` · `build_catalog_index()`
+- `src/agent/engine/state.py` — thêm `hypothesis_catalog_index: dict` vào `InvestigationState`
+- `src/agent/engine/loop.py` — xóa `_HYPOTHESIS_RELEVANCE` hardcode · `_update_hypotheses` catalog-driven (load từ `state.hypothesis_catalog_index`, fallback MICROSERVICE nếu rỗng) · `InvestigationEngine.__init__` nhận `hypothesis_catalog=None`, build index · `.run()` set `state.hypothesis_catalog_index`
+- `src/agent/intake/runner.py` — detect `domain`, gọi `get_default_catalog(domain)`, truyền `hypothesis_catalog` xuống cả hai engine
+
+**Ngày 37 — E7: Unified stop conditions + multi-agent parity:**
+- `src/agent/engine/loop.py` — `_check_stop_conditions(state)` helper dùng chung (budget check + loop detection) với đầy đủ side-effect (set `stop_reason`, `finished`, return verdict text)
+- `src/agent/engine/graph.py` — `decide_node` thay inline stop logic bằng import `_check_stop_conditions` từ loop
+- `src/agent/engine/multi_agent.py` — `__init__` nhận `hypothesis_catalog` · `_run_specialist` truyền catalog xuống · `_merge_states` dedup hypotheses theo content (prefer confirmed > open; tiebreak confidence > evidence count; merge evidence_ids) · `_synthesize_verdict` thêm `resolve_conflicting_hypotheses()` + conflict annotation (ngang hàng single-agent)
+
+**Tests (Ngày 36+37) — thêm 12 tests:**
+- `TestHypothesisCatalog` (6): microservice deploy confirmed/ruled_out · fintech processor_timeout confirmed · fintech price_bug confirmed · no anomaly → ruled_out · empty catalog no crash
+- `TestStopConditionsShared` (4): budget exhausted → verdict text + side-effects · not exhausted → None · loop detected → verdict text · both false → None
+- `TestMultiAgentParity` (2): merge prefers confirmed hypothesis · conflict resolution returns correct winner
+
+**Cổng Ngày 36–37:**
+- 75/75 tests PASS (63 cũ + 12 mới)
+- eval 4/4 PASS (mock, regression OK)
+- Engine không còn hardcode domain keyword (`_HYPOTHESIS_RELEVANCE` đã xóa hoàn toàn)
+- LangGraph `decide_node` và `_run_loop` dùng chung `_check_stop_conditions` — parity đảm bảo về cấu trúc
+
+### [Session 39 — 2026-06-15] — Lập kế hoạch Phase 8 (Ngày 36–45)
+
+**Bối cảnh:** 35/35 ngày + Phase 7 xong (63/63 tests). Session này KHÔNG code — đọc toàn bộ trạng thái + **đọc kỹ code engine** (`loop.py`, `state.py`, `graph.py`, `multi_agent.py`) để đánh giá khách quan sau 7 phase → tổng hợp + chốt Phase 8.
+
+**Phát hiện chính (cơ sở Phase 8):**
+- **E6 (nghiêm trọng):** vòng đời giả thuyết **hardcode theo miền microservice + keyword tiếng Việt** (`loop.py:_HYPOTHESIS_RELEVANCE` 5 tag + `_update_hypotheses` match chuỗi). Tool fintech (`get_revenue_breakdown`…) không khớp tag nào → **fintech investigation có 0 hypothesis** → cổng cạnh tranh E4 không kích hoạt cho fintech. Engine nuốt domain knowledge — **vi phạm ngầm nguyên tắc #2**.
+- **E7:** 2 đường engine trùng logic stop/gate (`_run_loop` ↔ `decide_node`); multi-agent `_synthesize_verdict` thiếu competing gate + `resolve_conflicting_hypotheses` (Ngày 33 chỉ thêm vào `InvestigationEngine.run`); merge dedup-content-string ngây thơ.
+- **E8:** real-LLM eval chỉ smoke 6/6 một lần; calibration (E3) chỉ hiển thị dashboard, chưa feed ngược vào engine.
+- **E9:** structured verdict đi vòng args→text→parse (`_structured_args_to_verdict_text` → `_parse_verdict`).
+- **T1/T2:** 63 test chỉ phủ engine_core/auth/tools — thiếu 8 adapter, 5 output, queue, scheduler, multi-agent, graph, registry, crypto; không có CI.
+- **P1/P2:** không dùng prompt caching (~$0.17/run); nguyên tắc #1 (chống raw rows) không enforce bằng máy.
+
+**Đã làm (4 file, không động code):**
+- `docs/13-roadmap-phase-8.md` (mới) — kế hoạch Ngày 36–45, format Làm/Cổng như docs/11–12. Engine-quality round 2 + test/CI + cost/DX.
+- `CLAUDE.md` — header giai đoạn + bảng Phase 8 + roadmap pitch + cấu trúc file (docs/13).
+- `BUILD_STATE.md` — header trạng thái + bảng Tiến độ Phase 8 + entry này.
+
+**Quyết định chốt (qua AskUserQuestion):**
+- **Day 38 real-LLM eval = SMOKE MỞ RỘNG (~$2)** — KHÔNG full N=10 (~$10). Khớp pattern tiết kiệm đã chọn ở Day 21.
+- **Horizontal scale seam → vẫn Future** — giữ in-memory single-process, Redis SSE giữ stub (tránh over-engineer khi chưa có nhu cầu multi-instance thật).
+- **Tier-2 Postgres · bidirectional output → vẫn Future** (như Phase 6).
+
+**Chưa làm:** chưa bắt đầu code Ngày 36 (chờ session sau xác nhận khởi động).
 
 ### [Session 31 — 2026-06-14] — Lập kế hoạch Phase 6 (Ngày 26–30)
 

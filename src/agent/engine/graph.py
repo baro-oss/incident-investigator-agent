@@ -41,7 +41,7 @@ class LoopState(TypedDict, total=False):
 
 async def decide_node(state: LoopState) -> Dict[str, Any]:
     """Decide node: check stop conditions → call decide_next_action."""
-    from agent.engine.loop import decide_next_action, _emit_trace
+    from agent.engine.loop import decide_next_action, _emit_trace, _check_stop_conditions
 
     inv = state["inv"]
     llm = state["llm"]
@@ -52,35 +52,10 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
     investigation_id = inv.investigation_id
     current_step = inv.steps_taken
 
-    # --- Stop conditions (top of original while loop) ---
-    if inv.steps_taken >= inv.step_budget:
-        inv.stop_reason = "budget"
-        inv.finished = True
-        return {
-            "inv": inv,
-            "verdict_text": (
-                "VERDICT:\nRoot cause: Chưa xác định được trong ngân sách bước.\n"
-                "Độ tin: CHƯA ĐỦ BẰNG CHỨNG\n"
-                f"Bằng chứng: Đã đi {inv.steps_taken} bước, chưa kết luận.\n"
-                "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
-            ),
-            "tool_call": None,
-        }
-
-    if inv.is_looping():
-        inv.stop_reason = "loop_detected"
-        inv.finished = True
-        last_summary = inv.evidence[-1].summary if inv.evidence else "N/A"
-        return {
-            "inv": inv,
-            "verdict_text": (
-                "VERDICT:\nRoot cause: Phát hiện vòng lặp tool — dừng sớm.\n"
-                "Độ tin: THẤP\n"
-                f"Bằng chứng: {last_summary}\n"
-                "Lan truyền: Không rõ\nGiả thuyết cạnh tranh: Chưa loại trừ đủ"
-            ),
-            "tool_call": None,
-        }
+    # --- E7: Stop conditions — dùng chung với while-loop path ---
+    stop_vtext = _check_stop_conditions(inv)
+    if stop_vtext:
+        return {"inv": inv, "verdict_text": stop_vtext, "tool_call": None}
 
     tracer.start_step(current_step)
 
