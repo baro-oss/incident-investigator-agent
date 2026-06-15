@@ -487,8 +487,8 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
     # Decrypt llm_config for display in form
     from agent.security import decrypt_secret
     import json as _json
-    raw_cfg_str = decrypt_secret(p["llm_config"]) if p.get("llm_config") else None
     try:
+        raw_cfg_str = decrypt_secret(p["llm_config"]) if p["llm_config"] else None
         llm_config_raw = _json.loads(raw_cfg_str) if raw_cfg_str else None
     except Exception:
         llm_config_raw = None
