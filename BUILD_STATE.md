@@ -6,8 +6,8 @@
 
 **Giai đoạn:** Phase 6 📋 (Ngày 26–30, đang thực hiện).
 **Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
-**Cổng kiểm gần nhất:** Ngày 29 — B3 investigation queue ✅ · A1 graceful shutdown ✅ · B4 rate limiting ✅ · D sidebar grouping ✅ · E default light mode ✅
-**Việc kế tiếp:** Ngày 30 (Ecosystem + close — C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 root cause clustering · Cổng Phase 6).
+**Cổng kiểm gần nhất:** Ngày 30 — F2 nav fix ✅ · F1 demo theme ✅ · C1 PagerDuty/OpsGenie ✅ · C4 callback ✅ · D3 clustering ✅ · Regression 4/4 ✅
+**Phase 6 HOÀN TẤT (30/30 ngày). Việc kế tiếp:** Future — Tier-2 Postgres · Bidirectional integrations · Horizontal scale.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -74,7 +74,7 @@
 | 27 | Engine intelligence | E4 stop/loop thông minh + cổng giả thuyết cạnh tranh · E3/D1 calibration · D2 baseline auto-update | ✅ |
 | 28 | Security + custom LLM | A4 API token webhook · A2 secret at-rest · A3 trace retention · per-project LLM endpoint riêng (model/url/header, fallback default) | ✅ |
 | 29 | Reliability infra | A1 graceful shutdown · B3 investigation queue (in-process) · B4 rate limiting | ✅ |
-| 30 | Ecosystem + close | C1 PagerDuty/OpsGenie · C3 deploy hook · C4 callback · D3 clustering · Cổng Phase 6 | 📋 |
+| 30 | Ecosystem + close | C1 PagerDuty/OpsGenie · C4 callback · D3 clustering · F1 demo theme · F2 nav fix · Cổng Phase 6 | ✅ |
 
 **Defer → Future:** B1 Tier-2 Postgres (cần lệnh rõ + env) · C2 bidirectional (phá READ-ONLY, cần duyệt) · B2 horizontal scale seam · D4 real MCP pack mở rộng.
 
@@ -102,6 +102,38 @@
 - **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
 - **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
 - **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 36 — 2026-06-15] — Ngày 30: Ecosystem + Close (Cổng Phase 6)
+
+**F2 — Fix nav Admin group ẩn khi click API Tokens:**
+- `router.py:admin_tokens_page` — thêm `_ctx()` wrapper, truyền `current_user` và `active='admin_tokens'` vào template. Trước đây dùng dict thuần → `current_user` không có → nhóm Admin không render.
+
+**F1 — Đồng bộ theme Demo với dashboard:**
+- `demo.html` — bỏ `body { background: #0a0c14; }` hardcode. Thêm inline script ngay sau `<body>`: đọc `localStorage ia-theme` (default `'light'`), áp `theme-light` class lên `document.body` đồng bộ trước render → không flash.
+
+**C1 — PagerDuty/OpsGenie intake adapter:**
+- `src/agent/intake/adapters/pagerduty.py` (mới) — xử lý v2 format (`messages[].incident`) và v3 format; chỉ trigger events; infer scenario từ title keywords.
+- `src/agent/intake/adapters/opsgenie.py` (mới) — xử lý action Create; timestamp từ milliseconds epoch; scenario từ `details.scenario` hoặc tags hoặc infer từ message.
+- `adapters/__init__.py` — đăng ký `pagerduty` và `opsgenie` vào `_ADAPTERS`.
+
+**C4 — Webhook callback outbound:**
+- `src/agent/output/callback.py` (mới) — `push_callback(state, callback_url)`: POST verdict structured JSON; `_build_callback_payload()` tạo dict: investigation_id, project_id, scenario, verdict (root_cause, confidence, evidence_summary, propagation, speculative).
+- `runner.py:run_investigation_background()` — sau `push_verdict()`, check `req.raw_payload.get('callback_url')` → gọi `push_callback()`.
+
+**D3 — Root cause clustering:**
+- `queries.py:get_recurring_incidents(project_id, threshold=2)` — query `investigation_patterns WHERE count >= threshold ORDER BY count DESC`. Tái dùng bảng đã có từ D12.
+- `router.py:/health` — gọi `get_recurring_incidents()`, pass `recurring_incidents` vào template.
+- `health.html` — thêm card "Recurring Incidents": bảng root_cause_type · service · project · count (badge màu) · avg_steps · updated_at. Badge ⚠️ khi count ≥ 5.
+
+**Cổng Phase 6 ✅ PASS:**
+- F2: `_ctx()` trong admin/tokens route ✅
+- F1: localStorage theme sync, không hardcode dark ✅
+- C1: PagerDuty parse service+scenario ✅; OpsGenie parse ms-epoch timestamp ✅; non-trigger/non-Create → None ✅; cả 2 đăng ký trong router ✅
+- C4: callback payload đúng cấu trúc ✅; runner wire callback_url ✅
+- D3: `get_recurring_incidents()` query đúng ✅; health route + template render ✅
+- Regression: 4/4 mock eval PASS ✅
+
+**C3 (GitHub/GitLab deploy hook) — bỏ khỏi scope theo yêu cầu người dùng → defer Future.**
 
 ### [Session 35 — 2026-06-15] — Ngày 29: Reliability Infra + UI Polish
 

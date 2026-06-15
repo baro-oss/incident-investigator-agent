@@ -640,3 +640,40 @@ def get_calibration_with_feedback() -> Dict[str, Any]:
     combined_out.sort(key=lambda x: order.get(x.get("confidence", ""), 9))
 
     return {"eval": eval_out, "feedback": feedback_out, "combined": combined_out}
+
+
+# ── D3: Root cause clustering ─────────────────────────────────────────────────
+
+def get_recurring_incidents(
+    project_id: Optional[str] = None,
+    threshold: int = 2,
+) -> List[Dict[str, Any]]:
+    """
+    D3: Group investigations theo root_cause_type từ investigation_patterns.
+    Trả các pattern xuất hiện >= threshold lần, sắp xếp theo count DESC.
+
+    project_id=None → tất cả projects (admin view).
+    """
+    conn = open_db()
+    if project_id:
+        rows = conn.execute(
+            """
+            SELECT project_id, service, root_cause_type, count, avg_steps, updated_at
+            FROM investigation_patterns
+            WHERE project_id = ? AND count >= ?
+            ORDER BY count DESC, updated_at DESC
+            """,
+            (project_id, threshold),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """
+            SELECT project_id, service, root_cause_type, count, avg_steps, updated_at
+            FROM investigation_patterns
+            WHERE count >= ?
+            ORDER BY count DESC, updated_at DESC
+            """,
+            (threshold,),
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

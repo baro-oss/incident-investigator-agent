@@ -121,6 +121,50 @@
 
 </div>
 
+<!-- D3: Root cause clustering -->
+<div class="card" style="margin-top:0">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <h3 style="margin:0">Recurring Incidents <span style="font-size:11px;color:var(--muted);font-weight:400">(root cause lặp ≥ 2 lần)</span></h3>
+    {% if recurring_incidents %}
+    <span class="badge badge-{{ 'high' if recurring_incidents|length > 3 else 'medium' }}">
+      {{ recurring_incidents|length }} pattern
+    </span>
+    {% endif %}
+  </div>
+  {% if recurring_incidents %}
+  <table style="width:100%;border-collapse:collapse;font-size:12px">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border)">
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Root Cause Type</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Service</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Project</th>
+        <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">Số lần</th>
+        <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">TB bước</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Cập nhật</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in recurring_incidents %}
+      <tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:7px 6px;font-weight:500">
+          {% if r.count >= 5 %}⚠️ {% endif %}{{ r.root_cause_type }}
+        </td>
+        <td style="padding:7px 6px"><code style="font-size:11px">{{ r.service }}</code></td>
+        <td style="padding:7px 6px;color:var(--muted)">{{ r.project_id }}</td>
+        <td style="padding:7px 6px;text-align:center">
+          <span class="badge badge-{{ 'high' if r.count >= 5 else 'medium' if r.count >= 3 else 'low' }}">{{ r.count }}×</span>
+        </td>
+        <td style="padding:7px 6px;text-align:center;color:var(--muted)">{{ r.avg_steps }}</td>
+        <td style="padding:7px 6px;color:var(--muted);font-size:11px">{{ r.updated_at[:16] if r.updated_at else '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:var(--muted);font-size:13px;margin:0">Chưa có pattern lặp lại nào. Chạy thêm investigations để tích lũy dữ liệu.</p>
+  {% endif %}
+</div>
+
 <div style="margin-top:16px">
   <a href="/dashboard/health" class="btn btn-ghost" style="font-size:12px">↺ Tải lại</a>
   <a href="/dashboard" class="btn btn-ghost" style="font-size:12px;margin-left:8px">← Investigations</a>

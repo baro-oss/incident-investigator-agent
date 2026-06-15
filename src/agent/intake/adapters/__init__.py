@@ -11,6 +11,8 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional
 
 from agent.intake.adapters.grafana import map_grafana
+from agent.intake.adapters.opsgenie import map_opsgenie
+from agent.intake.adapters.pagerduty import map_pagerduty
 from agent.intake.adapters.prometheus import map_prometheus
 from agent.intake.adapters.sentry import map_sentry
 from agent.intake.normalizer import InvestigationRequest
@@ -20,6 +22,8 @@ _ADAPTERS: Dict[str, Callable[[Dict[str, Any]], Optional[InvestigationRequest]]]
     "alertmanager": map_prometheus,   # alias phổ biến
     "grafana": map_grafana,
     "sentry": map_sentry,
+    "pagerduty": map_pagerduty,
+    "opsgenie": map_opsgenie,
 }
 
 

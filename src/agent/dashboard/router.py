@@ -369,6 +369,9 @@ async def dashboard_health(
     except Exception:
         pass
 
+    from agent.dashboard.queries import get_recurring_incidents
+    recurring = get_recurring_incidents(project_id=None, threshold=2)
+
     return templates.TemplateResponse("health.html", _ctx(request, user,
         active="health",
         limiter=limiter,
@@ -377,6 +380,7 @@ async def dashboard_health(
         model=model,
         llm_key_set=llm_key_set,
         mcp_servers=mcp_servers_raw,
+        recurring_incidents=recurring,
     ))
 
 
@@ -1068,14 +1072,13 @@ async def admin_tokens_page(
     users = list_users()
     return templates.TemplateResponse(
         "admin_tokens.html",
-        {
-            "request": request,
-            "user": user,
-            "tokens": tokens,
-            "users": users,
-            "new_token": new_token,
-            "new_token_name": new_token_name,
-        },
+        _ctx(request, user,
+             active="admin_tokens",
+             tokens=tokens,
+             users=users,
+             new_token=new_token,
+             new_token_name=new_token_name,
+        ),
     )
 
 

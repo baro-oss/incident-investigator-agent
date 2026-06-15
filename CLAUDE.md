@@ -29,15 +29,15 @@ Plan 20 ngày gốc: `docs/10-roadmap-20-ngay.md`. Plan Phase 5: `docs/11-roadma
 
 **Cổng Phase 5 PASS:** auth · cost · real-LLM eval · storage seam · Slack/MCP integration · replay diff · MCP auth · search · tool test-run.
 
-**Phase 6 — Engine Quality + Production-readiness (engine-first 2+2+1, chưa code):**
+**Phase 6 ✅ HOÀN TẤT (26–30):**
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
-| 26 | Engine core | Vòng đời giả thuyết thật (E1) · structured verdict (E5) · evidence-grounding guard (E2) | 📋 |
-| 27 | Engine intelligence | Stop/loop thông minh + cổng giả thuyết cạnh tranh (E4) · confidence calibration (E3/D1) · baseline auto-update (D2) | 📋 |
-| 28 | Security + custom LLM | API token webhook (A4) · secret at-rest (A2) · trace retention (A3) · per-project LLM endpoint riêng (model/url/header key, fallback default) | 📋 |
-| 29 | Reliability infra | Graceful shutdown (A1) · investigation queue in-process (B3) · rate limiting (B4) | 📋 |
-| 30 | Ecosystem + close | PagerDuty/OpsGenie + deploy hook + callback + clustering · Cổng Phase 6 | 📋 |
+| 26 | Engine core | Vòng đời giả thuyết thật (E1) · structured verdict (E5) · evidence-grounding guard (E2) | ✅ |
+| 27 | Engine intelligence | Stop/loop thông minh + cổng giả thuyết cạnh tranh (E4) · confidence calibration (E3/D1) | ✅ |
+| 28 | Security + custom LLM | API token webhook (A4) · secret at-rest (A2) · trace retention (A3) · per-project LLM endpoint riêng | ✅ |
+| 29 | Reliability infra | Graceful shutdown (A1) · investigation queue in-process (B3) · rate limiting (B4) · sidebar grouping · light mode | ✅ |
+| 30 | Ecosystem + close | PagerDuty/OpsGenie (C1) · callback outbound (C4) · root cause clustering (D3) · Cổng Phase 6 | ✅ |
 
 **Defer → Future:** Tier-2 Postgres (B1, cần lệnh rõ) · bidirectional output (C2, phá READ-ONLY) · horizontal scale seam (B2). Chi tiết: `docs/12-roadmap-phase-6.md`.
 

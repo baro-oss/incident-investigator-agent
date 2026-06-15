@@ -196,12 +196,14 @@ Day 30  Ecosystem + close     — C1 PagerDuty/OpsGenie + C3 deploy hook + C4 ca
 
 ## Ngày 30 — Ecosystem + Đóng Phase 6
 
-**Mục tiêu:** mở rộng biên nhận/đẩy (giữ READ-ONLY) + recurring-incident view + đóng pha.
+**Mục tiêu:** mở rộng biên nhận/đẩy (giữ READ-ONLY) + recurring-incident view + đóng pha + 2 UI fix.
 
-- **C1 — PagerDuty/OpsGenie intake adapter:** thêm adapter (route qua `X-Alert-Source`) → normalize → investigation. READ-ONLY: chỉ nhận alert, KHÔNG ack/resolve. Pattern giống 3 adapter có sẵn.
-- **C3 — GitHub/GitLab deploy hook (proactive):** webhook khi có release → auto-trigger "deploy mới có gây lỗi không?". Khớp kịch bản deploy-bug sẵn có. Đây là proactive mode (pull-style).
+- **F2 — Fix nav Admin group ẩn khi click API Tokens:** route `GET /dashboard/admin/tokens` thiếu `_ctx()` → `current_user` không được truyền vào template → nhóm Admin biến mất. Fix: dùng `_ctx()` đồng nhất với các route khác.
+- **F1 — Đồng bộ theme Demo với dashboard:** `demo.html` hardcode `body { background: #0a0c14; }` (luôn dark). Fix: đọc `localStorage ia-theme` giống `base.html`, áp `theme-light` class lên body khi cần.
+- **C1 — PagerDuty/OpsGenie intake adapter:** thêm adapter (route qua `X-Alert-Source: pagerduty / opsgenie`) → normalize → investigation. READ-ONLY: chỉ nhận alert, KHÔNG ack/resolve. Pattern giống 3 adapter có sẵn (Prometheus/Grafana/Sentry).
 - **C4 — Webhook callback outbound:** sau verdict, POST kết quả structured ra `callback_url` của caller → integrate CI/CD. Thực chất là 1 output adapter (HTTP POST), giữ READ-ONLY với hệ thống ngoài.
 - **D3 — Root cause clustering:** group investigations có verdict tương tự (trên `investigation_patterns`) → view "top recurring incidents" + cảnh báo nếu cùng root cause lặp > N lần/ngày.
+- ~~**C3 — GitHub/GitLab deploy hook:**~~ **Bỏ khỏi scope** (chưa cần, defer → Future).
 - Cập nhật `BUILD_STATE.md` + bảng Phase trong `CLAUDE.md`.
 
 **Cổng Phase 6 (bắt buộc):**

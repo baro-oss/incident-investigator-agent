@@ -224,6 +224,12 @@ async def run_investigation_background(
     # Push tất cả kênh output — luôn luôn, không chết im lặng
     await push_verdict(state)
 
+    # C4: Webhook callback outbound — nếu caller cung cấp callback_url
+    callback_url = req.raw_payload.get("callback_url") if req.raw_payload else None
+    if callback_url:
+        from agent.output.callback import push_callback
+        await push_callback(state, callback_url)
+
 
 def trigger_investigation(
     req: InvestigationRequest,

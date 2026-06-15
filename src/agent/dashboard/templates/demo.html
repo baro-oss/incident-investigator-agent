@@ -6,7 +6,7 @@
   <title>Investigation Agent — Demo</title>
   <link rel="stylesheet" href="/dashboard/static/style.css">
   <style>
-    body { background: #0a0c14; }
+    /* background handled by CSS var(--bg) — do not hardcode */
 
     .demo-layout {
       min-height: 100vh;
@@ -189,6 +189,7 @@
   </style>
 </head>
 <body>
+<script>(function(){ if((localStorage.getItem('ia-theme')||'light')==='light') document.body.classList.add('theme-light'); })();</script>
 <div class="demo-layout">
 
   <div class="demo-header">
