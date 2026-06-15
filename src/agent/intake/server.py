@@ -554,22 +554,26 @@ async def _handle_trigger_request(request: Request, project_id: str) -> JSONResp
     from agent.intake.adapters._shared import verify_webhook_signature
 
     # A4: API token auth — validate X-API-Token trước khi xử lý
+    # Fallback: user đã đăng nhập qua session (demo UI, dashboard) cũng được phép trigger
     if not _allow_anon_trigger():
         raw_token = (
             request.headers.get("x-api-token")
             or request.headers.get("x-api-key")
         )
-        if not raw_token:
+        session_user_id = request.session.get("user_id")
+        if raw_token:
+            from agent.auth.rbac import verify_token
+            token_user = verify_token(raw_token)
+            if not token_user:
+                raise HTTPException(status_code=401, detail="API token không hợp lệ hoặc đã thu hồi.")
+            if not token_user.get("is_active"):
+                raise HTTPException(status_code=403, detail="Tài khoản bị vô hiệu hóa.")
+        elif not session_user_id:
+            # Không có token VÀ không có session → từ chối
             raise HTTPException(
                 status_code=401,
-                detail="Yêu cầu header X-API-Token. Set ALLOW_ANON_TRIGGER=true để bỏ qua (dev).",
+                detail="Yêu cầu header X-API-Token hoặc đăng nhập qua dashboard. Set ALLOW_ANON_TRIGGER=true để bỏ qua (dev).",
             )
-        from agent.auth.rbac import verify_token
-        token_user = verify_token(raw_token)
-        if not token_user:
-            raise HTTPException(status_code=401, detail="API token không hợp lệ hoặc đã thu hồi.")
-        if not token_user.get("is_active"):
-            raise HTTPException(status_code=403, detail="Tài khoản bị vô hiệu hóa.")
 
     raw_body = await request.body()
     source = request.headers.get("x-alert-source")
@@ -590,6 +594,12 @@ async def _handle_trigger_request(request: Request, project_id: str) -> JSONResp
         payload = _json.loads(raw_body) if raw_body else {}
     except _json.JSONDecodeError:
         raise HTTPException(status_code=422, detail="Payload không phải JSON hợp lệ")
+
+    # Inject event-type header cho GitHub/GitLab adapter đọc mà không thay đổi interface _ADAPTERS
+    if source == "github":
+        payload["_event_type"] = request.headers.get("x-github-event", "")
+    elif source == "gitlab":
+        payload["_event_type"] = request.headers.get("x-gitlab-event", "")
 
     return await _do_trigger(project_id, payload, source)
 

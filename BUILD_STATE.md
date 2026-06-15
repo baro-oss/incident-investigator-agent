@@ -4,10 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 6 📋 (Ngày 26–30, đang thực hiện).
-**Kế hoạch Phase 6:** `docs/12-roadmap-phase-6.md`.
-**Cổng kiểm gần nhất:** Ngày 30 — F2 nav fix ✅ · F1 demo theme ✅ · C1 PagerDuty/OpsGenie ✅ · C4 callback ✅ · D3 clustering ✅ · Regression 4/4 ✅
-**Phase 6 HOÀN TẤT (30/30 ngày). Việc kế tiếp:** Future — Tier-2 Postgres · Bidirectional integrations · Horizontal scale.
+**Giai đoạn:** Phase 7 (Ngày 31–35, đang thực hiện).
+**Kế hoạch Phase 7:** xem mục "Tiến độ Phase 7" bên dưới.
+**Cổng kiểm gần nhất:** Ngày 31 — Demo 401 fix ✅ · C3 GitHub/GitLab adapter ✅ · pytest 24/24 PASS ✅ · Regression 4/4 ✅
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -78,6 +77,16 @@
 
 **Defer → Future:** B1 Tier-2 Postgres (cần lệnh rõ + env) · C2 bidirectional (phá READ-ONLY, cần duyệt) · B2 horizontal scale seam · D4 real MCP pack mở rộng.
 
+## Tiến độ Phase 7 (Ngày 31–35)
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 31 | Quick wins + Test skeleton | Demo 401 fix · C3 GitHub/GitLab adapter · pytest 24 tests | ✅ |
+| 32 | Proactive monitoring | Scheduled trigger · Recurring incident alert push | ☐ |
+| 33 | Engine depth | D2 baseline auto-update · Multi-agent conflict · Fintech re-verify | ☐ |
+| 34 | Deployment & DX | Docker + docker-compose · Investigation export JSON/CSV | ☐ |
+| 35 | Production bridge + close | Tier-2 Postgres hoặc Redis SSE seam · Phase 7 gate | ☐ |
+
 ## Nhật ký session (mới nhất lên đầu)
 
 ### [Session 31 — 2026-06-14] — Lập kế hoạch Phase 6 (Ngày 26–30)
@@ -102,6 +111,28 @@
 - **Bidirectional output (C2) → Future** (giữ ranh giới READ-ONLY; cần duyệt rõ mới làm).
 - **3 P0:** engine quality (D26–27) · webhook auth + secret at-rest (D28) · graceful shutdown + queue (D29).
 - **Regression gate bắt buộc cho ngày engine** (26–27): eval 4/4 + 2 KB end-to-end + Telegram không vỡ.
+
+### [Session 37 — 2026-06-15] — Ngày 31: Quick wins + Test skeleton
+
+**A. Bug fix: Demo 401**
+- `server.py:_handle_trigger_request()` — thêm fallback session auth: nếu không có `X-API-Token` header, kiểm `request.session.get("user_id")`. User đã đăng nhập dashboard (session cookie hợp lệ) được phép trigger mà không cần token. External webhook không có cookie → vẫn cần token. Logic không thay đổi cho anonymous trigger (ALLOW_ANON_TRIGGER env).
+
+**B. C3 — GitHub/GitLab deploy hook adapter:**
+- `adapters/github.py` (mới) — parse `X-GitHub-Event: push` (ref main/master/prod) và `deployment` (action=created). Infer service từ repo name, scenario từ commit message keywords. Non-trigger events → None.
+- `adapters/gitlab.py` (mới) — parse `X-Gitlab-Event: Push Hook` và `Pipeline Hook` (status=failed). GitLab timestamp format `"2024-01-15 14:03:00 UTC"` → chuẩn hóa trước khi parse.
+- `server.py:_handle_trigger_request()` — inject `_event_type` vào payload (từ `X-GitHub-Event` / `X-Gitlab-Event` header) trước khi route → adapter đọc được mà không thay đổi interface `_ADAPTERS`.
+- `adapters/__init__.py` — đăng ký `github` và `gitlab`.
+
+**C. Test skeleton:**
+- `tests/conftest.py` — fixtures: `sample_state`, `sample_observation`, `sample_verdict`.
+- `tests/test_engine_core.py` — 24 unit tests: hypothesis lifecycle (4) · competing_open (4) · loop oscillation detection (6) · evidence-grounding guard (4) · structured verdict text (3) · evidence linking (3).
+- **24/24 PASS** (0.03s)
+
+**Cổng Ngày 31 ✅ PASS:**
+- Demo page trigger hoạt động với session auth (không cần API token) ✅
+- C3: GitHub push → service=payment-gateway · GitHub deployment → scenario1 · GitLab push → infer đúng · GitLab pipeline → service/window đúng · Non-trigger → None ✅
+- pytest 24/24 PASS ✅
+- Regression eval 4/4 mock PASS ✅
 
 ### [Session 36 — 2026-06-15] — Ngày 30: Ecosystem + Close (Cổng Phase 6)
 

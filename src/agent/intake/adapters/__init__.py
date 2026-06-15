@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
 
+from agent.intake.adapters.github import map_github
+from agent.intake.adapters.gitlab import map_gitlab
 from agent.intake.adapters.grafana import map_grafana
 from agent.intake.adapters.opsgenie import map_opsgenie
 from agent.intake.adapters.pagerduty import map_pagerduty
@@ -24,6 +26,8 @@ _ADAPTERS: Dict[str, Callable[[Dict[str, Any]], Optional[InvestigationRequest]]]
     "sentry": map_sentry,
     "pagerduty": map_pagerduty,
     "opsgenie": map_opsgenie,
+    "github": map_github,
+    "gitlab": map_gitlab,
 }
 
 
