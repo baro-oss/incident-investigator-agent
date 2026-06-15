@@ -77,7 +77,7 @@ async def dashboard_home(
         search=search or None,
         limit=100,
     )
-    return templates.TemplateResponse("index.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "index.html", _ctx(request, user,
         active="home",
         investigations=invs,
         total=len(invs),
@@ -103,7 +103,7 @@ async def dashboard_detail(
         langfuse_url = f"{host}/traces"
 
     feedback = get_investigation_feedback(investigation_id)
-    return templates.TemplateResponse("detail.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "detail.html", _ctx(request, user,
         active="home",
         inv=inv,
         langfuse_url=langfuse_url,
@@ -125,7 +125,7 @@ async def dashboard_diff(
     inv_b = get_investigation_detail(compare) if compare else None
     all_invs = list_investigations(limit=50)
 
-    return templates.TemplateResponse("diff.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "diff.html", _ctx(request, user,
         active="home",
         inv_a=inv_a,
         inv_b=inv_b,
@@ -192,7 +192,7 @@ async def dashboard_chat(
         },
     ]
 
-    return templates.TemplateResponse("chat.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "chat.html", _ctx(request, user,
         active="chat",
         projects=projects,
         quick_scenarios=quick_scenarios,
@@ -213,7 +213,7 @@ async def dashboard_trigger_get(
     services = svc_map.get(first_pid, [])
     recent = list_investigations(limit=5)
 
-    return templates.TemplateResponse("trigger.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "trigger.html", _ctx(request, user,
         active="trigger",
         projects=projects,
         services=services,
@@ -263,7 +263,7 @@ async def dashboard_trigger_post(
     services = svc_map.get(project_id, [])
     recent = list_investigations(limit=5)
 
-    return templates.TemplateResponse("trigger.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "trigger.html", _ctx(request, user,
         active="trigger",
         projects=projects,
         services=services,
@@ -283,7 +283,7 @@ async def dashboard_projects(
 ):
     projects = get_projects_overview()
     can_manage = user.get("is_root") or __import__("agent.auth.rbac", fromlist=["user_can"]).user_can(user["id"], "project.manage")
-    return templates.TemplateResponse("projects.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "projects.html", _ctx(request, user,
         active="projects",
         projects=projects,
         can_manage=can_manage,
@@ -308,7 +308,7 @@ async def dashboard_project_create(
     if error:
         projects = get_projects_overview()
         can_manage = True
-        return templates.TemplateResponse("projects.html", _ctx(request, user,
+        return templates.TemplateResponse(request, "projects.html", _ctx(request, user,
             active="projects",
             projects=projects,
             can_manage=can_manage,
@@ -373,7 +373,7 @@ async def dashboard_health(
     from agent.dashboard.queries import get_recurring_incidents
     recurring = get_recurring_incidents(project_id=None, threshold=2)
 
-    return templates.TemplateResponse("health.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "health.html", _ctx(request, user,
         active="health",
         limiter=limiter,
         breaker=breaker,
@@ -395,7 +395,7 @@ async def dashboard_metrics_live(
     projects = get_projects_overview()
     all_services = sorted({m["service"] for m in metrics})
 
-    return templates.TemplateResponse("metrics_live.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "metrics_live.html", _ctx(request, user,
         active="metrics",
         metrics=metrics,
         selected_service=service or "",
@@ -412,7 +412,7 @@ async def dashboard_channels(
     channels = get_channel_config()
     projects = get_projects_overview()
 
-    return templates.TemplateResponse("channels.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "channels.html", _ctx(request, user,
         active="channels",
         channel_rows=channels,
         projects=projects,
@@ -455,7 +455,7 @@ async def dashboard_mcp(
 ):
     servers = get_mcp_servers_for_dashboard()
     projects = _get_all_project_ids()
-    return templates.TemplateResponse("mcp.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "mcp.html", _ctx(request, user,
         active="mcp",
         servers=servers,
         projects=projects,
@@ -481,7 +481,7 @@ async def dashboard_mcp_register(
     if error:
         servers = get_mcp_servers_for_dashboard()
         projects = _get_all_project_ids()
-        return templates.TemplateResponse("mcp.html", _ctx(request, user,
+        return templates.TemplateResponse(request, "mcp.html", _ctx(request, user,
             active="mcp",
             servers=servers,
             projects=projects,
@@ -541,7 +541,7 @@ async def dashboard_project_detail(
     proj = get_project_detail(project_id)
     if not proj:
         return HTMLResponse("<h3>Project not found</h3>", status_code=404)
-    return templates.TemplateResponse("project_detail.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "project_detail.html", _ctx(request, user,
         active="projects",
         proj=proj,
         llm_save_ok=False,
@@ -624,7 +624,7 @@ async def dashboard_project_save_llm(
     proj = get_project_detail(project_id)
     if not proj:
         return HTMLResponse("<h3>Project not found</h3>", status_code=404)
-    return templates.TemplateResponse("project_detail.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "project_detail.html", _ctx(request, user,
         active="projects",
         proj=proj,
         llm_save_ok=llm_save_ok,
@@ -695,7 +695,7 @@ async def dashboard_cost(
     user: dict = Depends(require_perm("observability.view")),
 ):
     data = get_cost_data()
-    return templates.TemplateResponse("cost.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "cost.html", _ctx(request, user,
         active="cost",
         **data,
     ))
@@ -738,7 +738,7 @@ async def dashboard_demo(
          "scenario": "fintech2", "time_window": "14:00-15:00", "domain": "fintech",
          "symptom": "merch-buzz: refund_rate 14.8% từ 14:00 (~8x baseline)"},
     ]
-    return templates.TemplateResponse("demo.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "demo.html", _ctx(request, user,
         projects=projects,
         quick_scenarios=quick_scenarios,
     ))
@@ -752,7 +752,7 @@ async def dashboard_tools(
 ):
     all_tools = get_all_tools_for_dashboard()
     selected = domain or "microservice"
-    return templates.TemplateResponse("tools.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "tools.html", _ctx(request, user,
         active="tools",
         all_tools=all_tools,
         selected_domain=selected,
@@ -828,7 +828,7 @@ async def dashboard_eval(
     # E12: specificity stats từ trace_events
     specificity_data = get_specificity_data()
 
-    return templates.TemplateResponse("eval.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "eval.html", _ctx(request, user,
         active="eval",
         eval_rows=eval_rows,
         total_runs=total_runs,
@@ -858,7 +858,7 @@ async def admin_users_get(
     # Enrich với assignments
     for u in users:
         u["assignments"] = list_user_assignments(u["id"])
-    return templates.TemplateResponse("admin_users.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "admin_users.html", _ctx(request, user,
         active="admin",
         users=users,
         roles=roles,
@@ -884,7 +884,7 @@ async def admin_users_post(
         roles = list_roles()
         for u in users:
             u["assignments"] = list_user_assignments(u["id"])
-        return templates.TemplateResponse("admin_users.html", _ctx(request, user,
+        return templates.TemplateResponse(request, "admin_users.html", _ctx(request, user,
             active="admin",
             users=users,
             roles=roles,
@@ -947,7 +947,7 @@ async def admin_roles_get(
     roles = list_roles()
     for r in roles:
         r["perms"] = set(get_role_permissions(r["id"]))
-    return templates.TemplateResponse("admin_roles.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "admin_roles.html", _ctx(request, user,
         active="admin",
         roles=roles,
         permission_catalog=PERMISSION_CATALOG,
@@ -975,7 +975,7 @@ async def admin_roles_post(
         roles = list_roles()
         for r in roles:
             r["perms"] = set(get_role_permissions(r["id"]))
-        return templates.TemplateResponse("admin_roles.html", _ctx(request, user,
+        return templates.TemplateResponse(request, "admin_roles.html", _ctx(request, user,
             active="admin",
             roles=roles,
             permission_catalog=PERMISSION_CATALOG,
@@ -1025,7 +1025,7 @@ async def admin_groups_get(
     for g in groups:
         g["members"] = list_group_members(g["id"])
     projects = list_projects()
-    return templates.TemplateResponse("admin_groups.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "admin_groups.html", _ctx(request, user,
         active="admin",
         groups=groups,
         projects=projects,
@@ -1081,8 +1081,7 @@ async def admin_tokens_page(
     from agent.auth.rbac import list_all_tokens, list_users
     tokens = list_all_tokens()
     users = list_users()
-    return templates.TemplateResponse(
-        "admin_tokens.html",
+    return templates.TemplateResponse(request, "admin_tokens.html",
         _ctx(request, user,
              active="admin_tokens",
              tokens=tokens,
@@ -1132,7 +1131,7 @@ async def scheduled_list(
     triggers = list_triggers(project_id=project_id or None)
     projects = [p["id"] for p in list_projects()]
     services_map = {p: list_project_services(p) for p in projects}
-    return templates.TemplateResponse("scheduled.html", _ctx(request, user,
+    return templates.TemplateResponse(request, "scheduled.html", _ctx(request, user,
         active="scheduled",
         triggers=triggers,
         projects=projects,

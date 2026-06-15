@@ -235,7 +235,7 @@ async def auth_login_get(request: Request, next: str = "/dashboard"):
     # Nếu đã đăng nhập → redirect
     if request.session.get("user_id"):
         return RedirectResponse(next or "/dashboard", status_code=303)
-    return _auth_templates.TemplateResponse("login.html", {
+    return _auth_templates.TemplateResponse(request, "login.html", {
         "request": request,
         "next": next,
         "error": None,
@@ -260,7 +260,7 @@ async def auth_login_post(
         error = "Tên đăng nhập hoặc mật khẩu không đúng"
 
     if error:
-        return _auth_templates.TemplateResponse("login.html", {
+        return _auth_templates.TemplateResponse(request, "login.html", {
             "request": request,
             "next": next,
             "error": error,
