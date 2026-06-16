@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63, nén 3 ngày) — LLM UI catalog + bug fix batch. Cổng P12 PASS 2026-06-16: catalog+dropdown+GreenNode · test-conn endpoint · key security+preserve · BUG-01..07 fix · 502/502 tests xanh · READ-ONLY + 4 nguyên tắc giữ.
+**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63). **Phase 13 📋 ĐÃ LÊN KẾ HOẠCH (duyệt 2026-06-16), CHƯA CODE** — Hardening & Sharpening (Ngày 64–69), plan đầy đủ ở `docs/18-roadmap-phase-13.md`.
 **Cổng kiểm gần nhất:** Ngày 63 (D63 Tests+CI+Audit+Cổng P12) — 502 tests (461 baseline + 41 mới) · CI matrix sqlite+postgres đã xanh từ Phase 11 · READ-ONLY audit clean · 4 nguyên tắc giữ · degrade safe (api_key không lộ HTML, _draining reset).
-**Kế hoạch kế tiếp:** chưa có lệnh — chờ người dùng định hướng Phase 13+.
+**Kế hoạch kế tiếp:** Phase 13 Ngày 64 (Reliability: silent-death & queue bookkeeping) — bắt đầu implement ở session sau. Ràng buộc cứng: KHÔNG đụng schema/engine state (giữ Verdict/InvestigationState; ngoại lệ duy nhất: status `failed` cho investigation_queue).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -154,6 +154,36 @@
 
 **Chốt Phase 12 (nén 3 ngày — không cắt scope):** KHÔNG thêm engine feature/tool/schema — chỉ biên dashboard/intake · LLM key không bao giờ rời server (chỉ bool `key_set`) · test connection = prompt tối giản, không chạy investigation · GreenNode MaaS qua `OpenAICompatibleClient` hiện có (không sửa client/factory) · 4 nguyên tắc + READ-ONLY giữ. Mỗi ngày cỡ L; regression gate (461 tests + eval 4/4 + 2 KB E2E) cuối mỗi ngày.
 **Xương sống KHÔNG cắt:** BUG-01 (port 8000) · BUG-02 (admin nav) · BUG-03 (key security) · key preserve · GreenNode MaaS support · CI green.
+
+## Tiến độ Phase 13 (docs/18-roadmap-phase-13.md) — 📋 ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+
+**Chủ đề:** Hardening & Sharpening. **Ràng buộc cứng:** KHÔNG đụng schema/engine state (giữ Verdict/InvestigationState; ngoại lệ duy nhất: status `failed` cho investigation_queue) · 4 nguyên tắc + READ-ONLY tuyệt đối · regression gate mỗi ngày (502 tests + eval 4/4 + 2 KB E2E + Telegram, từ Ngày 65 trên cả sqlite & postgres) · mock eval (không tốn credit).
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 64 | Reliability: silent-death & queue | H2 outer-`finally` (discard+push luôn chạy) · L1 guard push_verdict(None) · M2 status `failed` · M12 dedup tại enqueue · bắt CancelledError riêng | ☐ |
+| 65 | Dialect parity prod + cost accuracy | H1 dịch json_extract→jsonb (PG) · M4 pricing đúng provider/model · M11 đóng conn finally | ☐ |
+| 66 | Engine quality I | H3 re-prompt chống dừng sớm (biến cục bộ) · M3 trace-gap trung thực · M1 cache-token graph parity · M10 retry loop path | ☐ |
+| 67 | Engine quality II | Specificity tuning (loại số timestamp + threshold theo conf) · competing gate multi-agent · M8 code-diff distill · M9 cap deps · L4 validate time_window | ☐ |
+| 68 | Security/authz + UX/DX | M5 siết READ-ONLY guard · M6 require_perm scoped (catalog/channel/service/repo) · M7 SSE auth + dọn dead seam · trang lỗi+escape (L8) · L5 HMAC · logging correlation | ☐ |
+| 69 | Tests reliability + Cổng P13 | Test _translate · invariant error→push_verdict · resilience · graph parity · READ-ONLY guard · queue drain+failed · thay test mong manh · audit + đóng pha | ☐ |
+
+**Xương sống KHÔNG cắt:** H1 · H2 · H3 · M2 · Ngày 69. **Cắt nếu hụt giờ:** UX polish (D68) → specificity 2-lần-fire (D67) → graph parity test mức smoke.
+
+### [Session 67 — 2026-06-16] — Audit Phase 1–12 + Lập kế hoạch Phase 13
+
+**Đã làm:**
+- Đọc trực tiếp engine core (loop/graph/multi_agent/specificity/state) + registry + trace_request + runner + investigation_queue + output/router + postgres_backend + queries; verify các claim HIGH/MEDIUM.
+- Chạy 4 agent audit song song: intake · dashboard · tools · tests (coverage matrix + test mong manh).
+- Tổng hợp 3 HIGH (H1 json_extract PG · H2 silent-death · H3 dừng sớm) + 12 MEDIUM + 8 LOW; điểm yếu engine (specificity gaming, tool-seq advisory, multi-agent thiếu competing gate, grounding thô); UX gaps (cost sai, seam giả Redis, trace "complete" khi đứt).
+- Tạo `docs/18-roadmap-phase-13.md` (plan 6 ngày đầy đủ + map 3 mảng + ràng buộc cứng).
+- Cập nhật `CLAUDE.md` (header line 20) + `BUILD_STATE.md` (header + bảng Phase 13 + log này).
+
+**Phát hiện riêng (không từ agent):** M1 graph path mất cache-token (parity bug, graph là default → cache stats luôn 0) · H3 premature-stop trên text-không-verdict (`loop.py:429-431`) · M10 resilience chỉ chạy graph path.
+
+**Đánh giá lại nhẹ hơn agent:** M5 READ-ONLY guard — default-deny đã chặn `fork_/dispatch_/trigger_`; lỗ thực chỉ ở read-prefix + verb-ghi-vị-trí-sau (search_and_replace…). Rủi ro thực thấp, fix defense-in-depth.
+
+**Người dùng chốt:** duyệt nguyên trạng 6 ngày · ràng buộc cứng = KHÔNG đụng schema/engine state (ngoại lệ: status `failed` queue). Implement bắt đầu session sau (Ngày 64).
 
 ### [Session 65 — 2026-06-16] — Lập kế hoạch Phase 12
 
