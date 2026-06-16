@@ -115,7 +115,7 @@ async def run_investigation_background(
 ) -> None:
     """
     Chạy một phiên điều tra end-to-end trong background.
-    Tự push Telegram khi xong — dù thành công, timeout hay lỗi.
+    Tự push Telegram khi xong — dù thành công, timeout hay lỗi hay bị cancel.
     """
     key = req.dedup_key
 
@@ -130,128 +130,137 @@ async def run_investigation_background(
     mcp_clients: List[MCPClient] = []
     state: Optional[InvestigationState] = None
 
-    # ConcurrencyLimiter: block nếu đã có 3 phiên chạy, queue cho đến khi có slot
-    async with investigation_limiter:
-        try:
-            project_id = req.project_id
-
-            # Đọc services của project → gợi ý scope điều tra
-            available_services = _get_project_services(project_id)
-            if available_services:
-                logger.info("[%s] Project services: %s", project_id, available_services)
-
-            # Connect MCP servers của project (+ env var fallback)
-            mcp_servers = _get_mcp_servers_for_project(project_id)
-            if mcp_servers:
-                mcp_urls = [s["url"] for s in mcp_servers]
-                logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_servers), mcp_urls)
-                mcp_clients = await _connect_mcp_clients(mcp_servers)
-
-            # Xây tool registry + hypothesis catalog theo domain
-            domain = getattr(req, "domain", "microservice")
-            from agent.engine.hypothesis_catalog import get_default_catalog, merge_catalog_with_db
-            hypothesis_catalog = merge_catalog_with_db(get_default_catalog(domain), domain, project_id)
-
-            if domain == "fintech":
-                from agent.tools.registry_fintech import get_fintech_tool_registry
-                tools = get_fintech_tool_registry()
-                logger.info("[%s] Dùng Fintech tool registry (%d tools)", key, len(tools))
-            else:
-                tools = await build_tool_registry(mcp_clients if mcp_clients else None)
-                # F2: thêm get_code_diff khi project có service_repos cấu hình
-                try:
-                    from agent.intake.project_registry import list_service_repos
-                    from agent.tools.get_code_diff import CODE_DIFF_TOOL_NAME, build_code_diff_tool
-                    repos = list_service_repos(project_id)
-                    if repos and not any(t.name == CODE_DIFF_TOOL_NAME for t in tools):
-                        tools = list(tools) + [build_code_diff_tool(project_id)]
-                        logger.info("[%s] Thêm %s (%d repo mapping)", project_id, CODE_DIFF_TOOL_NAME, len(repos))
-                except Exception as e:
-                    logger.warning("Không thêm được code_diff tool: %s", e)
-
-            # Resolve LLM: project DB config → global env vars
-            llm_cfg = None
+    try:
+        # ConcurrencyLimiter: block nếu đã có 3 phiên chạy, queue cho đến khi có slot
+        # Outer try bọc cả async with để discard(key) + push_verdict luôn chạy
+        # dù CancelledError xảy ra khi đang chờ limiter slot (H2).
+        async with investigation_limiter:
             try:
-                from agent.intake.project_registry import get_project_llm
-                llm_cfg = get_project_llm(project_id)
-            except Exception as e:
-                logger.warning("Không đọc được project LLM config: %s", e)
+                project_id = req.project_id
 
-            if llm_cfg:
-                llm = create_llm_client(
-                    provider=llm_cfg.get("provider"),
-                    model=llm_cfg.get("model"),
-                    extra_config=llm_cfg.get("config"),
-                )
-                logger.info("[%s] Dùng LLM từ project config: provider=%s model=%s",
-                            project_id, llm_cfg.get("provider"), llm_cfg.get("model"))
-            else:
-                llm = create_llm_client()
+                # Đọc services của project → gợi ý scope điều tra
+                available_services = _get_project_services(project_id)
+                if available_services:
+                    logger.info("[%s] Project services: %s", project_id, available_services)
 
-            # Long-term memory: warm-start hint
-            warm_hint = get_warm_start_hint(
-                project_id=project_id,
-                service=req.service,
-                error_keywords=None,
-            )
-            if warm_hint:
-                logger.info("[%s] Warm-start hint: %s", project_id, warm_hint[:80])
+                # Connect MCP servers của project (+ env var fallback)
+                mcp_servers = _get_mcp_servers_for_project(project_id)
+                if mcp_servers:
+                    mcp_urls = [s["url"] for s in mcp_servers]
+                    logger.info("[%s] Kết nối %d MCP server(s): %s", project_id, len(mcp_servers), mcp_urls)
+                    mcp_clients = await _connect_mcp_clients(mcp_servers)
 
-            # Chọn engine: MultiAgent (parallel) hoặc single-agent (LangGraph)
-            if req.multi_agent:
-                engine_obj = MultiAgentEngine(
-                    llm=llm, all_tools=tools, step_budget=step_budget,
-                    hypothesis_catalog=hypothesis_catalog,
-                )
-                logger.info("[%s] Dùng MultiAgentEngine (parallel specialists)", key)
-            else:
-                engine_obj = InvestigationEngine(
-                    llm=llm, tools=tools, step_budget=step_budget,
-                    hypothesis_catalog=hypothesis_catalog,
-                )
+                # Xây tool registry + hypothesis catalog theo domain
+                domain = getattr(req, "domain", "microservice")
+                from agent.engine.hypothesis_catalog import get_default_catalog, merge_catalog_with_db
+                hypothesis_catalog = merge_catalog_with_db(get_default_catalog(domain), domain, project_id)
 
-            state = await asyncio.wait_for(
-                engine_obj.run(
-                    symptom=req.symptom,
-                    time_window=req.time_window,
-                    scenario=req.scenario,
-                    date=req.date,
+                if domain == "fintech":
+                    from agent.tools.registry_fintech import get_fintech_tool_registry
+                    tools = get_fintech_tool_registry()
+                    logger.info("[%s] Dùng Fintech tool registry (%d tools)", key, len(tools))
+                else:
+                    tools = await build_tool_registry(mcp_clients if mcp_clients else None)
+                    # F2: thêm get_code_diff khi project có service_repos cấu hình
+                    try:
+                        from agent.intake.project_registry import list_service_repos
+                        from agent.tools.get_code_diff import CODE_DIFF_TOOL_NAME, build_code_diff_tool
+                        repos = list_service_repos(project_id)
+                        if repos and not any(t.name == CODE_DIFF_TOOL_NAME for t in tools):
+                            tools = list(tools) + [build_code_diff_tool(project_id)]
+                            logger.info("[%s] Thêm %s (%d repo mapping)", project_id, CODE_DIFF_TOOL_NAME, len(repos))
+                    except Exception as e:
+                        logger.warning("Không thêm được code_diff tool: %s", e)
+
+                # Resolve LLM: project DB config → global env vars
+                llm_cfg = None
+                try:
+                    from agent.intake.project_registry import get_project_llm
+                    llm_cfg = get_project_llm(project_id)
+                except Exception as e:
+                    logger.warning("Không đọc được project LLM config: %s", e)
+
+                if llm_cfg:
+                    llm = create_llm_client(
+                        provider=llm_cfg.get("provider"),
+                        model=llm_cfg.get("model"),
+                        extra_config=llm_cfg.get("config"),
+                    )
+                    logger.info("[%s] Dùng LLM từ project config: provider=%s model=%s",
+                                project_id, llm_cfg.get("provider"), llm_cfg.get("model"))
+                else:
+                    llm = create_llm_client()
+
+                # Long-term memory: warm-start hint
+                warm_hint = get_warm_start_hint(
                     project_id=project_id,
-                    available_services=available_services or None,
-                    warm_start_hint=warm_hint,
-                    investigation_id=key,
-                    service=req.service,   # E11: dùng cho prior lookup
-                ),
-                timeout=300.0,
-            )
+                    service=req.service,
+                    error_keywords=None,
+                )
+                if warm_hint:
+                    logger.info("[%s] Warm-start hint: %s", project_id, warm_hint[:80])
 
-        except asyncio.TimeoutError:
-            logger.error("Investigation timeout sau 5 phút: %s", key)
-            state = _make_error_state(req, "timeout")
+                # Chọn engine: MultiAgent (parallel) hoặc single-agent (LangGraph)
+                if req.multi_agent:
+                    engine_obj = MultiAgentEngine(
+                        llm=llm, all_tools=tools, step_budget=step_budget,
+                        hypothesis_catalog=hypothesis_catalog,
+                    )
+                    logger.info("[%s] Dùng MultiAgentEngine (parallel specialists)", key)
+                else:
+                    engine_obj = InvestigationEngine(
+                        llm=llm, tools=tools, step_budget=step_budget,
+                        hypothesis_catalog=hypothesis_catalog,
+                    )
 
-        except Exception as e:
-            logger.error("Investigation lỗi không mong đợi: %s — %s", key, e)
-            state = _make_error_state(req, f"error: {e}")
+                state = await asyncio.wait_for(
+                    engine_obj.run(
+                        symptom=req.symptom,
+                        time_window=req.time_window,
+                        scenario=req.scenario,
+                        date=req.date,
+                        project_id=project_id,
+                        available_services=available_services or None,
+                        warm_start_hint=warm_hint,
+                        investigation_id=key,
+                        service=req.service,   # E11: dùng cho prior lookup
+                    ),
+                    timeout=300.0,
+                )
 
-        finally:
-            _active_investigations.discard(key)
-            await _close_mcp_clients(mcp_clients)
+            except asyncio.TimeoutError:
+                logger.error("Investigation timeout sau 5 phút: %s", key)
+                state = _make_error_state(req, "timeout")
 
-    # Long-term memory: lưu pattern nếu verdict HIGH
-    if state and state.verdict and state.verdict.confidence == "high":
-        try:
-            save_pattern(state)
-        except Exception as e:
-            logger.warning("Không lưu được memory pattern: %s", e)
+            except Exception as e:
+                logger.error("Investigation lỗi không mong đợi: %s — %s", key, e)
+                state = _make_error_state(req, f"error: {e}")
 
-    # Push tất cả kênh output — luôn luôn, không chết im lặng
-    await push_verdict(state)
+            finally:
+                await _close_mcp_clients(mcp_clients)
 
-    # C4: Webhook callback outbound — nếu caller cung cấp callback_url
-    callback_url = req.raw_payload.get("callback_url") if req.raw_payload else None
-    if callback_url:
-        from agent.output.callback import push_callback
-        await push_callback(state, callback_url)
+        # Long-term memory: lưu pattern nếu verdict HIGH
+        if state and state.verdict and state.verdict.confidence == "high":
+            try:
+                save_pattern(state)
+            except Exception as e:
+                logger.warning("Không lưu được memory pattern: %s", e)
+
+    except asyncio.CancelledError:
+        # Xảy ra khi SIGTERM drain cancel task này (có thể trước/sau khi vào limiter)
+        logger.warning("Investigation bị huỷ (SIGTERM drain): %s", key)
+        if state is None:
+            state = _make_error_state(req, "cancelled")
+        raise
+
+    finally:
+        # Luôn giải phóng dedup key và push output — kể cả khi bị cancel (H2)
+        _active_investigations.discard(key)
+        await push_verdict(state)
+        callback_url = req.raw_payload.get("callback_url") if req.raw_payload else None
+        if callback_url:
+            from agent.output.callback import push_callback
+            await push_callback(state, callback_url)
 
 
 def trigger_investigation(
@@ -263,6 +272,10 @@ def trigger_investigation(
     Nếu queue chưa khởi động (test / direct call) → fallback fire-and-forget.
     """
     from agent.intake.investigation_queue import enqueue, _queue
+    # M12: dedup tại enqueue — loại bỏ trigger trùng trước khi vào queue
+    if req.dedup_key in _active_investigations:
+        logger.info("Dedup tại enqueue: bỏ qua trigger trùng (key=%s)", req.dedup_key)
+        return
     if _queue is not None:
         enqueue(req, step_budget=step_budget)
     else:

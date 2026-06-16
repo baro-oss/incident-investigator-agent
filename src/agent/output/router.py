@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from agent.engine.state import InvestigationState
 
@@ -41,7 +41,7 @@ async def _dispatch(channel: str, state: InvestigationState, config: Dict[str, A
         logger.error("Kênh '%s' lỗi: %s", channel, e)
 
 
-async def push_verdict(state: InvestigationState) -> None:
+async def push_verdict(state: Optional[InvestigationState]) -> None:
     """
     Gửi verdict đến tất cả kênh của project.
 
@@ -49,6 +49,9 @@ async def push_verdict(state: InvestigationState) -> None:
     Nếu không có → fallback env var OUTPUT_CHANNELS=telegram,teams,...
     Mỗi kênh chạy độc lập — một kênh lỗi không chặn kênh khác.
     """
+    if state is None:
+        logger.error("push_verdict called with state=None — skipping output")
+        return
     channels: List[Dict[str, Any]] = []
 
     # Thử load per-project channels từ DB

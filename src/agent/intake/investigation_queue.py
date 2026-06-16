@@ -113,12 +113,18 @@ async def _worker(worker_id: int) -> None:
 
         req, step_budget = item
         _set_db_status(req.dedup_key, "running")
+        status = "done"
         try:
             await run_investigation_background(req, step_budget=step_budget)
+        except asyncio.CancelledError:
+            logger.warning("Worker %d: investigation %s cancelled", worker_id, req.dedup_key)
+            status = "failed"
+            raise
         except Exception as e:
             logger.error("Worker %d: investigation %s crashed: %s", worker_id, req.dedup_key, e)
+            status = "failed"
         finally:
-            _set_db_status(req.dedup_key, "done")
+            _set_db_status(req.dedup_key, status)
             _queue.task_done()
 
 
