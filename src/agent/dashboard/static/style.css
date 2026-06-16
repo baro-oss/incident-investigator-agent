@@ -58,7 +58,7 @@ body {
 .layout { display: flex; min-height: 100vh; }
 
 nav {
-  width: 220px;
+  width: 252px;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 24px 0;
@@ -70,8 +70,8 @@ nav {
 }
 
 nav .logo {
-  padding: 0 20px 20px;
-  font-size: 15px;
+  padding: 0 22px 20px;
+  font-size: 16px;
   font-weight: 700;
   color: var(--accent);
   border-bottom: 1px solid var(--border);
@@ -82,21 +82,21 @@ nav .logo span { color: var(--muted); font-weight: 400; font-size: 11px; display
 nav a {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 20px;
+  gap: 10px;
+  padding: 10px 22px;
   color: var(--muted);
   text-decoration: none;
-  font-size: 13px;
+  font-size: 14px;
   transition: all .15s;
 }
 nav a:hover, nav a.active {
   color: var(--text);
   background: var(--surface2);
 }
-nav a .ico { width: 16px; text-align: center; }
+nav a .ico { width: 18px; text-align: center; font-size: 15px; }
 .nav-group-label {
-  padding: 10px 20px 3px;
-  font-size: 10px;
+  padding: 11px 22px 3px;
+  font-size: 10.5px;
   font-weight: 600;
   letter-spacing: .07em;
   text-transform: uppercase;

@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 style="font-size:18px;font-weight:500">Tool Registry</h1>
+  <h1 style="font-size:18px;font-weight:500" data-i18n="page.tools">Danh mục công cụ</h1>
   <div class="meta">Tất cả tools theo domain — engine dùng toolset tương ứng khi điều tra</div>
 </div>
 
@@ -37,7 +37,7 @@
               style="margin-left:auto;font-size:11px;padding:3px 10px;cursor:pointer;
                      background:var(--surface2);border:1px solid var(--border);border-radius:4px;
                      color:var(--muted)">
-        ▶ Test Run
+        ▶ Chạy thử
       </button>
     </div>
     <p style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px">
@@ -45,7 +45,7 @@
     </p>
     {% if t.params %}
     <div style="font-size:11px;color:var(--muted)">
-      <span style="color:var(--text);font-weight:500">Params:</span>
+      <span style="color:var(--text);font-weight:500" data-i18n="lbl.params">Tham số:</span>
       {% for p in t.params %}
       <code style="margin-left:4px;background:var(--surface2);padding:1px 5px;border-radius:3px">{{ p }}</code>
       {% endfor %}
@@ -92,10 +92,10 @@ function toggleTestRun(name) {
   const btn = document.querySelector('#card-' + name + ' button');
   if (panel.style.display === 'none') {
     panel.style.display = '';
-    btn.textContent = '▼ Test Run';
+    btn.textContent = window.i18n ? window.i18n('btn.test_run_open') : '▼ Chạy thử';
   } else {
     panel.style.display = 'none';
-    btn.textContent = '▶ Test Run';
+    btn.textContent = window.i18n ? window.i18n('btn.test_run_closed') : '▶ Chạy thử';
   }
 }
 

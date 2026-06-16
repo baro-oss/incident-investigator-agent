@@ -2,31 +2,31 @@
 {% block title %}Cost Dashboard — Investigation Agent{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Cost Dashboard</h2>
-  <div style="color:var(--text-muted);font-size:.85rem">Ước tính dựa trên token thật từ eval (60% input / 40% output split)</div>
+  <h2 data-i18n="page.cost">Bảng chi phí</h2>
+  <div style="color:var(--muted);font-size:.85rem">Ước tính dựa trên token thật từ eval (60% input / 40% output split)</div>
 </div>
 
 <!-- Summary cards -->
 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;margin-bottom:1.5rem">
   <div class="card">
     <div class="card-body" style="text-align:center">
-      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Total Eval Tokens</div>
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" data-i18n="lbl.total_eval_tokens">Tổng Token Eval</div>
       <div style="font-size:1.8rem;font-weight:700;color:var(--accent);margin:.3rem 0">{{ "{:,}".format(grand_total_tokens) }}</div>
-      <div style="font-size:.8rem;color:var(--text-muted)">từ {{ scenarios|length }} scenario × run mới nhất</div>
+      <div style="font-size:.8rem;color:var(--muted)">từ {{ scenarios|length }} scenario × run mới nhất</div>
     </div>
   </div>
   <div class="card">
     <div class="card-body" style="text-align:center">
-      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Eval Cost (ước tính)</div>
-      <div style="font-size:1.8rem;font-weight:700;color:var(--severity-high);margin:.3rem 0">${{ grand_total_cost }}</div>
-      <div style="font-size:.8rem;color:var(--text-muted)">tổng tất cả run trong eval set</div>
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Eval Cost (ước tính)</div>
+      <div style="font-size:1.8rem;font-weight:700;color:var(--high);margin:.3rem 0">${{ grand_total_cost }}</div>
+      <div style="font-size:.8rem;color:var(--muted)">tổng tất cả run trong eval set</div>
     </div>
   </div>
   <div class="card">
     <div class="card-body" style="text-align:center">
-      <div style="font-size:.75rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Live Investigations</div>
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" data-i18n="lbl.live_inv">Điều tra thực tế</div>
       <div style="font-size:1.8rem;font-weight:700;color:var(--text);margin:.3rem 0">{{ live_n_inv }}</div>
-      <div style="font-size:.8rem;color:var(--text-muted)">
+      <div style="font-size:.8rem;color:var(--muted)">
         {% if live_total_tokens > 0 %}{{ "{:,}".format(live_total_tokens) }} tokens · ${{ live_total_cost }}{% else %}chưa có token data{% endif %}
       </div>
     </div>
@@ -55,7 +55,7 @@
         <td><code style="font-size:.8rem">{{ r.scenario }}</code></td>
         <td>
           <span class="badge badge-info" style="font-size:.72rem">{{ r.provider or '—' }}</span>
-          {% if r.model %}<span style="color:var(--text-muted);font-size:.75rem;margin-left:.3rem">{{ r.model }}</span>{% endif %}
+          {% if r.model %}<span style="color:var(--muted);font-size:.75rem;margin-left:.3rem">{{ r.model }}</span>{% endif %}
         </td>
         <td style="text-align:right">{{ r.n }}</td>
         <td style="text-align:right">{{ "{:,}".format(r.avg_tokens) }}</td>
@@ -70,13 +70,13 @@
         <td colspan="4">Tổng cộng</td>
         <td style="text-align:right">{{ "{:,}".format(grand_total_tokens) }}</td>
         <td></td>
-        <td style="text-align:right;color:var(--severity-high)">${{ grand_total_cost }}</td>
+        <td style="text-align:right;color:var(--high)">${{ grand_total_cost }}</td>
       </tr>
     </tfoot>
   </table>
 </div>
 {% else %}
-<div class="card"><div class="card-body" style="color:var(--text-muted)">
+<div class="card"><div class="card-body" style="color:var(--muted)">
   Chưa có dữ liệu token thật. Chạy <code>python scripts/eval_agent.py --n 1</code> (real LLM) để có số thật.
 </div></div>
 {% endif %}
@@ -88,53 +88,53 @@
     {% if cache_reads > 0 or cache_writes > 0 %}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;margin-bottom:1rem">
       <div style="text-align:center">
-        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Cache writes</div>
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" data-i18n="lbl.cache_writes">Ghi cache</div>
         <div style="font-size:1.4rem;font-weight:700;color:var(--text);margin:.2rem 0">{{ "{:,}".format(cache_writes) }}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">tokens (~+25% billed)</div>
+        <div style="font-size:.75rem;color:var(--muted)">tokens (~+25% billed)</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Cache reads</div>
-        <div style="font-size:1.4rem;font-weight:700;color:var(--severity-high);margin:.2rem 0">{{ "{:,}".format(cache_reads) }}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">tokens (~-90% vs no-cache)</div>
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" data-i18n="lbl.cache_reads">Đọc cache</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--high);margin:.2rem 0">{{ "{:,}".format(cache_reads) }}</div>
+        <div style="font-size:.75rem;color:var(--muted)">tokens (~-90% vs no-cache)</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Net savings</div>
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" data-i18n="lbl.net_savings">Tiết kiệm ròng</div>
         {% set net = cache_net_savings %}
-        <div style="font-size:1.4rem;font-weight:700;color:{% if net > 0 %}var(--severity-high){% else %}var(--text-muted){% endif %};margin:.2rem 0">
+        <div style="font-size:1.4rem;font-weight:700;color:{% if net > 0 %}var(--high){% else %}var(--muted){% endif %};margin:.2rem 0">
           ${{ "%.5f"|format(net|abs) }}{% if net > 0 %} saved{% elif net < 0 %} overhead{% else %}—{% endif %}
         </div>
-        <div style="font-size:.75rem;color:var(--text-muted)">trên {{ cache_n_inv }} investigation</div>
+        <div style="font-size:.75rem;color:var(--muted)">trên {{ cache_n_inv }} investigation</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:.72rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">Overhead cost</div>
-        <div style="font-size:1.4rem;font-weight:700;color:var(--text-muted);margin:.2rem 0">${{ "%.5f"|format(cache_extra_cost) }}</div>
-        <div style="font-size:.75rem;color:var(--text-muted)">write premium</div>
+        <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em" data-i18n="lbl.overhead_cost">Chi phí overhead</div>
+        <div style="font-size:1.4rem;font-weight:700;color:var(--muted);margin:.2rem 0">${{ "%.5f"|format(cache_extra_cost) }}</div>
+        <div style="font-size:.75rem;color:var(--muted)">write premium</div>
       </div>
     </div>
     <table class="table" style="font-size:.82rem">
-      <thead><tr><th>Metric</th><th style="text-align:right">Without caching</th><th style="text-align:right">With caching</th><th style="text-align:right">Delta</th></tr></thead>
+      <thead><tr><th data-i18n="th.metric">Chỉ số</th><th style="text-align:right" data-i18n="th.no_cache">Không cache</th><th style="text-align:right" data-i18n="th.with_cache">Có cache</th><th style="text-align:right" data-i18n="th.delta">Chênh lệch</th></tr></thead>
       <tbody>
         <tr>
-          <td>Input tokens billed</td>
+          <td data-i18n="lbl.input_tokens_billed">Token đầu vào tính phí</td>
           <td style="text-align:right">{{ "{:,}".format(cache_reads + cache_writes + live_total_tokens) }}</td>
           <td style="text-align:right">{{ "{:,}".format(live_total_tokens) }} + {{ "{:,}".format(cache_writes) }}×1.25 + {{ "{:,}".format(cache_reads) }}×0.10</td>
-          <td style="text-align:right;color:var(--severity-high)">-{{ "{:,}".format(cache_reads) }} effective</td>
+          <td style="text-align:right;color:var(--high)">-{{ "{:,}".format(cache_reads) }} effective</td>
         </tr>
         <tr>
-          <td>Estimated cost</td>
+          <td data-i18n="lbl.est_cost">Chi phí ước tính</td>
           <td style="text-align:right">${{ "%.5f"|format((cache_reads + cache_writes + live_total_tokens) * 3.0 / 1000000) }}</td>
           <td style="text-align:right">${{ "%.5f"|format(live_total_cost + cache_extra_cost + cache_reads * 3.0 * 0.1 / 1000000) }}</td>
-          <td style="text-align:right;color:{% if cache_net_savings > 0 %}var(--severity-high){% else %}var(--text-muted){% endif %}">
+          <td style="text-align:right;color:{% if cache_net_savings > 0 %}var(--high){% else %}var(--muted){% endif %}">
             {% if cache_net_savings > 0 %}-${{ "%.5f"|format(cache_net_savings) }}{% else %}${{ "%.5f"|format(cache_extra_cost) }} overhead{% endif %}
           </td>
         </tr>
       </tbody>
     </table>
-    <div style="font-size:.75rem;color:var(--text-muted);margin-top:.5rem">
+    <div style="font-size:.75rem;color:var(--muted);margin-top:.5rem">
       Caching tiết kiệm tối đa khi prefix (system+tools ~1700 tok) được đọc nhiều lần trên cùng một model. Savings thực tế sẽ có sau khi chạy real-LLM investigation với <code>ANTHROPIC_API_KEY</code>.
     </div>
     {% else %}
-    <div style="color:var(--text-muted);font-size:.85rem">
+    <div style="color:var(--muted);font-size:.85rem">
       Chưa có dữ liệu cache. Chạy investigation thật (real LLM) để thấy before/after.<br>
       Mock LLM không gọi Anthropic API nên không có cache token data.
     </div>
@@ -144,7 +144,7 @@
 
 <!-- Pricing reference -->
 <div class="card">
-  <div class="card-header">Bảng giá tham chiếu (USD / 1M tokens)</div>
+  <div class="card-header" data-i18n="sec.pricing_ref">Bảng giá tham chiếu (USD / 1M tokens)</div>
   <div class="card-body">
     <table class="table" style="font-size:.82rem">
       <thead>
@@ -160,7 +160,7 @@
         <tr><td>Groq</td><td>llama-3.x</td><td style="text-align:right">$0.05</td><td style="text-align:right">$0.10</td><td style="text-align:right">$0.07</td></tr>
       </tbody>
     </table>
-    <div style="font-size:.73rem;color:var(--text-muted);margin-top:.5rem">* Ước tính với 60% input / 40% output — điển hình cho agent nhiều tool call</div>
+    <div style="font-size:.73rem;color:var(--muted);margin-top:.5rem">* Ước tính với 60% input / 40% output — điển hình cho agent nhiều tool call</div>
   </div>
 </div>
 {% endblock %}

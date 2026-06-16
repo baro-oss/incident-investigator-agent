@@ -34,3 +34,6 @@ build/
 greennode-agentbase-skills
 
 deployment
+
+.coverage.agentbase/
+.agentbase/

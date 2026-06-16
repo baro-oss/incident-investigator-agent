@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 13 ✅ HOÀN TẤT (64–69). **Phase 14 📋 ĐÃ LÊN KẾ HOẠCH** — Bug Fix & UX Batch. 594 tests.
-**Cổng kiểm gần nhất:** Ngày 69 (Tests reliability + Cổng P13) — 594/594 tests · resilience · loop↔graph parity · push_verdict invariant · queue failed-status · thay test mong manh · READ-ONLY + 4 nguyên tắc audit clean.
-**Kế hoạch kế tiếp:** Phase 14 (Ngày 70–73) — `docs/19-roadmap-phase-14.md` · Bug Fix Batch (BUG-14-01..03 + UX-14-01..03 + ENG-14-01). Uncommitted: BUG-14-01 + UX-14-01/02/03 + ENG-14-01 (đã code, chờ commit Ngày 70). TODO: BUG-14-02 (service delete double slash) + BUG-14-03 (mask inputs).
+**Giai đoạn:** Phase 14 ✅ HOÀN TẤT (70–73). **Phase 15 ✅ HOÀN TẤT** — UI Audit, i18n & UX Polish. 594 tests.
+**Cổng kiểm gần nhất:** Phase 15 — client-side i18n 2 ngôn ngữ (vi/en) hoàn chỉnh · 128 `data-i18n` attribute · 60+ translation keys · EN mode sạch hoàn toàn · 594/594 tests.
+**Kế hoạch kế tiếp:** README rewrite cho mục đích thi — tập trung agent, giám khảo dễ hiểu.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -169,6 +169,19 @@
 | 69 | Tests reliability + Cổng P13 | Test _translate · invariant error→push_verdict · resilience · graph parity · READ-ONLY guard · queue drain+failed · thay test mong manh · audit + đóng pha | ✅ |
 
 **Xương sống KHÔNG cắt:** H1 · H2 · H3 · M2 · Ngày 69. **Cắt nếu hụt giờ:** UX polish (D68) → specificity 2-lần-fire (D67) → graph parity test mức smoke.
+
+### [Session 72 — 2026-06-17] — Phase 15: UI Audit, i18n & UX Polish
+
+**Đã làm:**
+- Kiểm toàn bộ 16 template — phát hiện hàng trăm text hardcoded EN/VI không nhất quán.
+- Viết mới `src/agent/dashboard/static/i18n.js` — dict vi + en với 60+ key (nav · page · sec · btn · status · th · lbl · h3 groups); expose `window.i18n(key)` helper cho inline JS.
+- Thêm 128 `data-i18n` attribute vào 13 template (mcp · channels · health · project_detail · projects · trigger · detail · scheduled · cost · metrics_live · eval · tools · index).
+- Sửa `base.html` — theme toggle language-aware (vi: "Chế độ tối/sáng", en: "Dark/Light Mode") qua `window._applyTheme` + `applyLang`.
+- Fix admin_tokens.html — thêm `data-i18n` còn thiếu từ session trước.
+- Giữ nguyên EN cho tech term: Root Cause · Gate · Hallucination · Confidence · Delta · Avg Steps/Tokens · Params (không dịch quá mức).
+- 594/594 tests — không thay đổi backend, chỉ static JS + HTML attribute.
+
+**Kết quả:** VI mode → 100% tiếng Việt (trừ tech term cố ý giữ EN); EN mode → 100% tiếng Anh. Toggle lưu localStorage, persist qua page reload.
 
 ### [Session 70 — 2026-06-16] — Lập kế hoạch Phase 14 + phát hiện uncommitted work
 

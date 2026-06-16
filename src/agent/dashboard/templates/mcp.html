@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 style="font-size:18px;font-weight:500">MCP Registry</h1>
+  <h1 style="font-size:18px;font-weight:500" data-i18n="page.mcp">Đăng ký MCP</h1>
   <div class="meta">Quản lý MCP servers — đăng ký, ping, xóa</div>
 </div>
 
@@ -16,13 +16,13 @@
 <!-- Register Form -->
 <div class="card" style="margin-bottom:20px">
   <div class="card-header" style="margin-bottom:14px">
-    <h3 style="margin:0">Đăng ký MCP Server mới</h3>
+    <h3 style="margin:0" data-i18n="sec.register_mcp">Đăng ký MCP Server mới</h3>
   </div>
   <form method="post" action="/dashboard/mcp/register" id="register-form">
     <!-- Row 1: Name + URL + Project -->
     <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;margin-bottom:10px">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Name *</label>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.mcp_name">Tên *</label>
         <input type="text" name="name" placeholder="my-mcp-server" required
                style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                       border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
@@ -34,7 +34,7 @@
                       border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
       </div>
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Project</label>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.project">Dự án</label>
         <select name="project_id"
                 style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                        border-radius:5px;color:var(--text);font-size:13px">
@@ -48,7 +48,7 @@
     <!-- Row 2: Auth -->
     <div style="display:grid;grid-template-columns:160px 1fr 1fr auto;gap:10px;align-items:end">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Auth Type</label>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.auth_type">Kiểu xác thực</label>
         <select name="auth_type" id="auth-type-select" onchange="onAuthTypeChange(this.value)"
                 style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                        border-radius:5px;color:var(--text);font-size:13px">
@@ -73,13 +73,13 @@
 
       <!-- API key: header name + value -->
       <div id="auth-apikey-header" style="display:none">
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Header Name</label>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.header_name">Tên header</label>
         <input type="text" id="apikey-header" placeholder="X-API-Key"
                style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                       border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
       </div>
       <div id="auth-apikey-value" style="display:none">
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">API Key Value</label>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.api_key_value">Giá trị API Key</label>
         <div style="position:relative">
           <input type="password" id="apikey-value" placeholder="key-..." autocomplete="off"
                  style="width:100%;padding:7px 36px 7px 10px;background:var(--surface2);border:1px solid var(--border);
@@ -98,7 +98,7 @@
 
       <div>
         <button type="submit" class="btn btn-primary" style="padding:7px 16px;white-space:nowrap">
-          + Register
+          <span data-i18n="btn.register_mcp">+ Đăng ký</span>
         </button>
       </div>
     </div>
@@ -116,12 +116,12 @@
   <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
-        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Name</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.name">Tên</th>
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">URL</th>
-        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Project</th>
-        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500">Auth</th>
-        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500">Status</th>
-        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">Ping Result</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.project">Dự án</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.auth">Xác thực</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.status">Trạng thái</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.ping_result">Kết quả Ping</th>
         <th style="padding:6px 8px"></th>
       </tr>
     </thead>
@@ -144,9 +144,9 @@
       </td>
       <td style="text-align:center;padding:9px 8px">
         {% if s.enabled %}
-        <span class="badge badge-high">enabled</span>
+        <span class="badge badge-high" data-i18n="status.on">bật</span>
         {% else %}
-        <span class="badge badge-default">disabled</span>
+        <span class="badge badge-default" data-i18n="status.off">tắt</span>
         {% endif %}
       </td>
       <td style="padding:9px 8px">
@@ -172,7 +172,9 @@
 </div>
 {% else %}
 <div class="card" style="text-align:center;padding:48px;color:var(--muted)">
-  Chưa có MCP server nào. Đăng ký server đầu tiên ở trên.
+  <div style="font-size:32px;margin-bottom:12px">⬡</div>
+  <div style="margin-bottom:8px">Chưa có MCP server nào được đăng ký.</div>
+  <div style="font-size:12px">Dùng form "Đăng ký MCP Server mới" ở trên để thêm server đầu tiên.</div>
 </div>
 {% endif %}
 

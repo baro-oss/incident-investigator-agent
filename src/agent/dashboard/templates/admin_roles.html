@@ -2,10 +2,15 @@
 {% block title %}Admin · Roles — Investigation Agent{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Quản lý Roles</h2>
-  <div style="display:flex;gap:.5rem">
-    <a href="/dashboard/admin/users" class="btn btn-secondary">Users →</a>
-    <a href="/dashboard/admin/groups" class="btn btn-secondary">Groups →</a>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+    <a href="/dashboard/admin/users" style="color:var(--muted);text-decoration:none;font-size:13px">← Users</a>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h2 style="margin:0" data-i18n="page.roles">Quản lý vai trò</h2>
+    <div style="display:flex;gap:.5rem">
+      <a href="/dashboard/admin/users" class="btn btn-secondary">Users →</a>
+      <a href="/dashboard/admin/groups" class="btn btn-secondary">Groups →</a>
+    </div>
   </div>
 </div>
 
@@ -15,7 +20,7 @@
 
 <!-- Tạo role mới -->
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header">Tạo role mới</div>
+  <div class="card-header" data-i18n="sec.create_role">Tạo vai trò mới</div>
   <div class="card-body">
     <form method="post" action="/dashboard/admin/roles" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
       <div>
@@ -30,7 +35,7 @@
         <label class="form-label">Mô tả</label>
         <input class="form-input" type="text" name="description" placeholder="Tóm tắt quyền hạn">
       </div>
-      <button type="submit" class="btn btn-primary">Tạo role</button>
+      <button type="submit" class="btn btn-primary" data-i18n="btn.create_role">Tạo vai trò</button>
     </form>
   </div>
 </div>

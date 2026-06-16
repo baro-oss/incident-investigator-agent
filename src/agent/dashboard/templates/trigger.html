@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-header">
-  <h1>▶ Trigger Investigation</h1>
+  <h1>▶ <span data-i18n="page.trigger">Kích hoạt điều tra</span></h1>
   <div class="meta">Tạo điều tra mới — không cần curl</div>
 </div>
 
@@ -22,11 +22,11 @@
 
 <div class="trigger-layout">
   <div class="card">
-    <h3 style="margin-bottom:16px">Cấu hình điều tra</h3>
+    <h3 style="margin-bottom:16px" data-i18n="sec.trigger_config">Cấu hình điều tra</h3>
     <form method="post" action="/dashboard/trigger">
 
       <div class="form-group">
-        <label>Domain</label>
+        <label data-i18n="lbl.domain">Miền</label>
         <div style="display:flex;gap:8px" id="domain-tabs">
           <button type="button" onclick="switchDomain('microservice')" id="tab-microservice"
                   class="btn btn-primary" style="font-size:12px;flex:1">⚙ Microservice Ops</button>
@@ -37,7 +37,7 @@
       </div>
 
       <div class="form-group">
-        <label>Project</label>
+        <label data-i18n="lbl.project">Dự án</label>
         <select name="project_id" id="project_id" onchange="updateServices()">
           {% for p in projects %}
           <option value="{{ p.id }}" {{ 'selected' if p.id == selected_project }}>
@@ -48,7 +48,7 @@
       </div>
 
       <div class="form-group">
-        <label>Service</label>
+        <label data-i18n="lbl.service">Dịch vụ</label>
         <input type="text" name="service" id="service_sel" list="service_list"
                value="{{ selected_service or '' }}" autocomplete="off"
                placeholder="chọn hoặc tự nhập service">
@@ -80,7 +80,7 @@
       </div>
 
       <div class="form-group">
-        <label>Time Window</label>
+        <label data-i18n="lbl.time_window">Khung thời gian</label>
         <input type="text" name="time_window" id="window-sel" list="window_list"
                value="14:00-15:00" autocomplete="off" placeholder="vd: 14:00-15:00">
         <datalist id="window_list">
@@ -98,14 +98,14 @@
 
       <button type="submit" id="submit-btn" class="btn btn-primary" style="width:100%;justify-content:center"
               onclick="this.innerHTML='<span class=spinner></span> Đang gửi…';this.disabled=true">
-        ▶ Bắt đầu điều tra
+        <span data-i18n="btn.start_inv">▶ Bắt đầu điều tra</span>
       </button>
     </form>
   </div>
 
   <div>
     <div class="card">
-      <h3 style="margin-bottom:12px">Hướng dẫn nhanh</h3>
+      <h3 style="margin-bottom:12px" data-i18n="sec.quick_guide">Hướng dẫn nhanh</h3>
       <div style="font-size:12px;color:var(--muted);line-height:1.8">
         <p>1. Chọn <strong style="color:var(--text)">project</strong> — scopes tool gọi theo services</p>
         <p>2. Chọn <strong style="color:var(--text)">service</strong> triệu chứng xuất hiện</p>
@@ -116,8 +116,8 @@
     </div>
 
     <div class="card" style="margin-top:0">
-      <h3 style="margin-bottom:12px">Curl tương đương</h3>
-      <pre style="font-size:11px;color:var(--accent);overflow-x:auto;line-height:1.6">curl -X POST localhost:8000/projects/{pid}/trigger \
+      <h3 style="margin-bottom:12px" data-i18n="sec.curl_equiv">Lệnh curl tương đương</h3>
+      <pre style="font-size:11px;color:var(--accent);overflow-x:auto;line-height:1.6">curl -X POST localhost:8080/projects/{pid}/trigger \
   -H "Content-Type: application/json" \
   -d '{
     "service": "payment-gateway",
@@ -128,7 +128,7 @@
 
     {% if recent %}
     <div class="card" style="margin-top:0">
-      <h3 style="margin-bottom:12px">Điều tra gần đây</h3>
+      <h3 style="margin-bottom:12px" data-i18n="sec.recent_inv">Điều tra gần đây</h3>
       {% for inv in recent %}
       <div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
         <a href="/dashboard/investigations/{{ inv.investigation_id }}"

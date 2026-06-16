@@ -3,21 +3,21 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 style="font-size:18px;font-weight:500">Metrics Live</h1>
+  <h1 style="font-size:18px;font-weight:500" data-i18n="page.metrics">Số liệu trực tiếp</h1>
   <div class="meta">Baseline vs hiện tại · tự động cập nhật mỗi 30s</div>
 </div>
 
 <!-- Filter -->
 <form method="get" action="/dashboard/metrics-live" style="margin-bottom:16px;display:flex;gap:10px;align-items:center">
   <select name="service" style="background:var(--surface);color:var(--text);border:1px solid var(--border);padding:6px 10px;border-radius:4px;font-size:13px">
-    <option value="">Tất cả service</option>
+    <option value="" data-i18n="lbl.all_services">Tất cả dịch vụ</option>
     {% for svc in all_services %}
     <option value="{{ svc }}" {% if selected_service == svc %}selected{% endif %}>{{ svc }}</option>
     {% endfor %}
   </select>
   <button type="submit" class="btn btn-primary" style="font-size:12px">Lọc</button>
   {% if selected_service %}
-  <a href="/dashboard/metrics-live" class="btn btn-ghost" style="font-size:12px">Xoá lọc</a>
+  <a href="/dashboard/metrics-live" class="btn btn-ghost" style="font-size:12px">Xóa lọc</a>
   {% endif %}
 </form>
 
@@ -26,14 +26,14 @@
 <table style="width:100%;font-size:13px;border-collapse:collapse">
   <thead>
     <tr style="border-bottom:1px solid var(--border)">
-      <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400">Service</th>
+      <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400" data-i18n="th.service">Dịch vụ</th>
       <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400">Scenario</th>
-      <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400">Metric</th>
+      <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400" data-i18n="th.metric">Chỉ số</th>
       <th style="text-align:right;padding:8px 12px;color:var(--muted);font-weight:400">Baseline</th>
       <th style="text-align:right;padding:8px 12px;color:var(--muted);font-weight:400">Hiện tại</th>
       <th style="text-align:right;padding:8px 12px;color:var(--muted);font-weight:400">Δ%</th>
-      <th style="text-align:right;padding:8px 12px;color:var(--muted);font-weight:400">Samples</th>
-      <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400">Last seen</th>
+      <th style="text-align:right;padding:8px 12px;color:var(--muted);font-weight:400" data-i18n="th.samples">Mẫu</th>
+      <th style="text-align:left;padding:8px 12px;color:var(--muted);font-weight:400" data-i18n="th.last_seen">Lần cuối</th>
     </tr>
   </thead>
   <tbody>

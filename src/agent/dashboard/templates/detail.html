@@ -5,7 +5,7 @@
 <div class="page-header">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div style="display:flex;align-items:center;gap:12px">
-      <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px">← Investigations</a>
+      <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px" data-i18n="lbl.back_inv">← Điều tra</a>
       <span style="color:var(--border)">·</span>
       <code style="font-size:13px;color:var(--accent)">{{ inv.investigation_id }}</code>
       {% if inv.get('project_id') %}
@@ -60,7 +60,7 @@
   <div class="vc-meta">
     {% if vp.get('root_cause') %}
     <div class="vc-field">
-      <div class="lbl">Root Cause</div>
+      <div class="lbl" data-i18n="lbl.root_cause_lbl">Nguyên nhân gốc</div>
       {{ vp.root_cause }}
     </div>
     {% endif %}
@@ -133,15 +133,15 @@
     <div class="card">
       <h3 style="margin-bottom:12px">Thông tin</h3>
       <table style="width:100%;font-size:12px">
-        <tr><td style="color:var(--muted);padding:4px 0">Project</td>
+        <tr><td style="color:var(--muted);padding:4px 0" data-i18n="lbl.project">Dự án</td>
             <td><code>{{ inv.get('project_id','default') }}</code></td></tr>
         <tr><td style="color:var(--muted);padding:4px 0">Scenario</td>
             <td><span class="tag">{{ inv.get('scenario','') }}</span></td></tr>
-        <tr><td style="color:var(--muted);padding:4px 0">Steps</td>
+        <tr><td style="color:var(--muted);padding:4px 0" data-i18n="lbl.steps">Số bước</td>
             <td>{{ inv.steps | length }}</td></tr>
-        <tr><td style="color:var(--muted);padding:4px 0">Stop reason</td>
+        <tr><td style="color:var(--muted);padding:4px 0" data-i18n="lbl.stop_reason">Lý do dừng</td>
             <td><span class="badge badge-{{ inv.get('stop_reason','default') }}">{{ inv.get('stop_reason','') }}</span></td></tr>
-        <tr><td style="color:var(--muted);padding:4px 0">Confidence</td>
+        <tr><td style="color:var(--muted);padding:4px 0" data-i18n="lbl.confidence">Độ tin cậy</td>
             <td><span class="badge badge-{{ conf }}">{{ conf }}</span></td></tr>
       </table>
     </div>
@@ -225,7 +225,7 @@
     {% endif %}
 
     <div class="card" style="margin-top:0">
-      <h3 style="margin-bottom:10px">Actions</h3>
+      <h3 style="margin-bottom:10px" data-i18n="lbl.actions">Hành động</h3>
       <a href="/dashboard/trigger?scenario={{ inv.get('scenario','') }}"
          class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px">
         ▶ Trigger lại

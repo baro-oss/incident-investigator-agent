@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 style="font-size:18px;font-weight:500">System Health</h1>
+  <h1 style="font-size:18px;font-weight:500" data-i18n="page.health">Tình trạng hệ thống</h1>
   <div class="meta">Trạng thái real-time — tải lại để cập nhật</div>
 </div>
 
@@ -46,7 +46,7 @@
     </div>
     <table style="width:100%;font-size:13px">
       <tr>
-        <td style="color:var(--muted);padding:4px 0;width:55%">Failures liên tiếp</td>
+        <td style="color:var(--muted);padding:4px 0;width:55%" data-i18n="lbl.errors_consec">Lỗi liên tiếp</td>
         <td><strong>{{ breaker.failures }}</strong> / {{ breaker.threshold }}</td>
       </tr>
       {% if breaker.remaining_s > 0 %}
@@ -60,7 +60,7 @@
 
   <!-- Concurrency Limiter -->
   <div class="card">
-    <h3 style="margin-bottom:14px">Investigation Queue</h3>
+    <h3 style="margin-bottom:14px" data-i18n="sec.queue">Hàng đợi điều tra</h3>
     <table style="width:100%;font-size:13px">
       <tr>
         <td style="color:var(--muted);padding:4px 0;width:55%">Đang chạy</td>
@@ -91,8 +91,8 @@
       <thead>
         <tr>
           <th style="text-align:left;color:var(--muted);padding-bottom:6px">URL</th>
-          <th style="text-align:left;color:var(--muted);padding-bottom:6px">Project</th>
-          <th style="text-align:center;color:var(--muted);padding-bottom:6px">Status</th>
+          <th style="text-align:left;color:var(--muted);padding-bottom:6px" data-i18n="th.project">Project</th>
+          <th style="text-align:center;color:var(--muted);padding-bottom:6px" data-i18n="th.status">Status</th>
         </tr>
       </thead>
       <tbody>
@@ -102,9 +102,9 @@
           <td style="padding:4px 0">{{ s.project_id or '—' }}</td>
           <td style="text-align:center;padding:4px 0">
             {% if s.enabled %}
-            <span class="badge badge-high" style="font-size:10px">enabled</span>
+            <span class="badge badge-high" style="font-size:10px" data-i18n="status.on">bật</span>
             {% else %}
-            <span class="badge badge-default" style="font-size:10px">disabled</span>
+            <span class="badge badge-default" style="font-size:10px" data-i18n="status.off">tắt</span>
             {% endif %}
           </td>
         </tr>
@@ -114,7 +114,7 @@
     {% else %}
     <p style="color:var(--muted);font-size:13px">Không có MCP server nào được đăng ký.</p>
     {% endif %}
-    <a href="/projects/default/mcp-servers" style="font-size:12px;color:var(--accent);text-decoration:none;display:inline-block;margin-top:8px">
+    <a href="/dashboard/mcp" style="font-size:12px;color:var(--accent);text-decoration:none;display:inline-block;margin-top:8px">
       Quản lý MCP →
     </a>
   </div>
@@ -124,7 +124,7 @@
 <!-- D3: Root cause clustering -->
 <div class="card" style="margin-top:0">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <h3 style="margin:0">Recurring Incidents <span style="font-size:11px;color:var(--muted);font-weight:400">(root cause lặp ≥ 2 lần)</span></h3>
+    <h3 style="margin:0"><span data-i18n="sec.recurring">Sự cố lặp lại</span> <span style="font-size:11px;color:var(--muted);font-weight:400">(root cause lặp ≥ 2 lần)</span></h3>
     {% if recurring_incidents %}
     <span class="badge badge-{{ 'high' if recurring_incidents|length > 3 else 'medium' }}">
       {{ recurring_incidents|length }} pattern
@@ -135,9 +135,9 @@
   <table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
-        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Root Cause Type</th>
-        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Service</th>
-        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Project</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400" data-i18n="th.rc_type">Loại nguyên nhân gốc</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400" data-i18n="th.service">Dịch vụ</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400" data-i18n="th.project">Dự án</th>
         <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">Số lần</th>
         <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">TB bước</th>
         <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Cập nhật</th>
@@ -166,8 +166,8 @@
 </div>
 
 <div style="margin-top:16px">
-  <a href="/dashboard/health" class="btn btn-ghost" style="font-size:12px">↺ Tải lại</a>
-  <a href="/dashboard" class="btn btn-ghost" style="font-size:12px;margin-left:8px">← Investigations</a>
+  <a href="/dashboard/health" class="btn btn-ghost" style="font-size:12px" data-i18n="btn.reload">↺ Tải lại</a>
+  <a href="/dashboard" class="btn btn-ghost" style="font-size:12px;margin-left:8px">← <span data-i18n="nav.investigations">Cuộc điều tra</span></a>
 </div>
 
 {% endblock %}

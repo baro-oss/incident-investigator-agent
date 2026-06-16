@@ -3,18 +3,18 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 style="font-size:18px;font-weight:500">Hypothesis Catalog Editor</h1>
+  <h1 style="font-size:18px;font-weight:500" data-i18n="page.catalog">Trình sửa danh mục giả thuyết</h1>
   <div class="meta">Thêm / xóa entry DB — engine dùng DB override lên trên default catalog</div>
 </div>
 
 <!-- Filter -->
 <div class="card" style="margin-bottom:16px;padding:12px 16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
   <form method="get" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <select name="domain" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:13px">
+    <select name="domain" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:13px">
       <option value="microservice" {{ 'selected' if filter_domain == 'microservice' }}>microservice</option>
       <option value="fintech" {{ 'selected' if filter_domain == 'fintech' }}>fintech</option>
     </select>
-    <select name="project_id" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:13px">
+    <select name="project_id" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:4px;font-size:13px">
       {% for pid in projects %}
       <option value="{{ pid }}" {{ 'selected' if filter_project == pid }}>{{ pid }}</option>
       {% endfor %}
@@ -25,46 +25,46 @@
 
 <!-- Add Form -->
 <div class="card" style="margin-bottom:20px">
-  <div class="card-header" style="margin-bottom:14px"><h3 style="margin:0">Thêm entry mới</h3></div>
+  <div class="card-header" style="margin-bottom:14px"><h3 style="margin:0" data-i18n="sec.add_entry">Thêm mục mới</h3></div>
   <form method="post" action="/dashboard/catalog/add" style="display:grid;gap:10px">
     <input type="hidden" name="domain" value="{{ filter_domain }}">
     <input type="hidden" name="project_id" value="{{ filter_project }}">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Tag *</label>
-        <input name="tag" required placeholder="vd: cache_miss" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Tag *</label>
+        <input name="tag" required placeholder="vd: cache_miss" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Root cause type</label>
-        <input name="root_cause_type" placeholder="vd: cache_miss" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Root cause type</label>
+        <input name="root_cause_type" placeholder="vd: cache_miss" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
       </div>
     </div>
     <div>
-      <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Content (mô tả)</label>
-      <input name="content" placeholder="Mô tả ngắn về giả thuyết" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Content (mô tả)</label>
+      <input name="content" placeholder="Mô tả ngắn về giả thuyết" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Keywords (phẩy)</label>
-        <input name="keywords" placeholder="cache, miss, eviction" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Keywords (phẩy)</label>
+        <input name="keywords" placeholder="cache, miss, eviction" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Relevant tools (phẩy)</label>
-        <input name="relevant_tools" placeholder="get_metrics, get_error_breakdown" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Relevant tools (phẩy)</label>
+        <input name="relevant_tools" placeholder="get_metrics, get_error_breakdown" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr 100px;gap:10px">
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Confirm keywords (phẩy)</label>
-        <input name="confirm_kws" placeholder="cache, miss" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Confirm keywords (phẩy)</label>
+        <input name="confirm_kws" placeholder="cache, miss" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Rule-out keywords (phẩy)</label>
-        <input name="rule_out_kws" placeholder="bình thường" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Rule-out keywords (phẩy)</label>
+        <input name="rule_out_kws" placeholder="bình thường" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
       </div>
       <div>
-        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:3px">Confirm conf</label>
-        <select name="confirm_conf" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Confirm conf</label>
+        <select name="confirm_conf" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
           <option value="medium" selected>medium</option>
           <option value="high">high</option>
           <option value="low">low</option>
@@ -85,7 +85,7 @@
   {% if db_entries %}
   <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead>
-      <tr style="color:var(--text-muted);border-bottom:1px solid var(--border)">
+      <tr style="color:var(--muted);border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:6px 8px">Tag</th>
         <th style="text-align:left;padding:6px 8px">Domain / Project</th>
         <th style="text-align:left;padding:6px 8px">Content</th>
@@ -99,10 +99,10 @@
       {% for e in db_entries %}
       <tr style="border-bottom:1px solid var(--border)">
         <td style="padding:6px 8px"><code>{{ e.tag }}</code></td>
-        <td style="padding:6px 8px;color:var(--text-muted);font-size:12px">{{ e.domain }}/{{ e.project_id }}</td>
+        <td style="padding:6px 8px;color:var(--muted);font-size:12px">{{ e.domain }}/{{ e.project_id }}</td>
         <td style="padding:6px 8px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ e.content }}</td>
-        <td style="padding:6px 8px;color:var(--text-muted);font-size:12px">{{ e.keywords }}</td>
-        <td style="padding:6px 8px;color:var(--text-muted);font-size:12px">{{ e.relevant_tools }}</td>
+        <td style="padding:6px 8px;color:var(--muted);font-size:12px">{{ e.keywords }}</td>
+        <td style="padding:6px 8px;color:var(--muted);font-size:12px">{{ e.relevant_tools }}</td>
         <td style="padding:6px 8px"><span class="badge badge-{{ 'high' if e.confirm_conf == 'high' else ('medium' if e.confirm_conf == 'medium' else 'low') }}">{{ e.confirm_conf }}</span></td>
         <td style="padding:6px 8px">
           <form method="post" action="/dashboard/catalog/{{ e.id }}/delete" style="display:inline">
@@ -117,18 +117,18 @@
     </tbody>
   </table>
   {% else %}
-  <div style="color:var(--text-muted);font-size:13px;padding:8px">Chưa có DB override — dùng default catalog.</div>
+  <div style="color:var(--muted);font-size:13px;padding:8px">Chưa có DB override — dùng default catalog.</div>
   {% endif %}
 </div>
 
 <!-- Default catalog (read-only) -->
 <div class="card">
   <div class="card-header" style="margin-bottom:12px">
-    <h3 style="margin:0">Default Catalog — <span style="font-weight:400;color:var(--text-muted)">{{ filter_domain }}</span> ({{ default_catalog|length }} entries, read-only)</h3>
+    <h3 style="margin:0">Default Catalog — <span style="font-weight:400;color:var(--muted)">{{ filter_domain }}</span> ({{ default_catalog|length }} entries, read-only)</h3>
   </div>
   <table style="width:100%;border-collapse:collapse;font-size:13px">
     <thead>
-      <tr style="color:var(--text-muted);border-bottom:1px solid var(--border)">
+      <tr style="color:var(--muted);border-bottom:1px solid var(--border)">
         <th style="text-align:left;padding:6px 8px">Tag</th>
         <th style="text-align:left;padding:6px 8px">Content</th>
         <th style="text-align:left;padding:6px 8px">Keywords</th>
@@ -140,7 +140,7 @@
       <tr style="border-bottom:1px solid var(--border)">
         <td style="padding:6px 8px"><code>{{ e.tag }}</code></td>
         <td style="padding:6px 8px">{{ e.content }}</td>
-        <td style="padding:6px 8px;color:var(--text-muted);font-size:12px">{{ e.keywords|join(", ") }}</td>
+        <td style="padding:6px 8px;color:var(--muted);font-size:12px">{{ e.keywords|join(", ") }}</td>
         <td style="padding:6px 8px"><span class="badge badge-{{ 'high' if e.confirm_conf == 'high' else ('medium' if e.confirm_conf == 'medium' else 'low') }}">{{ e.confirm_conf }}</span></td>
       </tr>
       {% endfor %}

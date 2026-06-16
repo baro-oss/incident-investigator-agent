@@ -2,10 +2,15 @@
 {% block title %}Admin · Users — Investigation Agent{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Quản lý Users</h2>
-  <div style="display:flex;gap:.5rem">
-    <a href="/dashboard/admin/roles" class="btn btn-secondary">Roles →</a>
-    <a href="/dashboard/admin/groups" class="btn btn-secondary">Groups →</a>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+    <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px">← Dashboard</a>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h2 style="margin:0" data-i18n="page.users">Quản lý người dùng</h2>
+    <div style="display:flex;gap:.5rem">
+      <a href="/dashboard/admin/roles" class="btn btn-secondary">Roles →</a>
+      <a href="/dashboard/admin/groups" class="btn btn-secondary">Groups →</a>
+    </div>
   </div>
 </div>
 
@@ -15,7 +20,7 @@
 
 <!-- Tạo user mới -->
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header">Tạo user mới</div>
+  <div class="card-header" data-i18n="sec.create_user">Tạo người dùng mới</div>
   <div class="card-body">
     <form method="post" action="/dashboard/admin/users" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
       <div>
@@ -26,7 +31,7 @@
         <label class="form-label">Mật khẩu</label>
         <input class="form-input" type="password" name="password" required placeholder="≥8 ký tự">
       </div>
-      <button type="submit" class="btn btn-primary">Tạo user</button>
+      <button type="submit" class="btn btn-primary" data-i18n="btn.create_user">Tạo người dùng</button>
     </form>
   </div>
 </div>
@@ -75,7 +80,7 @@
               <span class="badge badge-medium">{{ a.role_name }}</span>
               <small style="color:var(--text-muted)">{{ a.scope_type }}{% if a.scope_project_id %}/{{ a.scope_project_id }}{% endif %}</small>
               <form method="post" action="/dashboard/admin/assignments/{{ a.id }}/remove" style="display:inline">
-                <button type="submit" title="Xoá gán" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:0 2px;font-size:.75rem">✕</button>
+                <button type="submit" title="Xóa gán" style="background:none;border:none;color:var(--text-muted);cursor:pointer;padding:0 2px;font-size:.75rem">✕</button>
               </form>
             </span>
             {% endfor %}

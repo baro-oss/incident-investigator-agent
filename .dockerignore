@@ -32,3 +32,4 @@ greennode-agentbase-skills/
 # Temp
 *.tmp
 *.log
+.agentbase/

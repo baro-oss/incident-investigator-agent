@@ -2,20 +2,20 @@
 {% block title %}Investigations — Agent Dashboard{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Investigations</h1>
+  <h1 data-i18n="page.investigations">Cuộc điều tra</h1>
   <div class="meta">Lịch sử điều tra — {{ total }} bản ghi</div>
 </div>
 
 <div class="filter-bar">
   <form method="get" style="display:contents">
     <select name="project_id" onchange="this.form.submit()">
-      <option value="">Tất cả project</option>
+      <option value="" data-i18n="lbl.all_projects">Tất cả dự án</option>
       {% for p in projects %}
       <option value="{{ p }}" {{ 'selected' if p == filter_project }}>{{ p }}</option>
       {% endfor %}
     </select>
     <select name="confidence" onchange="this.form.submit()">
-      <option value="">Tất cả confidence</option>
+      <option value="" data-i18n="lbl.all_confidence">Tất cả độ tin cậy</option>
       <option value="high"         {{ 'selected' if filter_confidence == 'high' }}>HIGH</option>
       <option value="medium"       {{ 'selected' if filter_confidence == 'medium' }}>MEDIUM</option>
       <option value="low"          {{ 'selected' if filter_confidence == 'low' }}>LOW</option>
@@ -26,8 +26,8 @@
            style="flex:1;min-width:160px;padding:6px 10px;background:var(--surface2);
                   border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:13px">
     <button type="submit" class="btn btn-ghost" style="padding:6px 12px">🔍</button>
-    <a href="/dashboard" class="btn btn-ghost">Xóa filter</a>
-    <a href="/dashboard/trigger" class="btn btn-primary" style="margin-left:auto">▶ Trigger mới</a>
+    <a href="/dashboard" class="btn btn-ghost" data-i18n="btn.clear_filter">Xóa filter</a>
+    <a href="/dashboard/trigger" class="btn btn-primary" style="margin-left:auto" data-i18n="btn.new_trigger">▶ Trigger mới</a>
   </form>
 </div>
 
@@ -45,7 +45,7 @@
           <th>Steps</th>
           <th>Stop</th>
           <th>Thời gian</th>
-          <th>Root Cause</th>
+          <th data-i18n="th.root_cause">Nguyên nhân gốc</th>
         </tr>
       </thead>
       <tbody>

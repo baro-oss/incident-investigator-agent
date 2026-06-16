@@ -276,6 +276,15 @@ async def not_authorized_handler(request: Request, exc: NotAuthorized):
     )
 
 
+# ── Root redirect ─────────────────────────────────────────────────────────────
+
+@app.get("/")
+async def root_redirect(request: Request):
+    if request.session.get("user_id"):
+        return RedirectResponse("/dashboard", status_code=303)
+    return RedirectResponse("/auth/login", status_code=303)
+
+
 # ── Auth routes ───────────────────────────────────────────────────────────────
 
 @app.get("/auth/login", response_class=HTMLResponse)

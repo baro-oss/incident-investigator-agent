@@ -3,7 +3,7 @@
 {% block content %}
 
 <div class="page-header">
-  <h1 style="font-size:18px;font-weight:500">Alert Channels</h1>
+  <h1 style="font-size:18px;font-weight:500" data-i18n="page.channels">Kênh thông báo</h1>
   <div class="meta">Cấu hình kênh thông báo per-project</div>
 </div>
 
@@ -33,12 +33,13 @@
       </div>
       <div style="margin-bottom:12px">
         {% if row2.enabled %}
-        <span class="badge badge-high">enabled</span>
+        <span class="badge badge-high" data-i18n="status.on">bật</span>
         {% else %}
-        <span class="badge badge-default">disabled</span>
+        <span class="badge badge-default" data-i18n="status.off">tắt</span>
         {% endif %}
       </div>
-      <form method="post" action="/dashboard/channels/{{ row2.project_id }}/{{ row2.channel }}/toggle">
+      <form method="post" action="/dashboard/channels/{{ row2.project_id }}/{{ row2.channel }}/toggle"
+            {% if row2.enabled %}onsubmit="return confirm('Tắt kênh {{ row2.channel }} cho {{ row2.project_id }}?')"{% endif %}>
         <button type="submit" class="btn {{ 'btn-ghost' if row2.enabled else 'btn-primary' }}"
                 style="font-size:11px;padding:4px 10px;width:100%">
           {{ 'Tắt' if row2.enabled else 'Bật' }}

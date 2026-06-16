@@ -21,7 +21,7 @@
 
   <!-- LLM Config (per-project custom endpoint) -->
   <div class="card">
-    <h3 style="margin-bottom:12px">LLM Config</h3>
+    <h3 style="margin-bottom:12px" data-i18n="sec.llm_config">Cấu hình LLM</h3>
     <table style="width:100%;font-size:13px;margin-bottom:10px">
       <tr>
         <td style="color:var(--muted);padding:4px 0;width:40%">Provider hiện tại</td>
@@ -201,7 +201,7 @@
   <div class="card">
     <!-- Header + nút thêm -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <h3 style="margin:0">Services ({{ proj.services|length }})</h3>
+      <h3 style="margin:0"><span data-i18n="sec.services">Dịch vụ</span> ({{ proj.services|length }})</h3>
       <button type="button" onclick="svcToggleForm()"
               id="svc-add-btn" class="btn btn-primary" style="font-size:12px;padding:5px 12px">+ Thêm</button>
     </div>
@@ -331,7 +331,7 @@
 
 <!-- Alert Channels -->
 <div class="card" style="margin-top:0">
-  <h3 style="margin-bottom:14px">Alert Channels</h3>
+  <h3 style="margin-bottom:14px" data-i18n="sec.channels">Kênh thông báo</h3>
   {% set ch_icons = {'telegram': '✈', 'teams': '⊞', 'email': '✉', 'slack': '💬'} %}
   {% set ch_examples = {
     'telegram': '{"chat_id": "-1001234567890"}',
@@ -392,7 +392,7 @@
 <!-- MCP Servers -->
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <h3 style="margin:0">MCP Servers ({{ proj.mcp_servers|length }})</h3>
+    <h3 style="margin:0"><span data-i18n="sec.mcp_servers">MCP Servers</span> ({{ proj.mcp_servers|length }})</h3>
     <a href="/dashboard/mcp" style="font-size:12px;color:var(--accent);text-decoration:none">
       + Đăng ký mới →
     </a>
@@ -401,9 +401,9 @@
   <table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead>
       <tr style="border-bottom:1px solid var(--border)">
-        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">Name</th>
+        <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400" data-i18n="th.name">Tên</th>
         <th style="text-align:left;padding:5px 6px;color:var(--muted);font-weight:400">URL</th>
-        <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400">Status</th>
+        <th style="text-align:center;padding:5px 6px;color:var(--muted);font-weight:400" data-i18n="th.status">Trạng thái</th>
       </tr>
     </thead>
     <tbody>
@@ -413,9 +413,9 @@
         <td style="padding:7px 6px"><code style="font-size:11px">{{ srv.url }}</code></td>
         <td style="text-align:center;padding:7px 6px">
           {% if srv.enabled %}
-          <span class="badge badge-high" style="font-size:10px">enabled</span>
+          <span class="badge badge-high" style="font-size:10px" data-i18n="status.on">bật</span>
           {% else %}
-          <span class="badge badge-default" style="font-size:10px">disabled</span>
+          <span class="badge badge-default" style="font-size:10px" data-i18n="status.off">tắt</span>
           {% endif %}
         </td>
       </tr>
@@ -430,7 +430,7 @@
 <!-- Repo / Source Mapping (Phase 10 — F1) -->
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <h3 style="margin:0">Repo / Source ({{ proj.service_repos|length }})</h3>
+    <h3 style="margin:0"><span data-i18n="sec.repos">Repo / Mã nguồn</span> ({{ proj.service_repos|length }})</h3>
     <span style="font-size:11px;color:var(--muted)">READ-ONLY — chỉ đọc qua MCP</span>
   </div>
 
@@ -519,7 +519,7 @@
 
 <!-- Recent Investigations -->
 <div class="card">
-  <h3 style="margin-bottom:12px">Investigations gần đây</h3>
+  <h3 style="margin-bottom:12px" data-i18n="sec.recent_inv">Điều tra gần đây</h3>
   {% if proj.recent_investigations %}
   <table style="width:100%;border-collapse:collapse;font-size:12px">
     <thead>
@@ -548,7 +548,7 @@
         </td>
         <td style="padding:7px 6px;white-space:nowrap">
           <a href="/dashboard/investigations/{{ inv.investigation_id }}"
-             style="color:var(--accent);text-decoration:none;font-size:11px">detail →</a>
+             style="color:var(--accent);text-decoration:none;font-size:11px" data-i18n="lbl.detail_link">Chi tiết →</a>
         </td>
       </tr>
       {% endfor %}

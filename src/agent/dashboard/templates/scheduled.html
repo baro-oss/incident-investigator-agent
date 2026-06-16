@@ -2,16 +2,16 @@
 {% block title %}Scheduled Triggers{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>⏰ Scheduled Triggers</h1>
+  <h1>⏰ <span data-i18n="page.scheduled">Kích hoạt định kỳ</span></h1>
   <p class="muted">Trigger điều tra định kỳ per-project. Mỗi lần fire → 1 investigation được đưa vào queue.</p>
 </div>
 
 {# Form tạo trigger mới #}
 <div class="card" style="margin-bottom:24px">
-  <h3 style="margin:0 0 16px">Tạo trigger mới</h3>
+  <h3 style="margin:0 0 16px" data-i18n="sec.create_trigger">Tạo lịch mới</h3>
   <form method="POST" action="/dashboard/scheduled" style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
     <div class="form-group" style="margin:0">
-      <label class="form-label">Project</label>
+      <label class="form-label" data-i18n="lbl.project">Dự án</label>
       <select name="project_id" class="form-control" style="min-width:140px">
         {% for pid in projects %}
         <option value="{{ pid }}">{{ pid }}</option>
@@ -19,7 +19,7 @@
       </select>
     </div>
     <div class="form-group" style="margin:0">
-      <label class="form-label">Service</label>
+      <label class="form-label" data-i18n="lbl.service">Dịch vụ</label>
       <input name="service" class="form-control" placeholder="payment-gateway" required style="min-width:180px">
     </div>
     <div class="form-group" style="margin:0">
@@ -56,14 +56,14 @@
   <table class="table" style="margin:0">
     <thead>
       <tr>
-        <th>Project</th>
-        <th>Service</th>
+        <th data-i18n="th.project">Dự án</th>
+        <th data-i18n="th.service">Dịch vụ</th>
         <th>Scenario</th>
-        <th>Interval</th>
-        <th>Trạng thái</th>
-        <th>Last run</th>
-        <th>Next run</th>
-        <th>Hành động</th>
+        <th data-i18n="th.interval">Chu kỳ</th>
+        <th data-i18n="th.status">Trạng thái</th>
+        <th data-i18n="th.last_run">Lần chạy cuối</th>
+        <th data-i18n="th.next_run">Lần chạy tiếp</th>
+        <th data-i18n="th.action">Hành động</th>
       </tr>
     </thead>
     <tbody>

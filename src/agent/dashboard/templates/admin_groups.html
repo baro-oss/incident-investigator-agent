@@ -2,15 +2,20 @@
 {% block title %}Admin · Groups — Investigation Agent{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h2>Quản lý Project Groups</h2>
-  <div style="display:flex;gap:.5rem">
-    <a href="/dashboard/admin/users" class="btn btn-secondary">Users →</a>
-    <a href="/dashboard/admin/roles" class="btn btn-secondary">Roles →</a>
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+    <a href="/dashboard/admin/users" style="color:var(--muted);text-decoration:none;font-size:13px">← Users</a>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <h2 style="margin:0" data-i18n="page.groups">Quản lý nhóm dự án</h2>
+    <div style="display:flex;gap:.5rem">
+      <a href="/dashboard/admin/users" class="btn btn-secondary">Users →</a>
+      <a href="/dashboard/admin/roles" class="btn btn-secondary">Roles →</a>
+    </div>
   </div>
 </div>
 
 <div class="card" style="margin-bottom:1.5rem">
-  <div class="card-header">Tạo group mới</div>
+  <div class="card-header" data-i18n="sec.create_group">Tạo nhóm mới</div>
   <div class="card-body">
     <form method="post" action="/dashboard/admin/groups" style="display:flex;gap:.8rem;align-items:flex-end;flex-wrap:wrap">
       <div>
@@ -21,7 +26,7 @@
         <label class="form-label">Mô tả</label>
         <input class="form-input" type="text" name="description" placeholder="Tuỳ chọn">
       </div>
-      <button type="submit" class="btn btn-primary">Tạo group</button>
+      <button type="submit" class="btn btn-primary" data-i18n="btn.create_group">Tạo nhóm</button>
     </form>
   </div>
 </div>
