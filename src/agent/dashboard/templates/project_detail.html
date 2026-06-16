@@ -199,49 +199,132 @@
 
   <!-- Services -->
   <div class="card">
+    <!-- Header + nút thêm -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <h3 style="margin:0">Services ({{ proj.services|length }})</h3>
+      <button type="button" onclick="svcToggleForm()"
+              id="svc-add-btn" class="btn btn-primary" style="font-size:12px;padding:5px 12px">+ Thêm</button>
     </div>
-    {% if proj.services %}
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
-      {% for svc in proj.services %}
-      <div style="display:flex;align-items:flex-start;gap:8px;background:var(--surface2);
-                  border:1px solid var(--border);border-radius:5px;padding:6px 10px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:12px;font-weight:500">{{ svc.service }}</div>
-          {% if svc.description %}
-          <div style="font-size:11px;color:var(--muted);margin-top:1px;line-height:1.4">{{ svc.description }}</div>
-          {% else %}
-          <div style="font-size:10px;color:var(--muted);opacity:.6;margin-top:1px">chưa có mô tả</div>
-          {% endif %}
+
+    <!-- Form thêm / cập nhật (ẩn mặc định, toggle bằng nút trên) -->
+    <div id="svc-form-wrap" style="display:none;margin-bottom:14px;padding:12px 14px;
+         background:var(--surface2);border:1px solid var(--border);border-radius:6px">
+      <form method="post" action="/dashboard/projects/{{ proj.id }}/services/add"
+            id="svc-form" style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:6px;align-items:flex-start">
+          <input type="text" name="service" id="svc-input-name" placeholder="payment-gateway" required
+                 style="flex:1;padding:6px 10px;background:var(--bg,var(--surface));border:1px solid var(--border);
+                        border-radius:5px;color:var(--text);font-size:12px">
+          <button type="submit" class="btn btn-primary" style="font-size:12px;padding:6px 14px;white-space:nowrap">✓ Lưu</button>
+          <button type="button" onclick="svcToggleForm(true)"
+                  class="btn btn-ghost" style="font-size:12px;padding:6px 10px">✕</button>
         </div>
-        {% if svc.service %}
-        <form method="post" action="/dashboard/projects/{{ proj.id }}/services/{{ svc.service | urlencode_path }}/delete"
-              style="display:inline" onsubmit="return confirm('Xóa service {{ svc.service | e }}?')">
-          <button type="submit"
-                  style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
-                         padding:0;line-height:1" title="Xóa">✕</button>
-        </form>
-        {% endif %}
-      </div>
-      {% endfor %}
+        <input type="text" name="description" id="svc-input-desc"
+               placeholder="Mô tả ngắn — vd: cổng thanh toán, gọi provider thẻ (giúp agent suy luận)"
+               style="padding:6px 10px;background:var(--bg,var(--surface));border:1px solid var(--border);
+                      border-radius:5px;color:var(--text);font-size:12px">
+        <div style="font-size:10px;color:var(--muted)">Thêm lại service đã có để cập nhật mô tả.</div>
+      </form>
     </div>
-    {% else %}
-    <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Chưa có service nào.</p>
+
+    <!-- Bảng services -->
+    {% if proj.services %}
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border)">
+            <th style="text-align:left;padding:5px 8px;color:var(--muted);font-weight:500;white-space:nowrap">Service</th>
+            <th style="text-align:left;padding:5px 8px;color:var(--muted);font-weight:500;width:99%">Mô tả</th>
+            <th style="padding:5px 4px;width:64px"></th>
+          </tr>
+        </thead>
+        <tbody id="svc-tbody">
+          {% for svc in proj.services %}
+          {# Tương thích cả dict {service,description} lẫn plain string (tránh lỗi version mismatch) #}
+          {% set svc_name = svc.service if svc is mapping else svc %}
+          {% set svc_desc = svc.description if svc is mapping else '' %}
+          <tr class="svc-row" style="border-bottom:1px solid var(--border)">
+            <td style="padding:7px 8px;font-weight:500;white-space:nowrap;color:var(--text)">
+              {{ svc_name or '—' }}
+            </td>
+            <td style="padding:7px 8px;color:{{ 'var(--text)' if svc_desc else 'var(--muted)' }}">
+              {{ svc_desc if svc_desc else 'chưa có mô tả' }}
+            </td>
+            <td style="padding:7px 4px;white-space:nowrap;text-align:right">
+              {% if svc_name %}
+              <!-- Nút sửa mô tả (pre-fill form) -->
+              <button type="button"
+                      data-svc-name="{{ svc_name | e }}"
+                      data-svc-desc="{{ svc_desc | e }}"
+                      onclick="svcEdit(this.dataset.svcName, this.dataset.svcDesc)"
+                      style="background:none;border:none;cursor:pointer;color:var(--muted);
+                             font-size:12px;padding:2px 5px;border-radius:3px"
+                      title="Sửa mô tả">✏</button>
+              <!-- Nút xóa -->
+              <form method="post"
+                    action="/dashboard/projects/{{ proj.id }}/services/{{ svc_name | urlencode_path }}/delete"
+                    style="display:inline"
+                    onsubmit="return confirm('Xóa service {{ svc_name | e }}?')">
+                <button type="submit"
+                        style="background:none;border:none;cursor:pointer;color:var(--muted);
+                               font-size:13px;padding:2px 5px;border-radius:3px"
+                        title="Xóa service">✕</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {# Phân trang đơn giản: ẩn rows > 10, hiện nút "Xem thêm" nếu có nhiều hơn #}
+    {% if proj.services|length > 10 %}
+    <div id="svc-showmore" style="margin-top:8px;text-align:center">
+      <button type="button" onclick="svcShowAll()"
+              class="btn btn-ghost" style="font-size:11px;padding:4px 12px">
+        Xem thêm ({{ proj.services|length - 10 }} còn lại)
+      </button>
+    </div>
     {% endif %}
-    <form method="post" action="/dashboard/projects/{{ proj.id }}/services/add"
-          style="display:flex;flex-direction:column;gap:6px">
-      <input type="text" name="service" placeholder="payment-gateway" required
-             style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
-                    border-radius:5px;color:var(--text);font-size:12px">
-      <input type="text" name="description"
-             placeholder="Mô tả ngắn — vd: cổng thanh toán, gọi provider thẻ (giúp agent suy luận)"
-             style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
-                    border-radius:5px;color:var(--text);font-size:12px">
-      <button type="submit" class="btn btn-primary" style="font-size:12px;padding:6px 12px;align-self:flex-start">+ Thêm / cập nhật</button>
-    </form>
-    <div style="font-size:10px;color:var(--muted);margin-top:6px">Thêm lại service đã có để cập nhật mô tả.</div>
+    {% else %}
+    <p style="color:var(--muted);font-size:12px;margin:0">Chưa có service nào. Nhấn "+ Thêm" để bắt đầu.</p>
+    {% endif %}
   </div>
+
+  <script>
+  (function(){
+    // Ẩn rows > 10 khi load
+    var rows = document.querySelectorAll('#svc-tbody .svc-row');
+    for (var i = 10; i < rows.length; i++) rows[i].style.display = 'none';
+  })();
+
+  function svcShowAll() {
+    document.querySelectorAll('#svc-tbody .svc-row').forEach(function(r){ r.style.display = ''; });
+    var btn = document.getElementById('svc-showmore');
+    if (btn) btn.style.display = 'none';
+  }
+
+  function svcToggleForm(forceClose) {
+    var wrap = document.getElementById('svc-form-wrap');
+    var open = wrap.style.display !== 'none';
+    if (forceClose || open) {
+      wrap.style.display = 'none';
+      document.getElementById('svc-form').reset();
+    } else {
+      wrap.style.display = 'block';
+      document.getElementById('svc-input-name').focus();
+    }
+  }
+
+  function svcEdit(name, desc) {
+    var wrap = document.getElementById('svc-form-wrap');
+    wrap.style.display = 'block';
+    document.getElementById('svc-input-name').value = name;
+    document.getElementById('svc-input-desc').value = desc;
+    document.getElementById('svc-input-desc').focus();
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  </script>
 
 </div>
 
