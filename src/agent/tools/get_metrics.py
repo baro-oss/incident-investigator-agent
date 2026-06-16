@@ -8,6 +8,7 @@ Không dùng để: phân tích loại lỗi cụ thể (→ get_error_breakdown
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List
 
 from agent.storage.db import open_db
@@ -26,6 +27,14 @@ def _run(params: Dict[str, Any]) -> Observation:
     metric_name: str = params.get("metric_name", "latency_p99")
     scenario: str = params.get("scenario", "scenario1")
     date: str = params.get("date", "2024-01-15")
+
+    # L4: validate time_window format
+    if not re.match(r"^\d{1,2}:\d{2}-\d{1,2}:\d{2}$", time_window.strip()):
+        return Observation(
+            summary=f"time_window '{time_window}' không đúng định dạng HH:MM-HH:MM.",
+            aggregates={}, samples=[], total_count=0, truncated=False,
+            metadata={"tool_name": "get_metrics", "error": "invalid_time_window"},
+        )
 
     start_str, end_str = time_window.split("-")
     ts_start = f"{date}T{start_str}:00Z"

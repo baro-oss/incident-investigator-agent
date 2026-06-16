@@ -108,6 +108,18 @@ class MCPClient:
 
         return body.get("result", {})
 
+    async def call_tool_text(self, name: str, arguments: Dict[str, Any]) -> str:
+        """Gọi tool trên MCP server, trả raw text KHÔNG qua _parse_observation.
+
+        Dùng khi cần toàn bộ nội dung (vd: get_code_diff cần full diff text).
+        """
+        try:
+            result = await self._call("tools/call", {"name": name, "arguments": arguments})
+        except Exception as e:
+            logger.warning("MCP tool '%s' lỗi: %s", name, e)
+            return f"[MCP error: {e}]"
+        return _extract_text(result.get("content", []))
+
     async def _call_tool(self, name: str, arguments: Dict[str, Any]) -> Observation:
         """Gọi tool trên MCP server, parse kết quả → Observation."""
         try:

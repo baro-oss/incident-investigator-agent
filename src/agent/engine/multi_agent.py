@@ -357,6 +357,25 @@ class MultiAgentEngine:
         # E8: Calibration
         from agent.engine.calibration import apply_calibration
         merged.verdict = apply_calibration(merged.verdict)
+        # E4: competing gate — multi-agent không loop lại được → downgrade thay vì nudge
+        competing = merged.competing_open()
+        if merged.verdict.confidence in ("high", "medium") and competing:
+            names = "; ".join(h.content[:60] for h in competing[:3])
+            gate_note = (
+                f" [⚠ E4 competing-gate: {len(competing)} hypothesis chưa loại trừ"
+                f" — {names[:80]}]"
+            )
+            merged.verdict.competing_hypotheses = (
+                (merged.verdict.competing_hypotheses or "") + gate_note
+            )
+            _dg_conf = {"high": "medium", "medium": "low"}
+            orig_conf = merged.verdict.confidence
+            merged.verdict.confidence = _dg_conf.get(orig_conf, orig_conf)
+            logger.info(
+                "[%s] E4 multi-agent competing gate: %d open → downgrade %s→%s",
+                investigation_id, len(competing), orig_conf, merged.verdict.confidence,
+            )
+
         # E12: specificity — multi-agent không loop được → downgrade trực tiếp nếu mờ
         from agent.engine.specificity import SPECIFICITY_THRESHOLD, compute_verdict_specificity
         spec_score, spec_reasons = compute_verdict_specificity(merged.verdict, merged)

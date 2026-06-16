@@ -11,7 +11,7 @@ import json
 from typing import Any, Dict
 
 from agent.storage.db import open_db
-from agent.tools.contracts import Observation, Tool
+from agent.tools.contracts import SAMPLES_HARD_CAP, Observation, Tool
 
 
 def _run(params: Dict[str, Any]) -> Observation:
@@ -88,9 +88,9 @@ def _run(params: Dict[str, Any]) -> Observation:
     return Observation(
         summary=summary,
         aggregates=aggregates,
-        samples=dep_details,
+        samples=dep_details[:SAMPLES_HARD_CAP],
         total_count=len(dep_details),
-        truncated=False,
+        truncated=len(dep_details) > SAMPLES_HARD_CAP,
         metadata={"tool_name": "get_dependencies", "service": service},
     )
 

@@ -506,7 +506,7 @@ class TestGetCodeDiffTool:
 
     @pytest.mark.asyncio
     async def test_with_mcp_client_distills_raw(self):
-        """Có MCP client → gọi tool diff, distill output, trả Observation chưng cất."""
+        """Có MCP client → gọi call_tool_text, distill output, trả Observation chưng cất."""
         db_path = _make_temp_repos_db()
         raw_diff = (
             "diff --git a/config.yaml b/config.yaml\n"
@@ -514,26 +514,18 @@ class TestGetCodeDiffTool:
             "-  max_pool: 100\n"
             "+  max_pool: 20\n"
         )
-        mock_diff_tool_obs = Observation(
-            summary=raw_diff,
-            aggregates={},
-            samples=[],
-            total_count=1,
-            truncated=False,
-            metadata={},
-        )
-
-        async def _mock_run(params):
-            return mock_diff_tool_obs
 
         from agent.tools.contracts import Tool as _Tool
-        mock_diff_tool = _Tool("get_diff", "mock diff", {}, _mock_run)
 
         async def _mock_get_tools():
-            return [mock_diff_tool]
+            # Trả tool với tên get_diff để code_diff tìm thấy
+            dummy = _Tool("get_diff", "mock diff", {}, AsyncMock())
+            return [dummy]
 
         mock_client = MagicMock()
         mock_client.get_tools = _mock_get_tools
+        # M8: code_diff dùng call_tool_text thay vì diff_tool.run()
+        mock_client.call_tool_text = AsyncMock(return_value=raw_diff)
 
         with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
             from agent.intake.project_registry import upsert_service_repo

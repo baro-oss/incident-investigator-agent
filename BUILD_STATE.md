@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63). **Phase 13 📋 ĐÃ LÊN KẾ HOẠCH (duyệt 2026-06-16), CHƯA CODE** — Hardening & Sharpening (Ngày 64–69), plan đầy đủ ở `docs/18-roadmap-phase-13.md`.
-**Cổng kiểm gần nhất:** Ngày 63 (D63 Tests+CI+Audit+Cổng P12) — 502 tests (461 baseline + 41 mới) · CI matrix sqlite+postgres đã xanh từ Phase 11 · READ-ONLY audit clean · 4 nguyên tắc giữ · degrade safe (api_key không lộ HTML, _draining reset).
-**Kế hoạch kế tiếp:** Phase 13 Ngày 64 (Reliability: silent-death & queue bookkeeping) — bắt đầu implement ở session sau. Ràng buộc cứng: KHÔNG đụng schema/engine state (giữ Verdict/InvestigationState; ngoại lệ duy nhất: status `failed` cho investigation_queue).
+**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63). **Phase 13 🚧 ĐANG LÀM (Ngày 64–67 ✅, Ngày 68–69 còn lại)** — Hardening & Sharpening.
+**Cổng kiểm gần nhất:** Ngày 67 (Engine quality II) — 556 tests (502 baseline + 54 mới P13) · specificity lọc timestamp · competing gate multi-agent · M8 code-diff fix · M9 deps cap · L4 time_window validation · 4 tools.
+**Kế hoạch kế tiếp:** Ngày 68 (Security/authz: M5 READ-ONLY guard · M6 require_perm · M7 SSE auth · L8 HTML escape · L5 HMAC · logging correlation) → Ngày 69 (Tests reliability + Cổng P13).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -161,10 +161,10 @@
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
-| 64 | Reliability: silent-death & queue | H2 outer-`finally` (discard+push luôn chạy) · L1 guard push_verdict(None) · M2 status `failed` · M12 dedup tại enqueue · bắt CancelledError riêng | ☐ |
-| 65 | Dialect parity prod + cost accuracy | H1 dịch json_extract→jsonb (PG) · M4 pricing đúng provider/model · M11 đóng conn finally | ☐ |
-| 66 | Engine quality I | H3 re-prompt chống dừng sớm (biến cục bộ) · M3 trace-gap trung thực · M1 cache-token graph parity · M10 retry loop path | ☐ |
-| 67 | Engine quality II | Specificity tuning (loại số timestamp + threshold theo conf) · competing gate multi-agent · M8 code-diff distill · M9 cap deps · L4 validate time_window | ☐ |
+| 64 | Reliability: silent-death & queue | H2 outer-`finally` (discard+push luôn chạy) · L1 guard push_verdict(None) · M2 status `failed` · M12 dedup tại enqueue · bắt CancelledError riêng | ✅ |
+| 65 | Dialect parity prod + cost accuracy | H1 dịch json_extract→jsonb (PG) · M4 pricing đúng provider/model · M11 đóng conn finally | ✅ |
+| 66 | Engine quality I | H3 re-prompt chống dừng sớm (biến cục bộ) · M3 trace-gap trung thực · M1 cache-token graph parity · M10 retry loop path | ✅ |
+| 67 | Engine quality II | Specificity tuning (loại số timestamp) · competing gate multi-agent · M8 code-diff fix call_tool_text · M9 cap deps · L4 validate time_window 4 tools | ✅ |
 | 68 | Security/authz + UX/DX | M5 siết READ-ONLY guard · M6 require_perm scoped (catalog/channel/service/repo) · M7 SSE auth + dọn dead seam · trang lỗi+escape (L8) · L5 HMAC · logging correlation | ☐ |
 | 69 | Tests reliability + Cổng P13 | Test _translate · invariant error→push_verdict · resilience · graph parity · READ-ONLY guard · queue drain+failed · thay test mong manh · audit + đóng pha | ☐ |
 
@@ -249,6 +249,38 @@
 **Cổng Ngày 62 PASS:** Test-conn endpoint trả JSON ✅ · UI badge JS ✅ · key không lộ HTML ✅ · version v1.2 Phase 12 ✅ · 4-column channels (slack) ✅ · 461/461 tests ✅
 
 ---
+
+### [Session Phase 13 — 2026-06-16] — Ngày 64–67 Engine hardening (context resume)
+
+**Đã làm (Ngày 64 — Reliability):**
+- `output/router.py`: guard `push_verdict(None)` → early return (L1).
+- `investigation_queue.py`: `_worker` finally → `status="failed"` trên exception/cancel, `status="done"` chỉ khi success (M2).
+- `runner.py`: outer try/finally → `discard(key)` + `push_verdict(state)` LUÔN chạy kể cả `CancelledError` (H2); dedup tại enqueue (M12).
+- `tests/test_day64.py`: 8 tests (L1, M2, H2, M12). **537 tests xanh.**
+
+**Đã làm (Ngày 65 — Dialect parity):**
+- `postgres_backend._translate()`: thêm regex dịch `json_extract(col,'$.field')` → `(col::jsonb->>'field')` làm bước ĐẦU (H1).
+- `dashboard/queries.py`: CAST wrapper + `_PRICING` keys keyword-based ("opus"/"sonnet"/"haiku") + `_get_pricing` dùng `keyword in model` (M4) + fix `_cost_usd` default → sonnet.
+- `hypothesis_catalog.py`: 4 `with open_db()` → `try/finally: db.close()` (M11).
+- `tests/test_day65.py`: 17 tests (H1, M4, M11). `test_phase12.py`: update prefix test → keyword test.
+
+**Đã làm (Ngày 66 — Engine quality I):**
+- `loop.py`: `_MAX_TEXT_RETRIES=2` + re-prompt loop trong `decide_next_action` (H3); bật `with_retry` cho loop path (M10).
+- `graph.py`: tích lũy `cache_creation_tokens` + `cache_read_tokens` (M1).
+- `trace_request.py`: thay `pass` loop bằng multi-hop gap detection — `break_point` + 3-branch summary (M3).
+- `tests/test_day66.py`: 10 tests (H3, M3, M1, M10). **556 tests xanh.**
+
+**Đã làm (Ngày 67 — Engine quality II):**
+- `specificity.py`: `_count_distinct_numbers` lọc `HH:MM` trước khi đếm → verdict chỉ-time-window không inflate specificity.
+- `get_dependencies.py`: `samples=dep_details[:SAMPLES_HARD_CAP]`, `truncated=len(dep_details) > SAMPLES_HARD_CAP` (M9).
+- `mcp_client.py`: thêm `call_tool_text(name, args) → str` trả raw text không qua `_parse_observation`.
+- `get_code_diff.py`: dùng `call_tool_text` thay `diff_tool.run()` → tránh double-distill trên 200-char summary (M8).
+- `multi_agent.py`: thêm E4 competing gate trong `_synthesize_verdict` — confidence high/medium + open competing → downgrade + annotate (không loop, không thêm state field).
+- `trace_request.py`, `get_error_breakdown.py`, `get_metrics.py`, `get_recent_deploys.py`: L4 validate `time_window` format HH:MM-HH:MM trả error Observation.
+- `tests/test_day67.py`: 19 tests mới. Fix `test_code_layer.py::test_with_mcp_client_distills_raw` → mock `call_tool_text`. **556 tests xanh.**
+
+**Số liệu:** 502 (baseline P12) + 8 (D64) + 17 (D65) + 10 (D66) + 19 (D67) + 1 fixture = **556 tests.**
+**Ràng buộc:** KHÔNG đụng schema/engine state field · 4 nguyên tắc giữ · READ-ONLY · degrade safe.
 
 ### [Session 64 — 2026-06-15] — Ngày 60: docker-compose.prod + runbook AgentBase + README + audit + Cổng P11
 

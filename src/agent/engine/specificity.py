@@ -89,6 +89,11 @@ def _has_specific_token(text: str, services: list) -> bool:
 
 
 def _count_distinct_numbers(text: str) -> int:
-    """Đếm giá trị số phân biệt trong text (bao gồm dạng 87%, 5x, 8.4x, 200→1000)."""
-    nums = re.findall(r"\d+(?:[.,]\d+)?", text)
+    """Đếm giá trị số phân biệt trong text (bao gồm dạng 87%, 5x, 8.4x, 200→1000).
+
+    Loại bỏ pattern thời gian HH:MM (vd: 14:00, 9:30) trước khi đếm để tránh
+    time_window như "14:00-15:00" inflate count một cách sai.
+    """
+    stripped = re.sub(r"\b\d{1,2}:\d{2}\b", " ", text)
+    nums = re.findall(r"\d+(?:[.,]\d+)?", stripped)
     return len(set(nums))

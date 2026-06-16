@@ -105,13 +105,13 @@ def build_code_diff_tool(
             mcp_tools = await code_mcp_client.get_tools()
             mcp_tool_map = {t.name: t for t in mcp_tools}
 
-            diff_tool = None
+            diff_tool_name = None
             for candidate in _MCP_DIFF_TOOL_CANDIDATES:
                 if candidate in mcp_tool_map:
-                    diff_tool = mcp_tool_map[candidate]
+                    diff_tool_name = candidate
                     break
 
-            if diff_tool is None:
+            if diff_tool_name is None:
                 return Observation(
                     summary=(
                         f"{CODE_DIFF_TOOL_NAME} ({service}@{version}): "
@@ -129,12 +129,13 @@ def build_code_diff_tool(
                     },
                 )
 
-            raw_obs: Observation = await diff_tool.run({
+            # M8: gọi call_tool_text thay vì diff_tool.run() để lấy full diff text,
+            # tránh double-distill trên summary đã cắt 200-char bởi _parse_observation.
+            raw_text = await code_mcp_client.call_tool_text(diff_tool_name, {
                 "repo": repo_url,
                 "ref": branch,
                 "path": path,
             })
-            raw_text = raw_obs.summary or ""
             return distill_code_response(raw_text, tool_name=CODE_DIFF_TOOL_NAME, service=service)
 
         except Exception as e:

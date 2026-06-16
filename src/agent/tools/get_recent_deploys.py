@@ -7,6 +7,7 @@ Không dùng để: phân tích lỗi chi tiết (→ get_error_breakdown) hay l
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict
 
 from agent.storage.db import open_db
@@ -19,6 +20,14 @@ def _run(params: Dict[str, Any]) -> Observation:
     scenario: str = params.get("scenario", "scenario1")
     date: str = params.get("date", "2024-01-15")
     lookback_minutes: int = int(params.get("lookback_minutes", 60))  # mở rộng window nhìn lùi
+
+    # L4: validate time_window format
+    if not re.match(r"^\d{1,2}:\d{2}-\d{1,2}:\d{2}$", time_window.strip()):
+        return Observation(
+            summary=f"time_window '{time_window}' không đúng định dạng HH:MM-HH:MM.",
+            aggregates={}, samples=[], total_count=0, truncated=False,
+            metadata={"tool_name": "get_recent_deploys", "error": "invalid_time_window"},
+        )
 
     start_str, end_str = time_window.split("-")
     ts_start = f"{date}T{start_str}:00Z"
