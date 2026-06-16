@@ -180,11 +180,14 @@ def load_db_catalog_entries(domain: str = "microservice", project_id: str = "def
     """Đọc tất cả entry trong DB cho (domain, project_id). Trả [] nếu bảng chưa có."""
     try:
         from agent.storage.db import open_db
-        with open_db() as db:
+        db = open_db()
+        try:
             rows = db.execute(
                 "SELECT * FROM hypothesis_catalog WHERE domain=? AND project_id=?",
                 (domain, project_id),
             ).fetchall()
+        finally:
+            db.close()
         entries = [_row_to_entry(dict(r)) for r in rows]
         return [e for e in entries if e is not None]
     except Exception as e:
@@ -234,7 +237,8 @@ def add_catalog_entry(
     root_cause_type: str,
 ) -> None:
     from agent.storage.db import open_db
-    with open_db() as db:
+    db = open_db()
+    try:
         db.execute(
             """INSERT INTO hypothesis_catalog
                (domain, project_id, tag, content, keywords, relevant_tools,
@@ -257,21 +261,27 @@ def add_catalog_entry(
             ),
         )
         db.commit()
+    finally:
+        db.close()
 
 
 def delete_catalog_entry(entry_id: int) -> bool:
     from agent.storage.db import open_db
-    with open_db() as db:
+    db = open_db()
+    try:
         cur = db.execute("DELETE FROM hypothesis_catalog WHERE id=?", (entry_id,))
         db.commit()
         return cur.rowcount > 0
+    finally:
+        db.close()
 
 
 def list_catalog_entries_db(domain: Optional[str] = None, project_id: Optional[str] = None) -> List[dict]:
     """Trả list raw dict từ DB để hiển thị trong UI."""
     try:
         from agent.storage.db import open_db
-        with open_db() as db:
+        db = open_db()
+        try:
             clauses, params = [], []
             if domain:
                 clauses.append("domain=?")
@@ -284,6 +294,8 @@ def list_catalog_entries_db(domain: Optional[str] = None, project_id: Optional[s
                 f"SELECT * FROM hypothesis_catalog {where} ORDER BY domain, project_id, tag",
                 params,
             ).fetchall()
+        finally:
+            db.close()
         return [dict(r) for r in rows]
     except Exception:
         return []

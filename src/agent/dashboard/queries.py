@@ -11,10 +11,11 @@ from agent.storage.db import open_db
 
 _PRICING: Dict[str, Dict[str, tuple]] = {
     "anthropic": {
-        "claude-opus-4":   (15.00, 75.00),
-        "claude-sonnet-4": (3.00,  15.00),
-        "claude-haiku-4":  (0.25,  1.25),
-        "":                (3.00,  15.00),
+        # Khớp theo substring trong model ID (vd: claude-haiku-4-5-20251001 → "haiku")
+        "opus":    (15.00, 75.00),
+        "sonnet":  (3.00,  15.00),
+        "haiku":   (0.80,  4.00),
+        "":        (3.00,  15.00),  # default sonnet
     },
     "openai": {
         "gpt-4o-mini": (0.15, 0.60),
@@ -31,8 +32,9 @@ def _get_pricing(provider: str, model: str):
     provider = (provider or "mock").lower()
     model = (model or "").lower()
     tiers = _PRICING.get(provider, {"": (0.0, 0.0)})
-    for prefix, prices in tiers.items():
-        if prefix and model.startswith(prefix):
+    # Dùng `in` thay vì startswith để khớp model ID thật như claude-haiku-4-5-20251001
+    for keyword, prices in tiers.items():
+        if keyword and keyword in model:
             return prices
     return tiers.get("", (0.0, 0.0))
 
@@ -73,7 +75,7 @@ def get_cost_data() -> Dict[str, Any]:
                SUM(CAST(json_extract(payload,'$.total_tokens') AS INTEGER)) AS total_tokens
         FROM trace_events
         WHERE event_type='verdict'
-          AND json_extract(payload,'$.total_tokens') > 0
+          AND CAST(json_extract(payload,'$.total_tokens') AS INTEGER) > 0
     """).fetchone()
 
     # P1: Cache savings — sum cache_read/write tokens from verdict events
@@ -118,7 +120,7 @@ def get_cost_data() -> Dict[str, Any]:
     cache_writes = int((cache_row["total_cache_writes"] or 0) if cache_row else 0)
     n_cached     = int((cache_row["n_cached"]           or 0) if cache_row else 0)
     # Anthropic pricing: cache_read = 10% of standard input; cache_write = 125%
-    in_price_per_tok = 3.00 / 1_000_000  # claude-sonnet standard input
+    in_price_per_tok = _get_pricing("anthropic", "sonnet")[0] / 1_000_000
     cache_savings_usd = round(cache_reads * in_price_per_tok * 0.90, 5)  # discount vs no-cache
     cache_extra_cost  = round(cache_writes * in_price_per_tok * 0.25, 5) # write overhead
 
@@ -128,7 +130,7 @@ def get_cost_data() -> Dict[str, Any]:
         "grand_total_cost":   round(grand_cost, 4),
         "live_n_inv":         int(live_d.get("n_inv") or 0),
         "live_total_tokens":  live_tokens,
-        "live_total_cost":    round(_cost_usd(live_tokens, "anthropic", "claude-sonnet"), 4),
+        "live_total_cost":    round(_cost_usd(live_tokens, "anthropic", "sonnet"), 4),
         # P1: Prompt caching stats
         "cache_n_inv":        n_cached,
         "cache_reads":        cache_reads,

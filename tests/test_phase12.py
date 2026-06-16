@@ -258,12 +258,15 @@ class TestBugPricingFix:
         in_p, out_p = _get_pricing("anthropic", "claude-haiku-4-5-20251001")
         assert in_p > 0 and out_p > 0
 
-    def test_prefix_claude_opus_not_match_claude_4(self):
-        """Prefix cũ 'claude-opus' nếu còn sẽ vẫn match — test prefix mới khớp đúng giá."""
-        from agent.dashboard.queries import _PRICING
-        # Prefix mới phải là 'claude-opus-4', không phải 'claude-opus'
+    def test_keyword_matching_for_opus(self):
+        """M4 (Ngày 65): dùng keyword 'opus'/'sonnet'/'haiku' thay prefix dài."""
+        from agent.dashboard.queries import _PRICING, _get_pricing
         anthropic_tiers = _PRICING.get("anthropic", {})
-        assert "claude-opus-4" in anthropic_tiers, "Cần prefix 'claude-opus-4' không phải 'claude-opus'"
+        # Keyword-based keys (Phase 13 M4 fix)
+        assert "opus" in anthropic_tiers, "Cần keyword 'opus' trong PRICING anthropic"
+        # Real model IDs vẫn khớp đúng giá
+        in_p, _ = _get_pricing("anthropic", "claude-opus-4-8")
+        assert in_p == 15.00, f"claude-opus-4-8 phải lấy giá opus $15/M, got {in_p}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

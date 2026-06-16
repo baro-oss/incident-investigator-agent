@@ -73,11 +73,19 @@ def _translate(sql: str) -> str:
     """Dịch SQLite SQL dialect → PostgreSQL (psycopg3).
 
     Thứ tự quan trọng:
-    1. Escape literal % (LIKE pattern) → %% TRƯỚC khi thay ? → %s
-       (nếu đảo: % vừa mới thay trở thành %% → thành %%%s)
-    2. ? → %s
-    3. INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
+    1. json_extract(col,'$.field') → (col::jsonb->>'field') TRƯỚC khi xử lý %
+       (tên cột không chứa % nên an toàn)
+    2. Escape literal % (LIKE pattern) → %% TRƯỚC khi thay ? → %s
+    3. ? → %s
+    4. INSERT OR IGNORE → INSERT ... ON CONFLICT DO NOTHING
     """
+    # H1: SQLite json_extract → PostgreSQL JSONB text extraction
+    sql = re.sub(
+        r"json_extract\s*\(\s*([a-zA-Z_][a-zA-Z0-9_.]*)\s*,\s*'\$\.([^']+)'\s*\)",
+        r"(\1::jsonb->>'\2')",
+        sql,
+        flags=re.IGNORECASE,
+    )
     sql = sql.replace("%", "%%").replace("?", "%s")
     if re.search(r"INSERT\s+OR\s+IGNORE\b", sql, re.IGNORECASE):
         sql = re.sub(r"INSERT\s+OR\s+IGNORE\b", "INSERT", sql, flags=re.IGNORECASE)
