@@ -11,10 +11,10 @@ from agent.storage.db import open_db
 
 _PRICING: Dict[str, Dict[str, tuple]] = {
     "anthropic": {
-        "claude-opus":   (15.00, 75.00),
-        "claude-sonnet": (3.00,  15.00),
-        "claude-haiku":  (0.25,  1.25),
-        "":              (3.00,  15.00),
+        "claude-opus-4":   (15.00, 75.00),
+        "claude-sonnet-4": (3.00,  15.00),
+        "claude-haiku-4":  (0.25,  1.25),
+        "":                (3.00,  15.00),
     },
     "openai": {
         "gpt-4o-mini": (0.15, 0.60),
@@ -484,7 +484,7 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
         (project_id,),
     ).fetchall()
     channels = {r["channel"]: {"enabled": bool(r["enabled"]), "config": r["config"] or "{}"} for r in channels_raw}
-    for ch in ["telegram", "teams", "email"]:
+    for ch in ["telegram", "teams", "email", "slack"]:
         if ch not in channels:
             channels[ch] = {"enabled": False, "config": "{}"}
 
@@ -512,14 +512,18 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
             "confidence": verdict.get("confidence", ""),
         })
 
-    # Decrypt llm_config for display in form
+    # Decrypt llm_config — chỉ dùng base_url/headers; api_key KHÔNG rời server (BUG-03)
     from agent.security import decrypt_secret
     import json as _json
     try:
         raw_cfg_str = decrypt_secret(p["llm_config"]) if p["llm_config"] else None
-        llm_config_raw = _json.loads(raw_cfg_str) if raw_cfg_str else None
+        _full_cfg = _json.loads(raw_cfg_str) if raw_cfg_str else None
+        llm_key_set = bool((_full_cfg or {}).get("api_key"))
+        # Strip api_key trước khi trả về template
+        llm_config_raw = {k: v for k, v in _full_cfg.items() if k != "api_key"} if _full_cfg else None
     except Exception:
         llm_config_raw = None
+        llm_key_set = False
 
     # Service repos (Phase 10 — F1)
     try:
@@ -539,6 +543,7 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
         "llm_provider": p["llm_provider"] or "anthropic (env)",
         "llm_model": p["llm_model"] or "",
         "llm_config_raw": llm_config_raw,
+        "llm_key_set": llm_key_set,
         "services": services,
         "mcp_servers": mcp_servers,
         "channels": channels,

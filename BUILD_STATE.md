@@ -4,7 +4,7 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 12 🔨 ĐANG LÀM (61–63, nén 3 ngày) — LLM UI catalog + bug fix batch. **Ngày 61 HOÀN TẤT** (2026-06-16): `llm/catalog.py` + `GET /dashboard/llm-catalog` + provider/model dropdown + GreenNode MaaS. 461/461 tests xanh.
+**Giai đoạn:** Phase 12 🔨 ĐANG LÀM (61–63, nén 3 ngày) — LLM UI catalog + bug fix batch. **Ngày 61+62 HOÀN TẤT** (2026-06-16): catalog+dropdown+GreenNode · test-conn endpoint · key security+preserve · BUG-01..07 đã fix. 461/461 tests xanh.
 **Cổng kiểm gần nhất:** Ngày 60 (D60 Deploy+Close) — 461 tests · eval 4/4 mock PASS · port 8080 + amd64 + Dockerfile prod · docker-compose.prod + runbook AgentBase · READ-ONLY audit clean · 4 nguyên tắc giữ · single-instance `min=max=1` documented.
 **Kế hoạch kế tiếp:** Phase 12 (Ngày 61–63, nén 3 ngày, `docs/17-roadmap-phase-12.md`) — LLM UI catalog: `llm/catalog.py` PROVIDER_CATALOG (8 provider, +**GreenNode MaaS** VNG Cloud cho self-hosted) + provider/model `<select>` + base_url auto-fill + option "Khác" + test connection endpoint + fix key security (BUG-03) + key preserve + fix port 8000→8080 (BUG-01) + fix admin nav `or true` (BUG-02) + pricing prefix stale (BUG-05) + slack channels grid (BUG-06). D61=catalog · D62=test-conn+key+bug batch · D63=tests+CI+audit+cổng. Target: ≥490 tests.
 
@@ -149,7 +149,7 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 61 | LLM catalog + provider/model dropdown | `src/agent/llm/catalog.py` PROVIDER_CATALOG (8 provider, +**GreenNode MaaS**) — `label`+`base_url`+`models`+`allow_custom_model` · `GET /dashboard/llm-catalog` · provider `<select>` + model `<select>` + base_url auto-fill + option "Khác (tự nhập)" cho self-hosted · thêm `together`+`greennode` vào SUPPORTED_PROVIDERS + default base_url server-side | ✅ |
-| 62 | Test conn + key + bug batch | **Phần I:** `POST /dashboard/projects/{pid}/llm/test` + UI badge · fix key không lộ HTML (`llm_key_set` bool) + key preserve khi save rỗng · BUG-01 `localhost:8000`→`{PORT}` (trigger/replay). **Phần II:** BUG-02 admin nav `or true` · BUG-04 version stale · BUG-05 pricing prefix · BUG-06 slack channels grid · BUG-07 silent exception | ☐ |
+| 62 | Test conn + key + bug batch | **Phần I:** `POST /dashboard/projects/{pid}/llm/test` + UI badge · fix key không lộ HTML (`llm_key_set` bool) + key preserve khi save rỗng · BUG-01 `localhost:8000`→`{PORT}` (trigger/replay). **Phần II:** BUG-02 admin nav `or true` · BUG-04 version stale · BUG-05 pricing prefix · BUG-06 slack channels grid · BUG-07 silent exception | ✅ |
 | 63 | Tests + CI + Audit + Cổng P12 | **Phần I:** tests mới ~30 (catalog/test-conn/bug-fixes) · CI matrix sqlite+postgres xanh · target ≥490 tests. **Phần II:** READ-ONLY audit · 4 nguyên tắc · degrade safe · đóng pha · BUILD_STATE/CLAUDE | ☐ |
 
 **Chốt Phase 12 (nén 3 ngày — không cắt scope):** KHÔNG thêm engine feature/tool/schema — chỉ biên dashboard/intake · LLM key không bao giờ rời server (chỉ bool `key_set`) · test connection = prompt tối giản, không chạy investigation · GreenNode MaaS qua `OpenAICompatibleClient` hiện có (không sửa client/factory) · 4 nguyên tắc + READ-ONLY giữ. Mỗi ngày cỡ L; regression gate (461 tests + eval 4/4 + 2 KB E2E) cuối mỗi ngày.
@@ -182,6 +182,21 @@
 - Rewrite LLM form trong `project_detail.html` — provider `<select>` (8 option), model `<select>` (JS populate), custom model div (ẩn/hiện theo "_custom"), base_url auto-fill khi đổi provider, API key không pre-fill value (BUG-03 template side).
 
 **Cổng Ngày 61 PASS:** `GET /dashboard/llm-catalog` 8 provider ✅ · Provider dropdown + model populate ✅ · GreenNode models + base_url MaaS ✅ · "Khác" custom input ✅ · 461/461 tests ✅
+
+### [Session 66b — 2026-06-16] — Ngày 62: Test conn + key security + bug batch
+
+**Đã làm:**
+- **Test connection:** `POST /dashboard/projects/{pid}/llm/test` — gọi LLM với prompt tối giản, trả `{status, latency_ms, reply}`. UI badge JS inline (✓ OK / ✗ error) khi click "🔌 Test".
+- **BUG-03 backend:** `get_project_detail()` strip `api_key` khỏi `llm_config_raw` trước khi trả template; thêm `llm_key_set: bool`. Template badge dùng `proj.llm_key_set`.
+- **LLM-05 key preserve:** `dashboard_project_save_llm` — nếu `api_key` rỗng, load existing config và giữ key cũ.
+- **BUG-01:** Thêm `_SERVER_PORT = int(os.environ.get("PORT", "8080"))` module-level; fix 2 URL `localhost:8000` → `localhost:{_SERVER_PORT}`.
+- **BUG-02:** `base.html:76` xóa `or true` → `{% if current_user and current_user.is_root %}`.
+- **BUG-04:** Version "v0.9 · Phase 6" → "v1.2 · Phase 12".
+- **BUG-05:** Pricing prefixes "claude-opus" → "claude-opus-4", "claude-sonnet" → "claude-sonnet-4", "claude-haiku" → "claude-haiku-4".
+- **BUG-06:** queries.py thêm "slack" vào channels loop; template ch_icons thêm slack icon, grid 3→4 columns.
+- **BUG-07:** `except Exception: pass` → log warning.
+
+**Cổng Ngày 62 PASS:** Test-conn endpoint trả JSON ✅ · UI badge JS ✅ · key không lộ HTML ✅ · version v1.2 Phase 12 ✅ · 4-column channels (slack) ✅ · 461/461 tests ✅
 
 ---
 

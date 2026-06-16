@@ -38,6 +38,9 @@ templates = Jinja2Templates(directory=str(_HERE / "templates"))
 
 router = APIRouter()
 
+# Port server đang chạy — dùng cho internal self-call (trigger/replay)
+_SERVER_PORT = int(os.environ.get("PORT", "8080"))
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -251,7 +254,7 @@ async def dashboard_trigger_post(
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"http://localhost:8000/projects/{project_id}/trigger",
+                f"http://localhost:{_SERVER_PORT}/projects/{project_id}/trigger",
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:
@@ -325,11 +328,12 @@ async def dashboard_project_edit(
     description: str = Form(""),
     user: dict = Depends(require_perm("project.manage")),
 ):
+    import logging as _logging
     from agent.intake.project_registry import update_project
     try:
         update_project(project_id, name=name.strip(), description=description.strip())
-    except Exception:
-        pass
+    except Exception as _e:
+        _logging.getLogger(__name__).warning("update_project failed: %s", _e)
     return RedirectResponse("/dashboard/projects", status_code=303)
 
 
@@ -613,11 +617,17 @@ async def dashboard_project_save_llm(
             llm_save_err = "Extra Headers không phải JSON hợp lệ."
             extra = {}
         if not llm_save_err:
+            from agent.intake.project_registry import get_project_llm
             cfg: dict = {}
             if base_url.strip():
                 cfg["base_url"] = base_url.strip()
             if api_key.strip():
                 cfg["api_key"] = api_key.strip()
+            else:
+                # Key preserve: giữ key cũ nếu người dùng để trống
+                existing = get_project_llm(project_id)
+                if existing and existing.get("config", {}).get("api_key"):
+                    cfg["api_key"] = existing["config"]["api_key"]
             if extra:
                 cfg["headers"] = extra
             # Resolve model: "_custom" → dùng model_custom free-text
@@ -648,6 +658,38 @@ async def dashboard_project_save_llm(
         llm_save_err=llm_save_err,
         llm_catalog=get_provider_catalog(),
     ))
+
+
+@router.post("/projects/{project_id}/llm/test")
+async def dashboard_project_llm_test(
+    request: Request, project_id: str,
+    user: dict = Depends(require_perm("llm.manage")),
+):
+    """Test connection LLM của project — gửi prompt tối giản, không chạy investigation."""
+    import time
+    from agent.intake.project_registry import get_project_llm
+    from agent.llm.factory import create_llm_client
+    from agent.llm.base import Message
+
+    cfg = get_project_llm(project_id)
+    if not cfg:
+        return JSONResponse({"status": "error", "message": "Chưa cấu hình LLM cho project này."})
+    try:
+        client = create_llm_client(
+            provider=cfg["provider"],
+            model=cfg.get("model"),
+            extra_config=cfg.get("config", {}),
+        )
+        t0 = time.monotonic()
+        resp = await client.complete(
+            messages=[Message(role="user", content="Reply with the single word: ok")],
+            tools=[],
+        )
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        reply = (resp.text or "").strip()[:80]
+        return JSONResponse({"status": "ok", "latency_ms": latency_ms, "reply": reply})
+    except Exception as e:
+        return JSONResponse({"status": "error", "message": str(e)[:200]})
 
 
 @router.post("/projects/{project_id}/channels/{channel}/config", response_class=HTMLResponse)
@@ -731,7 +773,7 @@ async def dashboard_investigation_replay(
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"http://localhost:8000/projects/{project_id}/trigger",
+                f"http://localhost:{_SERVER_PORT}/projects/{project_id}/trigger",
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:

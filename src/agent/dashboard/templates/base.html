@@ -18,7 +18,7 @@
   <nav>
     <div class="logo">
       Investigation Agent
-      <span>v0.9 · Phase 6</span>
+      <span>v1.2 · Phase 12</span>
     </div>
 
     <!-- Nhóm: Điều tra -->
@@ -73,7 +73,7 @@
     </a>
 
     <!-- Nhóm: Admin -->
-    {% if current_user and (current_user.is_root or true) %}
+    {% if current_user and current_user.is_root %}
     <div class="nav-group-label">Admin</div>
     <a href="/dashboard/admin/users" class="{{ 'active' if active == 'admin' }}">
       <span class="ico">⛨</span> Người dùng & Vai trò
