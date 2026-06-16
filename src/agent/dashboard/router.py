@@ -532,6 +532,14 @@ async def dashboard_mcp_ping(server_id: int):
         return {"status": "error", "error": str(e), "latency_ms": latency_ms}
 
 
+# ── LLM catalog (JSON) ────────────────────────────────────────────────────────
+
+@router.get("/llm-catalog")
+async def dashboard_llm_catalog(user: dict = Depends(require_login)):
+    from agent.llm.catalog import get_provider_catalog
+    return JSONResponse(get_provider_catalog())
+
+
 # ── Project Detail UI ─────────────────────────────────────────────────────────
 
 @router.get("/projects/{project_id}", response_class=HTMLResponse)
@@ -539,6 +547,7 @@ async def dashboard_project_detail(
     request: Request, project_id: str,
     user: dict = Depends(require_login),
 ):
+    from agent.llm.catalog import get_provider_catalog
     proj = get_project_detail(project_id)
     if not proj:
         return HTMLResponse("<h3>Project not found</h3>", status_code=404)
@@ -547,6 +556,7 @@ async def dashboard_project_detail(
         proj=proj,
         llm_save_ok=False,
         llm_save_err="",
+        llm_catalog=get_provider_catalog(),
     ))
 
 
@@ -582,6 +592,7 @@ async def dashboard_project_save_llm(
     request: Request, project_id: str,
     provider: str = Form(""),
     model: str = Form(""),
+    model_custom: str = Form(""),
     base_url: str = Form(""),
     api_key: str = Form(""),
     headers_json: str = Form("{}"),
@@ -589,6 +600,7 @@ async def dashboard_project_save_llm(
     user: dict = Depends(require_perm("llm.manage")),
 ):
     from agent.intake.project_registry import set_project_llm, clear_project_llm
+    from agent.llm.catalog import get_provider_catalog
     llm_save_ok = False
     llm_save_err = ""
     if clear == "1":
@@ -608,6 +620,10 @@ async def dashboard_project_save_llm(
                 cfg["api_key"] = api_key.strip()
             if extra:
                 cfg["headers"] = extra
+            # Resolve model: "_custom" → dùng model_custom free-text
+            effective_model = (
+                model_custom.strip() if model.strip() == "_custom" else model.strip()
+            ) or None
             if not provider.strip():
                 llm_save_err = "Provider không được để trống (vd: anthropic, groq, openai)."
             else:
@@ -615,7 +631,7 @@ async def dashboard_project_save_llm(
                     set_project_llm(
                         project_id,
                         provider.strip(),
-                        model.strip() or None,
+                        effective_model,
                         cfg,
                     )
                     llm_save_ok = True
@@ -630,6 +646,7 @@ async def dashboard_project_save_llm(
         proj=proj,
         llm_save_ok=llm_save_ok,
         llm_save_err=llm_save_err,
+        llm_catalog=get_provider_catalog(),
     ))
 
 

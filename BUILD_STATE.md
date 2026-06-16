@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 11 ✅ HOÀN TẤT (56–60) — Postgres Tier-2 + deploy lên **GreenNode AgentBase**. 461/461 tests SQLite xanh. Mock eval 4/4 PASS. **Kế hoạch tiếp theo:** Future (MySQL backend · bidirectional output · horizontal scale · real-LLM eval đầy đủ).
-**Cổng kiểm gần nhất:** Ngày 55 (T3+Close) — 444 tests · coverage 44%→55% · server/runner/queries coverage · READ-ONLY audit clean · degrade audit clean · CI migrate D53+D54 · eval 4/4 mock PASS.
-**Kế hoạch kế tiếp:** Phase 11 (Ngày 56–60) — kích hoạt Tier-2 Postgres (lệnh người dùng 2026-06-15) **+ deploy lên GreenNode AgentBase** (skills: `greennode-agentbase-skills/`). Nền tảng ràng buộc: **port 8080**, build **amd64**, deploy qua managed CR + `runtime.sh` (KHÔNG k8s/kubectl), single-instance `min=max=1`, **disk ephemeral → Postgres bắt buộc** (không PVC, SQLite không bền). Deploy fresh + docker-compose PG local. Bao gồm bug fix B1/B2 + trace retention. Future: MySQL backend · bidirectional output · horizontal scale (multi-replica) · k8s self-managed · LLM qua MaaS · real-LLM eval (chờ credit).
+**Giai đoạn:** Phase 12 🔨 ĐANG LÀM (61–63, nén 3 ngày) — LLM UI catalog + bug fix batch. **Ngày 61 HOÀN TẤT** (2026-06-16): `llm/catalog.py` + `GET /dashboard/llm-catalog` + provider/model dropdown + GreenNode MaaS. 461/461 tests xanh.
+**Cổng kiểm gần nhất:** Ngày 60 (D60 Deploy+Close) — 461 tests · eval 4/4 mock PASS · port 8080 + amd64 + Dockerfile prod · docker-compose.prod + runbook AgentBase · READ-ONLY audit clean · 4 nguyên tắc giữ · single-instance `min=max=1` documented.
+**Kế hoạch kế tiếp:** Phase 12 (Ngày 61–63, nén 3 ngày, `docs/17-roadmap-phase-12.md`) — LLM UI catalog: `llm/catalog.py` PROVIDER_CATALOG (8 provider, +**GreenNode MaaS** VNG Cloud cho self-hosted) + provider/model `<select>` + base_url auto-fill + option "Khác" + test connection endpoint + fix key security (BUG-03) + key preserve + fix port 8000→8080 (BUG-01) + fix admin nav `or true` (BUG-02) + pricing prefix stale (BUG-05) + slack channels grid (BUG-06). D61=catalog · D62=test-conn+key+bug batch · D63=tests+CI+audit+cổng. Target: ≥490 tests.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -130,19 +130,60 @@
 **Xương sống KHÔNG cắt:** D51 (F1) · D52 (F2) · D55 (test + Cổng + audit READ-ONLY). Cắt nếu hụt giờ: demo-MCP stand-in (D51) → catalog editor UI (D54, giữ read-path) → coverage gate enforce (D55).
 **Bất biến:** Nguyên tắc #1 (code distill, không raw dump) · Nguyên tắc #2 (risk heuristic generic, mapping tool↔hypothesis trong catalog) · READ-ONLY · regression gate mỗi ngày engine/tool (51–54).
 
-## Tiến độ Phase 11 (docs/16-roadmap-phase-11.md) — 📋 ĐÃ LÊN KẾ HOẠCH, CHƯA CODE
+## Tiến độ Phase 11 (docs/16-roadmap-phase-11.md) — ✅ HOÀN TẤT
 
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|------------|
 | 56 | PG backend adapter + local infra | `postgres_backend.py`: thay stub bằng psycopg connection shim (`.execute` tự cursor + `?`→`%s`, dict-row key+index, `lastrowid` qua RETURNING, IntegrityError) + `psycopg_pool` connection pool · `data/schema_postgres.sql` (SERIAL, bỏ PRAGMA) · `init_db.py` backend-aware · seed/migrate chạy trên PG · `docker-compose.yml` service postgres local · `.env.example` +DB_BACKEND/DATABASE_URL · extra `[postgres]` | ✅ |
 | 57 | Dialect parity + đóng rò seam + CI matrix | `INSERT OR IGNORE/REPLACE`→`ON CONFLICT` · `datetime()/julianday()` → Python/branch · **fix `auth/rbac.py` `import sqlite3`→open_db()** · `migrate_*.py` exception trung lập · CI `DB_BACKEND=[sqlite,postgres]` matrix (services postgres) · **444 tests xanh trên cả 2** + eval 4/4 PG | ✅ |
-| 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** trong `start_server.py`/Dockerfile/health tests · Dockerfile multi-stage non-root + amd64 + `EXPOSE 8080` + HEALTHCHECK + `.[postgres]` + entrypoint init/migrate · `.dockerignore` (.env/.db/.venv) · secrets fail-fast khi `APP_ENV=production` (SESSION_SECRET_KEY/SECRET_KEY) · `/health/ready` (DB ping + backend) tách `/health` (liveness) · `.env.example` ghi chú 4 biến `GREENNODE_*` auto-inject không set tay · **B1: `_make_error_state` truyền project_id+available_services** | ☐ |
-| 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight (A1 verify+mở rộng) + ghi rõ queue semantics restart · JSON log opt-in (`LOG_FORMAT=json`) · `/health` sâu (DB+backend+MCP reachable+LLM key) · trace_events retention (`TRACE_RETENTION_DAYS`) · **B2: `loop.py:1069,1090` 2 `_emit_trace` thêm `project_id=state.project_id` (parity graph.py)** + perf re-check pool | ☐ |
-| 60 | Deploy lên AgentBase + smoke + Cổng P11 | `docker-compose.prod.yml` (app+postgres) · **runbook AgentBase**: build amd64 → managed CR (`vcr.vngcloud.vn`, `cr.sh docker-login`) → `runtime.sh create --from-cr --min/max-replicas 1` → poll ACTIVE → `<endpoint>/health` 200 · `deploy/k8s/` skeleton **HẠ xuống Future** (deploy qua runtime.sh, không kubectl) · README/api Deploy-AgentBase section (port 8080/amd64/CR/env/auto-inject) · E2E smoke (PG, trigger→điều tra→Telegram) · audit READ-ONLY/4 nguyên tắc/degrade (DB down→ready đỏ) · đóng pha | ☐ |
+| 58 | Container & config hardening + port 8080 + B1 | **port 8000→8080 (HARD AgentBase)** trong `start_server.py`/Dockerfile/health tests · Dockerfile multi-stage non-root + amd64 + `EXPOSE 8080` + HEALTHCHECK + `.[postgres]` + entrypoint init/migrate · `.dockerignore` (.env/.db/.venv) · secrets fail-fast khi `APP_ENV=production` (SESSION_SECRET_KEY/SECRET_KEY) · `/health/ready` (DB ping + backend) tách `/health` (liveness) · `.env.example` ghi chú 4 biến `GREENNODE_*` auto-inject không set tay · **B1: `_make_error_state` truyền project_id+available_services** | ✅ |
+| 59 | Lifecycle + observability + retention + B2 | SIGTERM drain in-flight (A1 verify+mở rộng) + ghi rõ queue semantics restart · JSON log opt-in (`LOG_FORMAT=json`) · `/health` sâu (DB+backend+MCP reachable+LLM key) · trace_events retention (`TRACE_RETENTION_DAYS`) · **B2: `loop.py:1069,1090` 2 `_emit_trace` thêm `project_id=state.project_id` (parity graph.py)** + perf re-check pool | ✅ |
+| 60 | Deploy lên AgentBase + smoke + Cổng P11 | `docker-compose.prod.yml` (app+postgres) · **runbook AgentBase**: build amd64 → managed CR (`vcr.vngcloud.vn`, `cr.sh docker-login`) → `runtime.sh create --from-cr --min/max-replicas 1` → poll ACTIVE → `<endpoint>/health` 200 · `deploy/k8s/` skeleton **HẠ xuống Future** (deploy qua runtime.sh, không kubectl) · README/api Deploy-AgentBase section (port 8080/amd64/CR/env/auto-inject) · E2E smoke (PG, trigger→điều tra→Telegram) · audit READ-ONLY/4 nguyên tắc/degrade (DB down→ready đỏ) · đóng pha | ✅ |
 
 **Chốt Phase 11 (đã xác nhận với người dùng — 2026-06-15):** ① **Postgres ngay** (Tier-2 kích hoạt) — PG backend prod, SQLite vẫn default dev, seam giữ cả 2; **bắt buộc vì AgentBase disk ephemeral (không PVC) → SQLite không bền qua deploy** · ② **single-instance** = AgentBase `min=max=1 replica` (KHÔNG externalize queue/dedup/SSE — horizontal scale vẫn Future) · ③ **deploy fresh** (chỉ init+seed PG, không migrate data SQLite cũ) · ④ **docker-compose chạy PG local** trước khi đẩy cloud · ⑤ không giới hạn khối lượng/ngày · ⑥ **nền tảng = GreenNode AgentBase**: port 8080 + build amd64 + deploy qua CR/`runtime.sh` + 4 biến `GREENNODE_*` auto-inject không set tay (skills: `greennode-agentbase-skills/`).
 **Xương sống KHÔNG cắt:** D56+D57 (PG parity + 444 tests xanh trên PG + đóng rò seam) · D58 (**port 8080** + container+secrets+B1) · D59 B2. Cắt nếu hụt giờ: deploy AgentBase thật → giữ runbook+compose.prod smoke (D60) → JSON logging (D59) → retention qua scheduler (D59, giữ script). **Port 8080/amd64 = hợp đồng cứng, không cắt.**
 **Bất biến:** DB swap chỉ dưới seam (`open_db()`/`IntegrityError` trung lập, không rò `import sqlite3` ngoài `sqlite_backend.py`) · READ-ONLY · 4 nguyên tắc · regression gate mỗi ngày (444 tests + eval 4/4 + 2 KB E2E + Telegram; từ D57 trên cả 2 backend).
+
+## Tiến độ Phase 12 (docs/17-roadmap-phase-12.md) — 📋 KẾ HOẠCH (nén 3 ngày)
+
+| Ngày | Theme | Nội dung | Trạng thái |
+|------|-------|----------|------------|
+| 61 | LLM catalog + provider/model dropdown | `src/agent/llm/catalog.py` PROVIDER_CATALOG (8 provider, +**GreenNode MaaS**) — `label`+`base_url`+`models`+`allow_custom_model` · `GET /dashboard/llm-catalog` · provider `<select>` + model `<select>` + base_url auto-fill + option "Khác (tự nhập)" cho self-hosted · thêm `together`+`greennode` vào SUPPORTED_PROVIDERS + default base_url server-side | ✅ |
+| 62 | Test conn + key + bug batch | **Phần I:** `POST /dashboard/projects/{pid}/llm/test` + UI badge · fix key không lộ HTML (`llm_key_set` bool) + key preserve khi save rỗng · BUG-01 `localhost:8000`→`{PORT}` (trigger/replay). **Phần II:** BUG-02 admin nav `or true` · BUG-04 version stale · BUG-05 pricing prefix · BUG-06 slack channels grid · BUG-07 silent exception | ☐ |
+| 63 | Tests + CI + Audit + Cổng P12 | **Phần I:** tests mới ~30 (catalog/test-conn/bug-fixes) · CI matrix sqlite+postgres xanh · target ≥490 tests. **Phần II:** READ-ONLY audit · 4 nguyên tắc · degrade safe · đóng pha · BUILD_STATE/CLAUDE | ☐ |
+
+**Chốt Phase 12 (nén 3 ngày — không cắt scope):** KHÔNG thêm engine feature/tool/schema — chỉ biên dashboard/intake · LLM key không bao giờ rời server (chỉ bool `key_set`) · test connection = prompt tối giản, không chạy investigation · GreenNode MaaS qua `OpenAICompatibleClient` hiện có (không sửa client/factory) · 4 nguyên tắc + READ-ONLY giữ. Mỗi ngày cỡ L; regression gate (461 tests + eval 4/4 + 2 KB E2E) cuối mỗi ngày.
+**Xương sống KHÔNG cắt:** BUG-01 (port 8000) · BUG-02 (admin nav) · BUG-03 (key security) · key preserve · GreenNode MaaS support · CI green.
+
+### [Session 65 — 2026-06-16] — Lập kế hoạch Phase 12
+
+**Đã làm:**
+- Đọc + phân tích toàn bộ `dashboard/router.py`, `dashboard/queries.py`, `dashboard/templates/` (15 templates), `src/agent/llm/`, `src/agent/intake/project_registry.py`.
+- Phát hiện 7 bugs (BUG-01 HIGH: port 8000 cứng trong trigger/replay · BUG-02 MEDIUM: admin nav `or true` · BUG-03 MEDIUM: API key lộ HTML · BUG-04..07 LOW).
+- Phát hiện 6 LLM UI gaps (LLM-01 catalog/dropdown · LLM-02 `together` không validated · LLM-03 key expose · LLM-04 test connection chưa có · LLM-05 key bị xóa khi save rỗng · **LLM-06 GreenNode MaaS self-hosted chưa support**).
+- Tạo `docs/17-roadmap-phase-12.md` (plan 5 ngày đầy đủ).
+- Cập nhật `CLAUDE.md`: header + bảng Phase 12 + roadmap pitch.
+- Cập nhật `BUILD_STATE.md`: header, bảng Phase 12, session log.
+
+**Bổ sung (user yêu cầu trong session):** model = dropdown `<select>` (không free-text) + GreenNode MaaS (VNG Cloud AI Platform) support cho model tự host.
+- Phân tích curl mẫu: base `https://maas-llm-aiplatform-hcm.api.vngcloud.vn/v1` · OpenAI-compat (`/chat/completions`) + Anthropic-compat (`/messages`) · Bearer auth · models `minimax/minimax-m2.5`, `qwen/qwen3-5-27b`, `google/gemma-4-31b-it`.
+- Quyết định: MODEL_CATALOG → PROVIDER_CATALOG giàu metadata (label/base_url/models/allow_custom_model); thêm provider `greennode` (base_url preset); UI model = `<select>` + option "Khác" cho self-hosted ngoài catalog; base_url auto-fill khi chọn provider; `set_project_llm` default base_url server-side.
+- **KHÔNG sửa client/factory** — greennode route qua `OpenAICompatibleClient` (nhánh else factory) tự động. Verify `openai.AsyncOpenAI` tự append `/chat/completions` → lưu base_url `.../v1`.
+
+**Nén 5 ngày → 3 ngày (user yêu cầu):** D61 (catalog+dropdown) giữ nguyên · D62 = D62+D63 cũ (test-conn+key+BUG-01 **+** bug batch BUG-02..07) · D63 = D64+D65 cũ (tests+CI **+** audit+cổng). KHÔNG cắt scope — mỗi ngày cỡ L. Cập nhật lại `docs/17` (rewrite), `CLAUDE.md`, `BUILD_STATE.md`.
+
+### [Session 66 — 2026-06-16] — Ngày 61: LLM catalog + provider/model dropdown
+
+**Đã làm:**
+- Tạo `src/agent/llm/catalog.py` — `PROVIDER_CATALOG` 8 provider (anthropic/openai/gemini/groq/mistral/together/ollama/**greennode**), mỗi entry có `label`+`base_url`+`models`+`allow_custom_model`.
+- Cập nhật `project_registry.py:set_project_llm()` — thêm `"together"` + `"greennode"` vào `SUPPORTED_PROVIDERS`.
+- Thêm `GET /dashboard/llm-catalog` (JSON) vào `dashboard/router.py`.
+- Cập nhật cả 2 handler (`dashboard_project_detail` + `dashboard_project_save_llm`) — truyền `llm_catalog` vào template; thêm `model_custom: str = Form("")`; giải `effective_model = model_custom if model == "_custom"`.
+- Rewrite LLM form trong `project_detail.html` — provider `<select>` (8 option), model `<select>` (JS populate), custom model div (ẩn/hiện theo "_custom"), base_url auto-fill khi đổi provider, API key không pre-fill value (BUG-03 template side).
+
+**Cổng Ngày 61 PASS:** `GET /dashboard/llm-catalog` 8 provider ✅ · Provider dropdown + model populate ✅ · GreenNode models + base_url MaaS ✅ · "Khác" custom input ✅ · 461/461 tests ✅
+
+---
 
 ### [Session 64 — 2026-06-15] — Ngày 60: docker-compose.prod + runbook AgentBase + README + audit + Cổng P11
 

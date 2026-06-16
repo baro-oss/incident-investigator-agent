@@ -19,7 +19,7 @@
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
 
-  <!-- LLM Config (A28-D: per-project custom endpoint) -->
+  <!-- LLM Config (per-project custom endpoint) -->
   <div class="card">
     <h3 style="margin-bottom:12px">LLM Config</h3>
     <table style="width:100%;font-size:13px;margin-bottom:10px">
@@ -34,7 +34,7 @@
       </tr>
       {% endif %}
     </table>
-    <details>
+    <details {% if llm_save_ok or llm_save_err %}open{% endif %}>
       <summary style="font-size:12px;color:var(--accent);cursor:pointer;margin-bottom:8px">
         ⚙ Cài đặt endpoint riêng (per-project override)
       </summary>
@@ -42,30 +42,55 @@
       {% if llm_save_err %}<div style="color:var(--danger,#ef4444);font-size:12px;margin-bottom:6px">{{ llm_save_err }}</div>{% endif %}
       <form method="post" action="/dashboard/projects/{{ proj.id }}/llm"
             style="display:flex;flex-direction:column;gap:8px;font-size:12px">
+        <!-- Provider dropdown -->
         <div>
-          <label style="color:var(--muted);display:block;margin-bottom:3px">Provider <span style="font-size:10px">(để trống = dùng default)</span></label>
-          <input type="text" name="provider" value="{{ proj.llm_config_raw.provider if proj.llm_config_raw else '' }}"
-                 placeholder="anthropic / openai / groq"
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Provider</label>
+          <select name="provider" id="llm-provider"
+                  style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+            <option value="">— dùng global env —</option>
+            {% for pid, pinfo in llm_catalog.items() %}
+            <option value="{{ pid }}"
+              {% if proj.llm_provider.replace(' (env)','').strip() == pid %}selected{% endif %}>
+              {{ pinfo.label }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <!-- Model dropdown (JS-populated) -->
+        <div>
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Model <span style="font-size:10px">(chọn hoặc tự nhập)</span></label>
+          <select name="model" id="llm-model"
+                  style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+            <option value="">— dùng default —</option>
+          </select>
+        </div>
+        <!-- Custom model text input (hiện khi chọn "Khác") -->
+        <div id="llm-custom-model-div" style="display:none">
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Model ID (tự nhập)</label>
+          <input type="text" name="model_custom" id="llm-model-custom"
+                 placeholder="vd: meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
                  style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
         </div>
+        <!-- Base URL (tự điền khi đổi provider) -->
         <div>
-          <label style="color:var(--muted);display:block;margin-bottom:3px">Model <span style="font-size:10px">(để trống = dùng default)</span></label>
-          <input type="text" name="model" value="{{ proj.llm_config_raw.model if proj.llm_config_raw else '' }}"
-                 placeholder="claude-sonnet-4-6"
-                 style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
-        </div>
-        <div>
-          <label style="color:var(--muted);display:block;margin-bottom:3px">Base URL <span style="font-size:10px">(để trống = mặc định provider)</span></label>
-          <input type="text" name="base_url" value="{{ proj.llm_config_raw.base_url if proj.llm_config_raw else '' }}"
+          <label style="color:var(--muted);display:block;margin-bottom:3px">Base URL <span style="font-size:10px">(tự điền theo provider)</span></label>
+          <input type="text" name="base_url" id="llm-base-url"
+                 value="{{ proj.llm_config_raw.base_url if proj.llm_config_raw and proj.llm_config_raw.base_url else '' }}"
                  placeholder="https://api.groq.com/openai/v1"
                  style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
         </div>
+        <!-- API Key (không pre-fill value để tránh lộ key trong HTML) -->
         <div>
-          <label style="color:var(--muted);display:block;margin-bottom:3px">API Key <span style="font-size:10px">(để trống = dùng env key)</span></label>
-          <input type="password" name="api_key" value="{{ proj.llm_config_raw.api_key if proj.llm_config_raw else '' }}"
-                 placeholder="sk-..."
+          <label style="color:var(--muted);display:block;margin-bottom:3px">API Key
+            {% if proj.llm_config_raw and proj.llm_config_raw.api_key %}
+            <span style="color:var(--success,#22c55e);font-size:10px;margin-left:4px">🔑 đã set</span>
+            {% endif %}
+            <span style="font-size:10px;color:var(--muted)"> — để trống = giữ key cũ nếu đã set</span>
+          </label>
+          <input type="password" name="api_key" placeholder="sk-..."
                  style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
         </div>
+        <!-- Extra Headers -->
         <div>
           <label style="color:var(--muted);display:block;margin-bottom:3px">Extra Headers <span style="font-size:10px">(JSON: {"X-Header":"value"})</span></label>
           <textarea name="headers_json" rows="2"
@@ -77,6 +102,66 @@
         </div>
       </form>
     </details>
+    <script>
+    (function () {
+      const providerSel = document.getElementById('llm-provider');
+      const modelSel    = document.getElementById('llm-model');
+      const customDiv   = document.getElementById('llm-custom-model-div');
+      const customInput = document.getElementById('llm-model-custom');
+      const baseUrlInput = document.getElementById('llm-base-url');
+      const curModel    = {{ proj.llm_model | tojson }};
+      let catalog = {};
+
+      async function init() {
+        try {
+          const r = await fetch('/dashboard/llm-catalog');
+          catalog = await r.json();
+        } catch (e) { return; }
+        populateModels(providerSel.value, true);
+      }
+
+      function populateModels(provider, isInit) {
+        const info   = catalog[provider] || {};
+        const models = info.models || [];
+
+        modelSel.innerHTML = '<option value="">— dùng default —</option>';
+        models.forEach(function (m) {
+          const opt = document.createElement('option');
+          opt.value = m; opt.textContent = m;
+          modelSel.appendChild(opt);
+        });
+        if (info.allow_custom_model !== false) {
+          const cOpt = document.createElement('option');
+          cOpt.value = '_custom'; cOpt.textContent = 'Khác (tự nhập)...';
+          modelSel.appendChild(cOpt);
+        }
+
+        if (isInit && curModel) {
+          if (models.indexOf(curModel) !== -1) {
+            modelSel.value = curModel;
+          } else {
+            modelSel.value  = '_custom';
+            customInput.value = curModel;
+          }
+        }
+        toggleCustom();
+      }
+
+      function toggleCustom() {
+        customDiv.style.display = (modelSel.value === '_custom') ? '' : 'none';
+      }
+
+      providerSel.addEventListener('change', function () {
+        const info = catalog[this.value] || {};
+        baseUrlInput.value = info.base_url || '';
+        populateModels(this.value, false);
+      });
+
+      modelSel.addEventListener('change', toggleCustom);
+
+      init();
+    })();
+    </script>
   </div>
 
   <!-- Services -->

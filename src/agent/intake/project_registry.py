@@ -231,7 +231,9 @@ def set_project_llm(
     """Cập nhật cấu hình LLM cho project. llm_config mã hóa at-rest nếu SECRET_KEY set (A2)."""
     from agent.security import encrypt_secret
 
-    SUPPORTED_PROVIDERS = {"anthropic", "openai", "gemini", "groq", "mistral", "ollama"}
+    SUPPORTED_PROVIDERS = {
+        "anthropic", "openai", "gemini", "groq", "mistral", "ollama", "together", "greennode"
+    }
     if provider not in SUPPORTED_PROVIDERS:
         raise ValueError(
             f"Provider '{provider}' không hỗ trợ. Hỗ trợ: {sorted(SUPPORTED_PROVIDERS)}"
