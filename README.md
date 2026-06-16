@@ -1,204 +1,331 @@
-# Investigation Agent
+# Agent điều tra nguyên nhân sự cố
 
-Agent điều tra sự cố tự động cho hệ microservice và fintech. Nhận triệu chứng (webhook alert hoặc trigger thủ công) → engine điều tra domain-agnostic qua adaptive loop + tool-calling → verdict neo bằng chứng → push Telegram/Teams/Email.
+> Đưa vào một sự cố (log error hoặc alert) → agent tự truy nguồn từ **deploy history,
+> logs, metrics và source code** → suy luận qua từng bước adaptive để khoanh vùng
+> nguyên nhân → trả về verdict dựa trên bằng chứng (evidence-grounded), kèm chuỗi bằng
+> chứng truy ngược được.
 
-## Kiến trúc 4 cạnh pluggable
-
-```
-             ┌──────────────────── ENGINE ─────────────────────┐
-             │                                                   │
-INTAKE       │  decide_next_action(state, llm, tools)           │  OUTPUT
-──────────   │  ──────────────────────────────────────────────  │  ────────
-Prometheus   │  • LLM chọn tool tiếp theo (adaptive)            │  Telegram
-Grafana      │  • run_tool → Observation (aggregate, ≤5 rows)  │  Teams
-Sentry       │  • update_state (hypothesis lifecycle)           │  Email
-PagerDuty    │  • stop khi: verdict / budget / loop detect      │  Callback
-OpsGenie     │                          │                        │
-GitHub       │              ┌───────────▼──────────┐            │
-GitLab       │              │    Tool Registry     │            │  MODEL
-             │              │  (local + MCP hot-   │            │  ────────
-             │              │   plug, per-project) │            │  Anthropic
-             │              └──────────────────────┘            │  OpenAI
-             │                   TOOL cạnh                       │  Groq/Mistral
-             └───────────────────────────────────────────────────┘
-```
-
-Engine **bất biến** ở giữa. Mỗi cạnh thêm adapter — không sửa engine.
-
-## Quickstart
-
-```bash
-# 1. Clone + venv
-git clone <repo> && cd Clawathon
-python3 -m venv .venv && source .venv/bin/activate
-
-# 2. Env vars
-cp .env.example .env        # điền ANTHROPIC_API_KEY (tùy chọn — mock LLM chạy không cần)
-
-# 3. Setup (DB + seed data)
-make init                   # init DB + migrations
-make seed                   # seed 6 kịch bản (4 microservice + 2 fintech)
-
-# 4. Chạy server
-make run                    # API server :8080
-
-# 5. Trigger điều tra
-make trigger sc=1           # kịch bản 1 (deploy bug)
-# Hoặc HTTP:
-curl -X POST localhost:8080/trigger \
-  -H "Content-Type: application/json" \
-  -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'
-```
-
-Mở **dashboard:** http://localhost:8080/dashboard
-
-## Lệnh `make`
-
-| Target | Mô tả |
-|--------|-------|
-| `make setup` | Cài đặt đầy đủ từ đầu (install + init + seed) |
-| `make init` | Init DB + chạy migrations |
-| `make seed` | Seed 6 kịch bản |
-| `make run` | Khởi động server port 8080 |
-| `make mcp` | Khởi động MCP demo server port 9000 |
-| `make test` | pytest (173 tests) |
-| `make eval` | Eval gate mock 4 kịch bản (CI gate) |
-| `make ci` | test + eval (cổng CI đầy đủ) |
-| `make trigger sc=1` | Trigger kịch bản (sc=1\|2\|3\|4\|f1\|f2) |
-| `make chat` | CLI REPL chat với agent |
-| `make reset` | Xóa DB + khởi tạo lại |
-
-## Kịch bản demo (7 phút)
-
-| # | Kịch bản | Engine path |
-|---|----------|-------------|
-| 1 | Deploy bug: payment-gateway v2.3.1 → lỗi 502 | 5 bước, verdict HIGH |
-| 2 | DB pool exhaustion: auth-service → timeout | 8 bước, verdict HIGH |
-| 3 | Provider sập: MoMo gateway → lỗi thanh toán | 6 bước, verdict HIGH |
-| 4 | Traffic surge 5x → rate limit api-gateway | 3 bước, verdict HIGH |
-| f1 | Fintech: processor timeout → thanh toán thất bại | multi-agent |
-| f2 | Fintech: price bug merchant → doanh thu lệch | multi-agent |
-
-**Luồng đầy đủ:**
-```
-make trigger sc=1
-→ POST /projects/default/trigger
-→ engine điều tra (adaptive loop, 5 bước)
-→ submit_verdict tool call → Verdict(confidence=high)
-→ push Telegram + lưu trace
-→ http://localhost:8080/dashboard (xem kết quả realtime qua SSE)
-```
-
-## Cấu trúc chính
-
-```
-src/agent/
-├── engine/       loop.py (engine) · state.py · graph.py (LangGraph) · multi_agent.py
-├── tools/        contracts.py (seam) · registry.py · các tool local
-├── intake/       server.py (API) · adapters/ · runner.py · scheduler.py
-├── output/       telegram.py · teams.py · email.py · slack.py · callback.py
-├── llm/          factory.py · anthropic.py · openai_compat.py
-├── dashboard/    router.py · templates/
-└── storage/      db.py (SQLite WAL)
-```
-
-## Tài liệu
-
-| File | Nội dung |
-|------|----------|
-| `docs/02-architecture.md` | Kiến trúc chi tiết, 4 nguyên tắc, đường ranh |
-| `docs/04-hop-dong-tool-va-observation.md` | Hợp đồng tool + Observation schema |
-| `docs/05-engine.md` | Engine loop, hypothesis lifecycle, verdict |
-| `docs/api.md` | API reference đầy đủ (REST + Dashboard) |
-| `CLAUDE.md` | Chỉ thị vận hành dự án (chỉ thị bắt buộc cho Claude Code) |
-| `BUILD_STATE.md` | Trạng thái build hiện tại |
-
-## Bốn nguyên tắc kiến trúc
-
-1. **LLM không thấy dữ liệu thô** — tool aggregate bằng SQL, trả Observation đã chưng cất.
-2. **Một đường ranh** — engine chỉ thấy `list[Tool]` đồng nhất; không biết "log"/"SQLite"/"MCP" là gì.
-3. **Lõi deterministic, agent chỉ điều phối** — tính toán trong tool; LLM chọn tool + quyết điểm dừng.
-4. **Async từ biên nhận; một nguồn structured, nhiều renderer** — Observation/verdict structured, render text chỉ ở biên tiêu thụ.
-
-## Stack
-
-Python 3.14 · FastAPI · **SQLite WAL** (dev) / **PostgreSQL** (prod) · Anthropic API (OpenAI-compat: Groq, Mistral) · asyncio background task · MCP JSON-RPC 2.0 over HTTP
+**Live demo:** https://endpoint-7183060e-00a5-49f0-8e5e-93859d95ffcd.agentbase-runtime.aiplatform.vngcloud.vn
+· Dashboard: `<link>/dashboard`
 
 ---
 
-## Deploy lên GreenNode AgentBase
+## Vấn đề
 
-> Chi tiết đầy đủ: [`deploy/RUNBOOK_AGENTBASE.md`](deploy/RUNBOOK_AGENTBASE.md)
+Khi microservice có sự cố, kỹ sư on-call phải lục qua nhiều nguồn cùng lúc — log lỗi,
+metrics, lịch sử deploy, source code — rồi tự ghép các dấu hiệu lại thành nguyên nhân
+gốc rễ. Việc đó thường mất 20–60 phút, và phần khó nhất không phải thiếu dữ liệu, mà là
+biết *nhìn vào đúng chỗ* theo đúng thứ tự.
 
-**Ràng buộc cứng:** port `8080` · build `linux/amd64` · `GET /health` → 200 · disk ephemeral → PostgreSQL bắt buộc · deploy via `runtime.sh` (KHÔNG kubectl) · single-instance `min=max=1`.
+Agent này hỗ trợ kỹ sư on-call làm đúng vòng lặp đó, tự động: nhận triệu chứng, tự sinh
+giả thuyết, gọi tool thu thập bằng chứng theo từng bước, loại trừ dần từng khả năng, và
+kết thúc bằng một verdict có chuỗi bằng chứng truy ngược được — trong vài phút thay vì
+vài chục phút.
 
-### 1. Chuẩn bị
+**Nguồn điều tra:** deploy history · application logs · metrics · distributed traces ·
+dependency graph · **source code** (đọc read-only qua external MCP — GitHub/GitLab).
 
-```bash
-# Biến môi trường GreenNode (lấy từ IAM console)
-export GREENNODE_CLIENT_ID="<sa-client-id>"
-export GREENNODE_CLIENT_SECRET="<sa-secret>"
+---
 
-# Tạo .env.prod (KHÔNG commit) — copy từ .env.example và điền:
-#   ANTHROPIC_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-#   DB_BACKEND=postgres, DATABASE_URL=postgresql://...
-#   APP_ENV=production, SESSION_SECRET_KEY=..., SECRET_KEY=...
-cp .env.example .env.prod
+## Cách agent hoạt động
+
+```
+Input: một sự cố
+ ├─ Chat thủ công (CLI / dashboard)
+ └─ Webhook: Grafana · Prometheus · Sentry · PagerDuty · OpsGenie
+            │
+            ▼
+┌───────────────────────────────────────────────────────────────┐
+│                       INVESTIGATION ENGINE                    │
+│                                                               │
+│  1. Pre-seed giả thuyết từ lịch sử service (E11)             │
+│                                                               │
+│  ┌─────────────────────────────────────────────────────────┐  │
+│  │            VÒNG LẶP ADAPTIVE (budget 10 bước)           │  │
+│  │                                                         │  │
+│  │  decide_next_action(state)                              │  │
+│  │  LLM thấy: triệu chứng · bảng giả thuyết hiện tại      │  │
+│  │            · observation vừa thu · gợi ý tool (E10)    │  │
+│  │  → chọn đúng 1 tool, hoặc gọi submit_verdict           │  │
+│  │                        │                               │  │
+│  │         ┌──────────────▼──────────────┐                │  │
+│  │         │   run_tool → Observation    │                │  │
+│  │         │   (logs/metrics/deploy/     │                │  │
+│  │         │    code/trace/deps)         │                │  │
+│  │         │   summary · aggregates      │                │  │
+│  │         │   ≤5 samples · total_count  │                │  │
+│  │         └──────────────┬──────────────┘                │  │
+│  │                        │                               │  │
+│  │  update_state: gắn bằng chứng → giả thuyết             │  │
+│  │  lifecycle: open → confirmed / ruled_out               │  │
+│  │                                                         │  │
+│  │  GATE trước khi chấp nhận verdict:                     │  │
+│  │  • E4: competing-hypothesis — còn giả thuyết đối lập  │  │
+│  │        nào chưa loại trừ không?                        │  │
+│  │  • E12: specificity — verdict đã đủ cụ thể chưa?      │  │
+│  │                                                         │  │
+│  │  DỪNG khi: verdict qua gate · hết budget               │  │
+│  │           · phát hiện loop · timeout                   │  │
+│  └─────────────────────────────────────────────────────────┘  │
+│                        │                                       │
+│  Finalize:                                                     │
+│  • E2: grounding check — hạ confidence nếu overlap thấp      │
+│  • E8: calibration lịch sử — hạ nếu accuracy loại này thấp   │
+│  • E9: structured verdict — không qua text round-trip         │
+└───────────────────────────────────────────────────────────────┘
+            │
+            ▼
+Verdict: root_cause · confidence · chuỗi bằng chứng · propagation
+            │
+            ▼
+Output: Telegram · Gmail · Teams · Slack   (mỗi project cấu hình kênh riêng)
+            │
+            └─→ Mọi bước được trace vào DB + stream qua SSE lên live dashboard
 ```
 
-### 2. Build & push image (amd64)
+### Từng bước
 
-```bash
-# Đăng nhập managed CR
-/agentbase-deploy cr login    # hoặc: docker login vcr.vngcloud.vn -u <token> -p <token>
+**1. Input** — Hai cách đưa sự cố vào: **chat thủ công** (CLI REPL / dashboard) hoặc
+**webhook** từ Grafana, Prometheus, Sentry, PagerDuty, OpsGenie. Normalizer chuẩn hóa
+mọi nguồn về cùng một `InvestigationRequest` (symptom, time_window, project_id).
 
-# Build amd64 (PHẢI có --platform, dù build trên Apple Silicon)
-docker build --platform linux/amd64 -t vcr.vngcloud.vn/<namespace>/investigation-agent:latest .
+**2. Pre-seed (E11)** — Trước bước đầu tiên, engine tra `investigation_patterns` của
+service này để gieo trước các giả thuyết `open` từ những root-cause type đã từng gặp.
+Agent được định hướng nhưng vẫn phải thu bằng chứng thật để xác nhận.
 
-# Push
-docker push vcr.vngcloud.vn/<namespace>/investigation-agent:latest
+**3. Vòng lặp adaptive** — Mỗi bước là một chuỗi hàm pure:
+
+- `decide_next_action(state)` — LLM nhận *state đã tổng hợp* (không phải lịch sử thô):
+  bảng giả thuyết + observation gần nhất + gợi ý tool theo giả thuyết open (E10) + số
+  bước còn lại. LLM chọn đúng 1 tool, hoặc gọi `submit_verdict`.
+
+- `run_tool → Observation` — tool tự aggregate ở tầng query (logs, metrics, deploy,
+  dependency, distributed trace, hoặc source code qua MCP) và trả về cấu trúc:
+  `summary` (tự diễn giải, signal lên đầu) · `aggregates` · `≤5 samples` ·
+  `total_count`. **LLM không bao giờ thấy raw rows.**
+
+- `update_state` — bằng chứng được gắn vào giả thuyết qua `evidence_ids`; vòng đời
+  (lifecycle) giả thuyết tiến theo catalog của domain (E6): `open → confirmed /
+  ruled_out`.
+
+**4. Hai gate trước verdict** — Mỗi gate chỉ kích một lần (idempotent):
+
+- **Competing-hypothesis gate (E4):** nếu confidence high/medium mà vẫn còn giả thuyết
+  đối lập chưa loại trừ → inject nudge "hãy loại trừ X, Y trước khi kết luận."
+- **Specificity gate (E12):** nếu verdict thiếu chi tiết cụ thể (version, timestamp,
+  %, baseline) → nudge bổ sung.
+
+**5. Verdict** — `submit_verdict` là một tool trong schema; LLM điền đầy đủ các field
+có cấu trúc. Sau đó:
+
+- **Grounding check (E2):** nếu từ khóa của root_cause overlap < 25% với bằng chứng đã
+  thu → hạ confidence 1 bậc + đánh dấu `speculative`.
+- **Calibration lịch sử (E8):** nếu accuracy lịch sử của loại giả thuyết này dưới
+  ngưỡng → hạ tiếp.
+- **Confidence căn cứ theo *loại* bằng chứng** — không phải số %:
+  `high` = tương quan thời gian + cơ chế nhân quả rõ;
+  `medium` = chỉ tương quan thời gian;
+  `low` = suy đoán;
+  `insufficient` = chưa đủ bằng chứng (là một kết quả hợp lệ).
+
+**6. Output & trace** — Verdict được push tới các kênh cấu hình theo project (Telegram,
+Gmail, Teams, Slack). Đồng thời, mọi bước điều tra — từng tool call, từng observation,
+từng lần đổi trạng thái giả thuyết — đều được trace vào DB và stream realtime qua SSE,
+nên có thể xem lại chính xác agent đã suy luận thế nào để ra verdict.
+
+---
+
+## Agent engine — đi sâu
+
+Quyết định trung tâm của engine: state luôn giữ một *bức tranh giả thuyết đang tiến
+hóa*, trong đó **giả thuyết và bằng chứng liên kết với nhau** — không phải hai danh
+sách rời. Loop adaptive cập nhật bức tranh đó, logic dừng đọc nó, và verdict chỉ là
+cách *trình bày lại* nó. Tách rời hai thứ này là tự chặn đường ở khâu verdict.
+
+### Control flow của vòng lặp
+
+Engine không phải một chuỗi gọi tool tuyến tính — nó là vòng lặp có điểm rẽ. Điểm
+khác biệt nằm ở **hai gate chặn giữa "LLM muốn kết luận" và "verdict được chấp nhận"**:
+khi LLM gọi `submit_verdict`, verdict chưa được nhận ngay mà phải qua gate; nếu chưa
+đạt, engine *inject một nudge* và đẩy LLM quay lại loop để điều tra thêm.
+
+```mermaid
+flowchart TD
+    Start(["Sự cố: log error / alert"]) --> Norm["Normalizer<br/>→ InvestigationRequest"]
+    Norm --> Seed["E11 · Pre-seed giả thuyết<br/>từ lịch sử service"]
+    Seed --> Decide["decide_next_action(state)<br/>LLM nhìn state đã tổng hợp"]
+    Decide -->|"chọn 1 tool"| RunTool["run_tool → Observation<br/>(summary · aggregates · ≤5 samples)"]
+    RunTool --> Update["update_state<br/>gắn evidence ↔ hypothesis<br/>lifecycle: open → confirmed / ruled_out"]
+    Update --> StopChk{"Dừng sớm?<br/>budget · loop · timeout"}
+    StopChk -->|"chưa"| Decide
+    StopChk -->|"có"| Finalize["Finalize"]
+    Decide -->|"submit_verdict"| Gate1{"E4 competing-hypothesis<br/>còn giả thuyết đối lập?"}
+    Gate1 -->|"còn → nudge"| Decide
+    Gate1 -->|"hết"| Gate2{"E12 specificity<br/>verdict đủ cụ thể?"}
+    Gate2 -->|"chưa → nudge"| Decide
+    Gate2 -->|"đủ"| Finalize
+    Finalize --> FinDetail["E2 grounding check<br/>E8 calibration lịch sử<br/>specificity score"]
+    FinDetail --> Out(["Verdict → Telegram/Gmail/Teams/Slack<br/>+ trace realtime qua SSE"])
 ```
 
-### 3. Init PostgreSQL managed
+Mỗi gate chỉ kích **một lần** (idempotent) và có budget-guard — không bao giờ đẩy agent
+vào vòng lặp nudge vô tận. Đây là đối sách chính cho việc model tầm trung hay *dừng quá
+sớm*: vừa thấy một manh mối hợp lý là muốn chốt ngay.
 
-```bash
-# Chạy một lần trên DB managed (lấy DATABASE_URL từ PG service của GreenNode)
-DB_BACKEND=postgres DATABASE_URL="postgresql://..." python data/init_db.py
-DB_BACKEND=postgres DATABASE_URL="postgresql://..." python data/seed_scenario1.py
-# ... (seed các kịch bản khác tùy nhu cầu)
+### Vòng đời giả thuyết
+
+Mỗi giả thuyết đi qua một máy trạng thái đơn giản, do **catalog của domain** điều khiển
+(E6 — không hard-code trong engine). Confirm/rule-out được quyết bởi keyword trong
+summary của Observation mới, và mỗi lần chuyển trạng thái đều gắn thêm `evidence_ids`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> open: pre-seed E11 / tạo mới khi evidence khớp catalog
+    open --> confirmed: evidence khớp confirm keywords
+    open --> ruled_out: evidence khớp rule-out keywords
+    confirmed --> [*]: nguồn của verdict
+    ruled_out --> [*]: bị loại trừ
 ```
 
-### 4. Deploy runtime
+Khi dừng mà có nhiều giả thuyết `confirmed`, engine chọn winner theo confidence rồi tới
+số lượng evidence (multi-agent conflict resolution), và annotate lại trong verdict.
 
-```bash
-# Tạo runtime mới (single-instance)
-/agentbase-deploy deploy \
-  --image vcr.vngcloud.vn/<namespace>/investigation-agent:latest \
-  --env-file .env.prod \
-  --min-replicas 1 --max-replicas 1
+### Mô hình dữ liệu — vì sao verdict luôn truy ngược được
 
-# Hoặc dùng runtime.sh trực tiếp:
-runtime.sh create \
-  --from-cr vcr.vngcloud.vn/<namespace>/investigation-agent:latest \
-  --env-file .env.prod \
-  --min-replicas 1 --max-replicas 1
+`InvestigationState` là dataclass thuần dữ liệu. Liên kết `Hypothesis.evidence_ids →
+Evidence → Observation` chính là thứ làm cho mỗi kết luận đều dẫn ngược được về dữ liệu
+gốc đã sinh ra nó.
+
+```mermaid
+classDiagram
+    class InvestigationState {
+        +str symptom
+        +str time_window
+        +list hypotheses
+        +list evidence
+        +int steps_taken
+        +int step_budget
+    }
+    class Hypothesis {
+        +str id
+        +str content
+        +str status
+        +str confidence
+        +list evidence_ids
+        +int prior_seen_count
+    }
+    class Evidence {
+        +str id
+        +str tool_name
+        +str summary
+        +Observation observation
+    }
+    class Observation {
+        +str summary
+        +dict aggregates
+        +list samples
+        +int total_count
+    }
+    InvestigationState "1" o-- "*" Hypothesis
+    InvestigationState "1" o-- "*" Evidence
+    Hypothesis "1" ..> "*" Evidence : evidence_ids
+    Evidence "1" --> "1" Observation
 ```
 
-### 5. Verify
+`status` ∈ `open / confirmed / ruled_out`; `confidence` ∈ `high / medium / low`. Vì
+verdict đọc lại đúng cấu trúc này, grounding check (E2) có thể đối chiếu từ khóa
+root_cause với toàn bộ `Evidence.summary` đã thu — nếu overlap quá thấp, confidence bị
+hạ và verdict bị đánh dấu `speculative`.
+
+### Đối sách cho model tầm trung
+
+Phần lớn công sức của engine dồn vào việc *bù* các điểm yếu của model tầm trung, thay vì
+giả định một model hoàn hảo:
+
+| Bẫy | Đối sách trong engine |
+|-----|------------------------|
+| Chọn sai tool | `description` sắc, phân biệt rõ khi nào dùng tool nào |
+| Lặp vô hạn | Phát hiện loop (2 call giống nhau / dao động A→B→A→B) + nhắc "đã chạy rồi"; budget là chặn cứng |
+| Dừng quá sớm | Competing-hypothesis gate (E4) buộc loại trừ giả thuyết đối lập trước khi chốt |
+| Bịa nguyên nhân | Grounding check (E2) — root_cause không gắn được bằng chứng → hạ confidence |
+| Verdict mơ hồ | Specificity gate (E12) đòi version/timestamp/%/baseline cụ thể |
+| Đánh giá sai quy mô | `total_count` + `truncated` trong Observation cho thấy quy mô thật |
+
+---
+
+## Các quyết định thiết kế chủ chốt
+
+- **Tool distillation — LLM không bao giờ thấy dữ liệu thô.**
+  Tool tự aggregate bằng SQL và trả về `Observation` gồm summary tự diễn giải +
+  aggregates + ≤5 samples + `total_count`. Đây là guardrail quan trọng nhất chống
+  hallucinate root cause: agent không thể bịa nguyên nhân từ dữ liệu nó chưa từng nhận.
+
+- **Engine domain-agnostic, catalog pluggable.**
+  Engine không biết "microservice" hay "fintech" là gì — nó chỉ thấy `list[Tool]` đồng
+  nhất và một hypothesis catalog. Đổi catalog (và tools) là đủ để áp dụng cùng engine
+  cho domain khác. Repo hiện có hai catalog: microservice ops và fintech anomaly.
+
+- **Vòng lặp adaptive, không plan-ahead.**
+  Mỗi bước LLM thấy state đã tổng hợp, không phải lịch sử hội thoại thô. Không vạch kế
+  hoạch trước; bước sau phụ thuộc kết quả bước trước — đúng bản chất điều tra sự cố, và
+  giữ mỗi quyết định đủ đơn giản cho model tầm trung.
+
+- **Verdict dựa trên bằng chứng (evidence-grounded).**
+  Mỗi giả thuyết giữ danh sách `evidence_ids` trỏ vào observation cụ thể đã thu. Verdict
+  phải qua grounding check trước khi được chấp nhận. "Chưa đủ bằng chứng" là kết quả hợp
+  lệ — một agent khiêm tốn đúng lúc đáng tin hơn agent luôn quả quyết.
+
+---
+
+## Chạy thử
 
 ```bash
-# Endpoint tự động sau khi runtime ACTIVE:
-curl https://<runtime-endpoint>/health
-# → {"status":"ok","db_backend":"postgres",...}
+git clone <repo> && cd Clawathon
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env           # điền ANTHROPIC_API_KEY
+make init && make seed         # khởi tạo DB + 6 kịch bản demo
+make run                       # server tại http://localhost:8080
+make trigger sc=1              # trigger kịch bản 1 (deploy bug)
+# hoặc chat thủ công với agent:
+make chat
+```
 
-curl https://<runtime-endpoint>/health/ready
-# → {"status":"ready","backend":"postgres","db":"ok"}
+Mở **http://localhost:8080/dashboard** — xem investigation chạy từng bước qua SSE, kèm
+verdict và chuỗi bằng chứng cuối cùng.
 
-# Trigger test:
-curl -X POST https://<runtime-endpoint>/trigger \
-  -H "X-API-Token: <token>" \
+**6 kịch bản sẵn có:**
+
+| # | Kịch bản | Kết quả |
+|---|----------|---------|
+| `sc=1` | Deploy bug: payment-gateway v2.3.1 → lỗi 502 | 5 bước, HIGH |
+| `sc=2` | DB pool exhaustion: auth-service → timeout | 8 bước, HIGH |
+| `sc=3` | Provider sập: MoMo gateway → thanh toán thất bại | 6 bước, HIGH |
+| `sc=4` | Traffic surge 5× → rate limit api-gateway | 3 bước, HIGH |
+| `sc=f1` | Fintech: processor timeout → giao dịch thất bại | multi-agent |
+| `sc=f2` | Fintech: lỗi giá merchant → doanh thu lệch | multi-agent |
+
+Endpoint thủ công:
+```bash
+curl -X POST localhost:8080/trigger \
   -H "Content-Type: application/json" \
   -d '{"service":"payment-gateway","scenario":"scenario1","time_window":"14:00-15:00"}'
+
+curl localhost:8080/health
 ```
 
-> **Lưu ý:** 4 biến `GREENNODE_CLIENT_ID/CLIENT_SECRET/AGENT_IDENTITY/ENDPOINT_URL` được **auto-inject** bởi platform — không set trong `.env.prod`.
+---
+
+## Stack
+
+| Thành phần | Hiện thực |
+|-----------|-----------|
+| Ngôn ngữ | Python 3.14 |
+| Agent loop | Tự viết (adaptive) + LangGraph (hot-swap, cùng interface) |
+| LLM | Anthropic Claude — OpenAI-compat: Groq, Mistral, GreenNode MaaS |
+| Storage | SQLite WAL (dev) · PostgreSQL (prod) — qua storage seam |
+| API server | FastAPI + uvicorn |
+| MCP protocol | JSON-RPC 2.0 over HTTP, hot-plug per project |
+| Nguồn dữ liệu | logs · metrics · deploy history · dependencies · traces · source code (MCP) |
+| Output | Telegram · Gmail · Teams · Slack — fan-out router, cấu hình per project |
+| Trace | trace_events lưu DB + SSE realtime lên dashboard |
