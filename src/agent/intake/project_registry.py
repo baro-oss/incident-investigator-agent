@@ -256,7 +256,7 @@ def clear_project_llm(project_id: str) -> None:
     """Xóa per-project LLM override — project sẽ dùng default từ env."""
     conn = open_db()
     conn.execute(
-        "UPDATE projects SET llm_provider=NULL, llm_model=NULL, llm_config=NULL, updated_at=? WHERE id=?",
+        "UPDATE projects SET llm_provider=NULL, llm_model=NULL, llm_config='{}', updated_at=? WHERE id=?",
         (_now(), project_id),
     )
     conn.commit()

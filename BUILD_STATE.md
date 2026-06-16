@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 12 🔨 ĐANG LÀM (61–63, nén 3 ngày) — LLM UI catalog + bug fix batch. **Ngày 61+62 HOÀN TẤT** (2026-06-16): catalog+dropdown+GreenNode · test-conn endpoint · key security+preserve · BUG-01..07 đã fix. 461/461 tests xanh.
-**Cổng kiểm gần nhất:** Ngày 60 (D60 Deploy+Close) — 461 tests · eval 4/4 mock PASS · port 8080 + amd64 + Dockerfile prod · docker-compose.prod + runbook AgentBase · READ-ONLY audit clean · 4 nguyên tắc giữ · single-instance `min=max=1` documented.
-**Kế hoạch kế tiếp:** Phase 12 (Ngày 61–63, nén 3 ngày, `docs/17-roadmap-phase-12.md`) — LLM UI catalog: `llm/catalog.py` PROVIDER_CATALOG (8 provider, +**GreenNode MaaS** VNG Cloud cho self-hosted) + provider/model `<select>` + base_url auto-fill + option "Khác" + test connection endpoint + fix key security (BUG-03) + key preserve + fix port 8000→8080 (BUG-01) + fix admin nav `or true` (BUG-02) + pricing prefix stale (BUG-05) + slack channels grid (BUG-06). D61=catalog · D62=test-conn+key+bug batch · D63=tests+CI+audit+cổng. Target: ≥490 tests.
+**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63, nén 3 ngày) — LLM UI catalog + bug fix batch. Cổng P12 PASS 2026-06-16: catalog+dropdown+GreenNode · test-conn endpoint · key security+preserve · BUG-01..07 fix · 502/502 tests xanh · READ-ONLY + 4 nguyên tắc giữ.
+**Cổng kiểm gần nhất:** Ngày 63 (D63 Tests+CI+Audit+Cổng P12) — 502 tests (461 baseline + 41 mới) · CI matrix sqlite+postgres đã xanh từ Phase 11 · READ-ONLY audit clean · 4 nguyên tắc giữ · degrade safe (api_key không lộ HTML, _draining reset).
+**Kế hoạch kế tiếp:** chưa có lệnh — chờ người dùng định hướng Phase 13+.
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -150,7 +150,7 @@
 |------|-------|----------|------------|
 | 61 | LLM catalog + provider/model dropdown | `src/agent/llm/catalog.py` PROVIDER_CATALOG (8 provider, +**GreenNode MaaS**) — `label`+`base_url`+`models`+`allow_custom_model` · `GET /dashboard/llm-catalog` · provider `<select>` + model `<select>` + base_url auto-fill + option "Khác (tự nhập)" cho self-hosted · thêm `together`+`greennode` vào SUPPORTED_PROVIDERS + default base_url server-side | ✅ |
 | 62 | Test conn + key + bug batch | **Phần I:** `POST /dashboard/projects/{pid}/llm/test` + UI badge · fix key không lộ HTML (`llm_key_set` bool) + key preserve khi save rỗng · BUG-01 `localhost:8000`→`{PORT}` (trigger/replay). **Phần II:** BUG-02 admin nav `or true` · BUG-04 version stale · BUG-05 pricing prefix · BUG-06 slack channels grid · BUG-07 silent exception | ✅ |
-| 63 | Tests + CI + Audit + Cổng P12 | **Phần I:** tests mới ~30 (catalog/test-conn/bug-fixes) · CI matrix sqlite+postgres xanh · target ≥490 tests. **Phần II:** READ-ONLY audit · 4 nguyên tắc · degrade safe · đóng pha · BUILD_STATE/CLAUDE | ☐ |
+| 63 | Tests + CI + Audit + Cổng P12 | **Phần I:** 41 tests mới (catalog/test-conn/bug-fixes) · 502/502 tổng · fix `encrypt_secret` patch path + TestClient lifespan drain + `clear_project_llm` NOT NULL. **Phần II:** READ-ONLY audit clean · 4 nguyên tắc giữ · api_key không lộ HTML · _draining reset between tests · đóng pha P12 | ✅ |
 
 **Chốt Phase 12 (nén 3 ngày — không cắt scope):** KHÔNG thêm engine feature/tool/schema — chỉ biên dashboard/intake · LLM key không bao giờ rời server (chỉ bool `key_set`) · test connection = prompt tối giản, không chạy investigation · GreenNode MaaS qua `OpenAICompatibleClient` hiện có (không sửa client/factory) · 4 nguyên tắc + READ-ONLY giữ. Mỗi ngày cỡ L; regression gate (461 tests + eval 4/4 + 2 KB E2E) cuối mỗi ngày.
 **Xương sống KHÔNG cắt:** BUG-01 (port 8000) · BUG-02 (admin nav) · BUG-03 (key security) · key preserve · GreenNode MaaS support · CI green.
@@ -182,6 +182,26 @@
 - Rewrite LLM form trong `project_detail.html` — provider `<select>` (8 option), model `<select>` (JS populate), custom model div (ẩn/hiện theo "_custom"), base_url auto-fill khi đổi provider, API key không pre-fill value (BUG-03 template side).
 
 **Cổng Ngày 61 PASS:** `GET /dashboard/llm-catalog` 8 provider ✅ · Provider dropdown + model populate ✅ · GreenNode models + base_url MaaS ✅ · "Khác" custom input ✅ · 461/461 tests ✅
+
+### [Session 66c — 2026-06-16] — Ngày 63: Tests + CI + Audit + Cổng Phase 12
+
+**Đã làm:**
+- Tạo `tests/test_phase12.py` — 41 tests (10 section): LLM catalog API · SUPPORTED_PROVIDERS (greennode+together) · GET /dashboard/llm-catalog HTTP · BUG-01 port fix · BUG-03 key security · BUG-05 pricing · BUG-06 slack channel · LLM-05 key preserve · test-conn endpoint · model_custom routing.
+- Fix 3 bugs phát hiện trong test: (1) `encrypt_secret` patch path sai → `agent.security.encrypt_secret`; (2) `TestClient` không context manager → lifespan `_draining=True` leak sang `test_server.py` → thêm `_q._draining = False` sau context manager exit; (3) `clear_project_llm()` dùng `llm_config=NULL` vi phạm NOT NULL constraint → đổi thành `'{}'`.
+- READ-ONLY audit: engine code không có write/push/merge/delete/PR/commit nào tới external source ✅.
+- API key security: `project_detail.html` chỉ có `api_key` là empty password input (không pre-fill value); template badge dùng `llm_key_set` bool ✅.
+- 4 nguyên tắc: #1 Observation chưng cất · #2 seam sạch · #3 lõi deterministic · #4 async structured — tất cả giữ ✅.
+
+**Số liệu:**
+- 502/502 tests pass (461 baseline Phase 11 + 41 mới Phase 12).
+- 3 bug phụ phát hiện + fix trong quá trình viết test (`encrypt_secret` patch · DB lock · NOT NULL constraint).
+
+**Cổng Phase 12 PASS:**
+- D61: catalog + dropdown + GreenNode MaaS ✅
+- D62: test-conn endpoint + key security + BUG-01..07 ✅
+- D63: 41 tests mới · 502/502 · READ-ONLY clean · 4 nguyên tắc · degrade safe ✅
+
+---
 
 ### [Session 66b — 2026-06-16] — Ngày 62: Test conn + key security + bug batch
 
