@@ -38,6 +38,9 @@ from agent.dashboard.queries import (
 
 _HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(_HERE / "templates"))
+# Custom filter: URL-encode path segment (service names có thể chứa ký tự đặc biệt)
+from urllib.parse import quote as _url_quote
+templates.env.filters["urlencode_path"] = lambda s: _url_quote(str(s), safe="")
 
 router = APIRouter()
 
@@ -577,9 +580,13 @@ async def dashboard_project_add_service(
     description: str = Form(""),
     user: dict = Depends(require_perm("project.manage")),
 ):
+    name = service.strip()
+    if not name or "/" in name:
+        logger.warning("add_project_service: tên service không hợp lệ '%s'", service)
+        return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
     from agent.intake.project_registry import add_project_service
     try:
-        add_project_service(project_id, service.strip(), description.strip())
+        add_project_service(project_id, name, description.strip())
     except Exception as e:
         logger.warning("add_project_service lỗi: %s", e)
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
@@ -590,6 +597,8 @@ async def dashboard_project_del_service(
     request: Request, project_id: str, service: str,
     user: dict = Depends(require_perm("project.manage")),
 ):
+    if not service.strip():
+        return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
     from agent.intake.project_registry import remove_project_service
     try:
         remove_project_service(project_id, service)

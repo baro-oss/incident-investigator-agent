@@ -142,6 +142,14 @@ function showToast(msg, type, duration) {
 }
 window.showToast = showToast;
 
+// ── Secret field toggle ────────────────────────────────────────────────
+function toggleSecret(id, btn) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.type = el.type === 'password' ? 'text' : 'password';
+  btn.textContent = el.type === 'password' ? '👁' : '🙈';
+}
+
 // ── Keyboard shortcuts ─────────────────────────────────────────────────
 document.addEventListener('keydown', function(e) {
   var tag = document.activeElement && document.activeElement.tagName;

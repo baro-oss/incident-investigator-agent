@@ -87,8 +87,13 @@
             {% endif %}
             <span style="font-size:10px;color:var(--muted)"> — để trống = giữ key cũ nếu đã set</span>
           </label>
-          <input type="password" name="api_key" placeholder="sk-..."
-                 style="width:100%;padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px">
+          <div style="position:relative">
+            <input type="password" id="llm-api-key" name="api_key" placeholder="sk-..."
+                   style="width:100%;padding:5px 32px 5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;box-sizing:border-box">
+            <button type="button" onclick="toggleSecret('llm-api-key', this)"
+                    style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:0;line-height:1"
+                    title="Hiện/Ẩn key">👁</button>
+          </div>
         </div>
         <!-- Extra Headers -->
         <div>
@@ -210,12 +215,14 @@
           <div style="font-size:10px;color:var(--muted);opacity:.6;margin-top:1px">chưa có mô tả</div>
           {% endif %}
         </div>
-        <form method="post" action="/dashboard/projects/{{ proj.id }}/services/{{ svc.service }}/delete"
-              style="display:inline" onsubmit="return confirm('Xóa service {{ svc.service }}?')">
+        {% if svc.service %}
+        <form method="post" action="/dashboard/projects/{{ proj.id }}/services/{{ svc.service | urlencode_path }}/delete"
+              style="display:inline" onsubmit="return confirm('Xóa service {{ svc.service | e }}?')">
           <button type="submit"
                   style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
                          padding:0;line-height:1" title="Xóa">✕</button>
         </form>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
