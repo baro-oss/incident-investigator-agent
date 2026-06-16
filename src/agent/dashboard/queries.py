@@ -471,10 +471,14 @@ def get_project_detail(project_id: str) -> Optional[Dict[str, Any]]:
         conn.close()
         return None
 
-    services = [r["service"] for r in conn.execute(
-        "SELECT service FROM project_services WHERE project_id=? ORDER BY service",
-        (project_id,),
-    ).fetchall()]
+    services = [
+        {"service": r["service"], "description": (r["description"] or "")}
+        for r in conn.execute(
+            "SELECT service, description FROM project_services "
+            "WHERE project_id=? ORDER BY service",
+            (project_id,),
+        ).fetchall()
+    ]
 
     mcp_servers = [dict(r) for r in conn.execute(
         "SELECT id, name, url, enabled, auth_type FROM mcp_servers WHERE project_id=? ORDER BY created_at",

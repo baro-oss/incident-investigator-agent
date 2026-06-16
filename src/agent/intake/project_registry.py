@@ -97,6 +97,7 @@ def delete_project(project_id: str) -> bool:
 # ── Project services ──────────────────────────────────────────────────────────
 
 def list_project_services(project_id: str) -> List[str]:
+    """Tên services của project (backward compat — chỉ tên)."""
     conn = open_db()
     rows = conn.execute(
         "SELECT service FROM project_services WHERE project_id=? ORDER BY service",
@@ -106,18 +107,46 @@ def list_project_services(project_id: str) -> List[str]:
     return [r["service"] for r in rows]
 
 
-def add_project_service(project_id: str, service: str) -> bool:
-    """Thêm service vào project. Trả False nếu đã tồn tại."""
+def list_project_services_detailed(project_id: str) -> List[Dict[str, Any]]:
+    """Services kèm mô tả ngắn — {service, description}."""
+    conn = open_db()
+    rows = conn.execute(
+        "SELECT service, description FROM project_services "
+        "WHERE project_id=? ORDER BY service",
+        (project_id,),
+    ).fetchall()
+    conn.close()
+    return [{"service": r["service"], "description": r["description"] or ""} for r in rows]
+
+
+def get_service_descriptions(project_id: str) -> Dict[str, str]:
+    """Map {service: description} cho project — chỉ trả entry có mô tả."""
+    return {
+        r["service"]: r["description"]
+        for r in list_project_services_detailed(project_id)
+        if r["description"]
+    }
+
+
+def add_project_service(project_id: str, service: str, description: str = "") -> bool:
+    """Thêm/cập nhật service trong project.
+
+    Upsert: nếu service đã tồn tại thì cập nhật mô tả (không coi là lỗi).
+    Trả True khi thêm mới, False khi chỉ cập nhật service đã có.
+    """
     conn = open_db()
     try:
         conn.execute(
-            "INSERT INTO project_services (project_id, service) VALUES (?, ?)",
-            (project_id, service),
+            "INSERT INTO project_services (project_id, service, description) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(project_id, service) DO UPDATE SET "
+            "description=COALESCE(NULLIF(excluded.description, ''), project_services.description)",
+            (project_id, service, description),
         )
         conn.commit()
         return True
     except IntegrityError:
-        return False  # đã tồn tại — OK, không phải lỗi
+        return False
     finally:
         conn.close()
 

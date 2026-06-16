@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63). **Phase 13 ✅ HOÀN TẤT (64–69)** — Hardening & Sharpening. 594 tests.
+**Giai đoạn:** Phase 13 ✅ HOÀN TẤT (64–69). **Phase 14 📋 ĐÃ LÊN KẾ HOẠCH** — Bug Fix & UX Batch. 594 tests.
 **Cổng kiểm gần nhất:** Ngày 69 (Tests reliability + Cổng P13) — 594/594 tests · resilience · loop↔graph parity · push_verdict invariant · queue failed-status · thay test mong manh · READ-ONLY + 4 nguyên tắc audit clean.
-**Kế hoạch kế tiếp:** Phase 14 (chưa lên kế hoạch).
+**Kế hoạch kế tiếp:** Phase 14 (Ngày 70–73) — `docs/19-roadmap-phase-14.md` · Bug Fix Batch (BUG-14-01..03 + UX-14-01..03 + ENG-14-01). Uncommitted: BUG-14-01 + UX-14-01/02/03 + ENG-14-01 (đã code, chờ commit Ngày 70). TODO: BUG-14-02 (service delete double slash) + BUG-14-03 (mask inputs).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -169,6 +169,31 @@
 | 69 | Tests reliability + Cổng P13 | Test _translate · invariant error→push_verdict · resilience · graph parity · READ-ONLY guard · queue drain+failed · thay test mong manh · audit + đóng pha | ✅ |
 
 **Xương sống KHÔNG cắt:** H1 · H2 · H3 · M2 · Ngày 69. **Cắt nếu hụt giờ:** UX polish (D68) → specificity 2-lần-fire (D67) → graph parity test mức smoke.
+
+### [Session 70 — 2026-06-16] — Lập kế hoạch Phase 14 + phát hiện uncommitted work
+
+**Đã làm:**
+- Phát hiện 14 files uncommitted từ session trước (code đã xong nhưng chưa commit): BUG-14-01 (MCP URL uniqueness) · UX-14-01 (service descriptions) · UX-14-02 (trigger combobox) · UX-14-03 (channels UX) · ENG-14-01 (engine service_descriptions context) + `data/migrate_phase14.py`.
+- User report 2 bugs mới: BUG-14-02 (service delete double slash) · BUG-14-03 (mask API key inputs).
+- Tạo `docs/19-roadmap-phase-14.md` — bug registry đầy đủ (7 items) + chi tiết fix + lịch 4 ngày.
+- Cập nhật `BUILD_STATE.md` + `CLAUDE.md`.
+- 594/594 tests vẫn xanh (uncommitted code không phá tests).
+
+**Uncommitted (chờ commit Ngày 70):**
+- `data/schema.sql` + `schema_postgres.sql`: `project_services.description` + `mcp_servers UNIQUE(url,project_id)`.
+- `data/migrate_phase14.py`: migration SQLite idempotent.
+- `src/agent/engine/state.py`: `service_descriptions` field + to_context() update.
+- `src/agent/engine/loop.py` + `multi_agent.py`: propagate `service_descriptions`.
+- `src/agent/intake/runner.py`: `_get_service_descriptions()` → truyền engine.
+- `src/agent/intake/project_registry.py`: `list_project_services_detailed()` + `get_service_descriptions()` + upsert add_project_service.
+- `src/agent/intake/mcp_registry.py`: error messages per-project scope.
+- `src/agent/dashboard/queries.py`: services = `[{service, description}]`.
+- `src/agent/dashboard/router.py`: `description` form param.
+- `src/agent/dashboard/templates/project_detail.html`: hiển thị description + combobox form.
+- `src/agent/dashboard/templates/trigger.html`: `<select>` → `<input+datalist>`.
+- `src/agent/dashboard/templates/channels.html`: slack icon + disabled style.
+
+**TODO (Ngày 71):** BUG-14-02 (service delete URL fix + validation) · BUG-14-03 (mask inputs + show/hide toggle).
 
 ### [Session 67 — 2026-06-16] — Audit Phase 1–12 + Lập kế hoạch Phase 13
 

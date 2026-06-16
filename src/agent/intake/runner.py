@@ -62,6 +62,15 @@ def _get_project_services(project_id: str) -> List[str]:
         return []
 
 
+def _get_service_descriptions(project_id: str) -> dict:
+    try:
+        from agent.intake.project_registry import get_service_descriptions
+        return get_service_descriptions(project_id)
+    except Exception as e:
+        logger.warning("Không đọc được service descriptions: %s", e)
+        return {}
+
+
 # Dedup: tập hợp dedup_key của các phiên đang chạy
 _active_investigations: Set[str] = set()
 
@@ -140,6 +149,7 @@ async def run_investigation_background(
 
                 # Đọc services của project → gợi ý scope điều tra
                 available_services = _get_project_services(project_id)
+                service_descriptions = _get_service_descriptions(project_id)
                 if available_services:
                     logger.info("[%s] Project services: %s", project_id, available_services)
 
@@ -224,6 +234,7 @@ async def run_investigation_background(
                         warm_start_hint=warm_hint,
                         investigation_id=key,
                         service=req.service,   # E11: dùng cho prior lookup
+                        service_descriptions=service_descriptions or None,
                     ),
                     timeout=300.0,
                 )

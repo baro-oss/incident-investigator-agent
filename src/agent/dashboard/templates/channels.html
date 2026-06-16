@@ -9,7 +9,7 @@
 
 {% if channel_rows %}
 
-{% set channel_icons = {'telegram': '✈', 'teams': '⊞', 'email': '✉'} %}
+{% set channel_icons = {'telegram': '✈', 'teams': '⊞', 'email': '✉', 'slack': '💬'} %}
 
 {% set ns = namespace(current_project='') %}
 {% for row in channel_rows %}
@@ -25,7 +25,8 @@
 
     {% for row2 in channel_rows if row2.project_id == row.project_id %}
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 18px;min-width:160px;
-                background:{{ 'var(--surface)' if row2.enabled else '#0d0d0d' }}">
+                background:{{ 'var(--surface)' if row2.enabled else 'var(--surface2)' }};
+                opacity:{{ '1' if row2.enabled else '.7' }}">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:18px">{{ channel_icons.get(row2.channel, '·') }}</span>
         <span style="font-size:13px;font-weight:500;text-transform:capitalize">{{ row2.channel }}</span>

@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_services (
     project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     service     TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',      -- mô tả ngắn để agent có ngữ cảnh suy luận
     PRIMARY KEY (project_id, service)
 );
 
@@ -87,14 +88,15 @@ CREATE INDEX IF NOT EXISTS idx_project_services ON project_services (project_id)
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id          BIGSERIAL PRIMARY KEY,
     name        TEXT    NOT NULL,
-    url         TEXT    NOT NULL UNIQUE,
+    url         TEXT    NOT NULL,
     description TEXT    NOT NULL DEFAULT '',
     enabled     INTEGER NOT NULL DEFAULT 1,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL,
     auth_type   TEXT    NOT NULL DEFAULT 'none',
     auth_config TEXT    NOT NULL DEFAULT '{}',
-    project_id  TEXT    NOT NULL DEFAULT 'default'
+    project_id  TEXT    NOT NULL DEFAULT 'default',
+    UNIQUE (url, project_id)               -- 1 URL có thể đăng ký cho nhiều project
 );
 
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_enabled ON mcp_servers (enabled);

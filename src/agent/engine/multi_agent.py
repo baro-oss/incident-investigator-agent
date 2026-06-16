@@ -19,7 +19,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from agent.engine.loop import (
     InvestigationEngine,
@@ -92,6 +92,7 @@ class MultiAgentEngine:
         warm_start_hint: Optional[str] = None,
         investigation_id: Optional[str] = None,
         service: Optional[str] = None,   # E11
+        service_descriptions: Optional[Dict[str, str]] = None,
     ) -> InvestigationState:
         investigation_id = investigation_id or str(uuid.uuid4())[:12]
 
@@ -122,12 +123,12 @@ class MultiAgentEngine:
         log_state_fut = self._run_specialist(
             "LogAnalystAgent", self.log_tools, log_id,
             symptom, time_window, scenario, date, project_id,
-            available_services, warm_start_hint, service,
+            available_services, warm_start_hint, service, service_descriptions,
         )
         metric_state_fut = self._run_specialist(
             "MetricAnalystAgent", self.metric_tools, metric_id,
             symptom, time_window, scenario, date, project_id,
-            available_services, warm_start_hint, service,
+            available_services, warm_start_hint, service, service_descriptions,
         )
 
         log_state, metric_state = await asyncio.gather(log_state_fut, metric_state_fut)
@@ -139,7 +140,7 @@ class MultiAgentEngine:
         merged = self._merge_states(
             log_state, metric_state,
             investigation_id, symptom, time_window, scenario, date,
-            project_id, available_services, warm_start_hint,
+            project_id, available_services, warm_start_hint, service_descriptions,
         )
 
         _emit_trace(investigation_id, merged.steps_taken, "multi_agent_merge", {
@@ -187,6 +188,7 @@ class MultiAgentEngine:
         available_services: Optional[List[str]],
         warm_start_hint: Optional[str],
         service: Optional[str] = None,  # E11
+        service_descriptions: Optional[Dict[str, str]] = None,
     ) -> InvestigationState:
         """Chạy một specialist engine với tool set giới hạn."""
         logger.info("[%s] %s bắt đầu (%d tools)",
@@ -205,6 +207,7 @@ class MultiAgentEngine:
             warm_start_hint=warm_start_hint,
             investigation_id=sub_id,
             service=service,  # E11
+            service_descriptions=service_descriptions,
         )
         logger.info("[%s] %s xong: %d bằng chứng, stop=%s",
                     sub_id, role, len(state.evidence), state.stop_reason)
@@ -222,6 +225,7 @@ class MultiAgentEngine:
         project_id: str,
         available_services: Optional[List[str]],
         warm_start_hint: Optional[str],
+        service_descriptions: Optional[Dict[str, str]] = None,
     ) -> InvestigationState:
         """Gộp evidence từ 2 specialist vào 1 InvestigationState."""
         merged = InvestigationState(
@@ -233,6 +237,7 @@ class MultiAgentEngine:
             step_budget=log_state.step_budget + metric_state.step_budget,
             project_id=project_id,
             available_services=available_services or [],
+            service_descriptions=service_descriptions or {},
             warm_start_hint=warm_start_hint,
         )
 

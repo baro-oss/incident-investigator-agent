@@ -65,6 +65,7 @@ class InvestigationState:
 
     project_id: str = "default"
     available_services: List[str] = field(default_factory=list)  # services trong project
+    service_descriptions: Dict[str, str] = field(default_factory=dict)  # {service: mô tả ngắn} — context cho LLM
 
     hypotheses: List[Hypothesis] = field(default_factory=list)
     evidence: List[Evidence] = field(default_factory=list)
@@ -195,7 +196,12 @@ class InvestigationState:
         # Danh sách service trong scope — LLM dùng để định hướng điều tra
         if self.available_services:
             lines.append(f"## Services trong project (chỉ điều tra các service này)")
-            lines.append(f"  {', '.join(self.available_services)}")
+            for svc in self.available_services:
+                desc = self.service_descriptions.get(svc)
+                if desc:
+                    lines.append(f"  - {svc}: {desc}")
+                else:
+                    lines.append(f"  - {svc}")
             lines.append("")
 
         # Giả thuyết + bằng chứng liên kết — cap để gọn context (P1)

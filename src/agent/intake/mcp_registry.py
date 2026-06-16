@@ -46,7 +46,9 @@ def add_server(
 ) -> Dict[str, Any]:
     """
     Thêm MCP server vào registry của project.
-    Raise ValueError nếu URL đã tồn tại (URL unique toàn cục).
+    URL unique theo (url, project_id) → cùng 1 URL đăng ký được cho nhiều project,
+    nhưng KHÔNG trùng trong cùng một project.
+    Raise ValueError nếu URL đã tồn tại trong project này.
 
     auth_type: 'none' | 'bearer' | 'api_key'
     auth_config: JSON string — {"token":"..."} hoặc {"header":"X-API-Key","value":"..."}
@@ -69,7 +71,9 @@ def add_server(
         ).fetchone()
         return dict(row)
     except IntegrityError:
-        raise ValueError(f"URL '{url}' đã tồn tại trong registry")
+        raise ValueError(
+            f"URL '{url}' đã tồn tại trong project '{project_id}'"
+        )
     finally:
         conn.close()
 
@@ -136,7 +140,9 @@ def update_server(
         ).fetchone()
         return dict(row) if row else None
     except IntegrityError:
-        raise ValueError(f"URL '{updates.get('url')}' đã tồn tại trong registry")
+        raise ValueError(
+            f"URL '{updates.get('url')}' đã tồn tại trong project này"
+        )
     finally:
         conn.close()
 

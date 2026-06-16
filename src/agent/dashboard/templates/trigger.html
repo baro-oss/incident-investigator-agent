@@ -49,39 +49,46 @@
 
       <div class="form-group">
         <label>Service</label>
-        <select name="service" id="service_sel">
+        <input type="text" name="service" id="service_sel" list="service_list"
+               value="{{ selected_service or '' }}" autocomplete="off"
+               placeholder="chọn hoặc tự nhập service">
+        <datalist id="service_list">
           {% for svc in services %}
-          <option value="{{ svc }}" {{ 'selected' if svc == selected_service }}>{{ svc }}</option>
+          <option value="{{ svc }}"></option>
           {% endfor %}
           {% if not services %}
-          <option value="payment-gateway">payment-gateway</option>
-          <option value="auth-service">auth-service</option>
-          <option value="api-gateway">api-gateway</option>
-          <option value="order-service">order-service</option>
-          <option value="third-party-provider">third-party-provider</option>
+          <option value="payment-gateway"></option>
+          <option value="auth-service"></option>
+          <option value="api-gateway"></option>
+          <option value="order-service"></option>
+          <option value="third-party-provider"></option>
           {% endif %}
-        </select>
-        <div class="form-hint">Services của project được chọn</div>
+        </datalist>
+        <div class="form-hint">Services của project được chọn — gõ để tự nhập tên khác</div>
       </div>
 
       <div class="form-group">
         <label>Scenario (dữ liệu seed)</label>
-        <select name="scenario" id="scenario-sel">
+        <input type="text" name="scenario" id="scenario-sel" list="scenario_list"
+               value="scenario1" autocomplete="off" placeholder="chọn hoặc tự nhập scenario">
+        <datalist id="scenario_list">
           <option value="scenario1">scenario1 — Deploy bug (payment-gateway timeout)</option>
           <option value="scenario2">scenario2 — Provider sập (third-party-provider down)</option>
           <option value="scenario3">scenario3 — DB pool exhaustion (auth-service)</option>
           <option value="scenario4">scenario4 — Traffic surge (api-gateway rate limit)</option>
-        </select>
+        </datalist>
       </div>
 
       <div class="form-group">
         <label>Time Window</label>
-        <select name="time_window" id="window-sel">
+        <input type="text" name="time_window" id="window-sel" list="window_list"
+               value="14:00-15:00" autocomplete="off" placeholder="vd: 14:00-15:00">
+        <datalist id="window_list">
           <option value="14:00-15:00">14:00 – 15:00</option>
           <option value="15:00-16:00">15:00 – 16:00</option>
           <option value="08:00-09:00">08:00 – 09:00</option>
           <option value="10:00-11:00">10:00 – 11:00</option>
-        </select>
+        </datalist>
       </div>
 
       <div class="form-group">
@@ -169,33 +176,38 @@ const DOMAIN_DATA = {
   },
 };
 
+// Combobox (input+datalist): cập nhật options trong datalist, set value mặc định cho input.
 function switchDomain(domain) {
   document.getElementById('field-domain').value = domain;
   document.getElementById('tab-microservice').className = domain==='microservice' ? 'btn btn-primary' : 'btn btn-ghost';
   document.getElementById('tab-fintech').className = domain==='fintech' ? 'btn btn-primary' : 'btn btn-ghost';
 
   const d = DOMAIN_DATA[domain];
-  const scenSel = document.getElementById('scenario-sel');
-  scenSel.innerHTML = d.scenarios.map(s=>`<option value="${s.value}">${s.label}</option>`).join('');
 
-  const winSel = document.getElementById('window-sel');
-  winSel.innerHTML = d.windows.map(w=>`<option value="${w}">${w}</option>`).join('');
+  document.getElementById('scenario_list').innerHTML =
+    d.scenarios.map(s=>`<option value="${s.value}">${s.label}</option>`).join('');
+  document.getElementById('scenario-sel').value = d.scenarios.length ? d.scenarios[0].value : '';
 
-  const svcSel = document.getElementById('service_sel');
+  document.getElementById('window_list').innerHTML =
+    d.windows.map(w=>`<option value="${w}">${w}</option>`).join('');
+  document.getElementById('window-sel').value = d.windows.length ? d.windows[0] : '';
+
   const pid = document.getElementById('project_id').value;
   const projSvcs = projectServices[pid] || [];
   const svcs = projSvcs.length ? projSvcs : d.services;
-  svcSel.innerHTML = svcs.map(s=>`<option value="${s}">${s}</option>`).join('');
+  document.getElementById('service_list').innerHTML =
+    svcs.map(s=>`<option value="${s}"></option>`).join('');
+  document.getElementById('service_sel').value = svcs.length ? svcs[0] : '';
 }
 
 function updateServices() {
   const domain = document.getElementById('field-domain').value;
   const pid = document.getElementById('project_id').value;
-  const sel = document.getElementById('service_sel');
   const svcs = projectServices[pid] || [];
-  sel.innerHTML = svcs.length
-    ? svcs.map(s => `<option value="${s}">${s}</option>`).join('')
-    : DOMAIN_DATA[domain].services.map(s=>`<option value="${s}">${s}</option>`).join('');
+  const list = svcs.length ? svcs : DOMAIN_DATA[domain].services;
+  document.getElementById('service_list').innerHTML =
+    list.map(s => `<option value="${s}"></option>`).join('');
+  document.getElementById('service_sel').value = list.length ? list[0] : '';
 }
 </script>
 {% endblock %}

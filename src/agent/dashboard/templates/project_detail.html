@@ -198,16 +198,23 @@
       <h3 style="margin:0">Services ({{ proj.services|length }})</h3>
     </div>
     {% if proj.services %}
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
       {% for svc in proj.services %}
-      <div style="display:flex;align-items:center;gap:4px;background:var(--surface2);
-                  border:1px solid var(--border);border-radius:4px;padding:3px 8px">
-        <span style="font-size:12px">{{ svc }}</span>
-        <form method="post" action="/dashboard/projects/{{ proj.id }}/services/{{ svc }}/delete"
-              style="display:inline" onsubmit="return confirm('Xóa service {{ svc }}?')">
+      <div style="display:flex;align-items:flex-start;gap:8px;background:var(--surface2);
+                  border:1px solid var(--border);border-radius:5px;padding:6px 10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500">{{ svc.service }}</div>
+          {% if svc.description %}
+          <div style="font-size:11px;color:var(--muted);margin-top:1px;line-height:1.4">{{ svc.description }}</div>
+          {% else %}
+          <div style="font-size:10px;color:var(--muted);opacity:.6;margin-top:1px">chưa có mô tả</div>
+          {% endif %}
+        </div>
+        <form method="post" action="/dashboard/projects/{{ proj.id }}/services/{{ svc.service }}/delete"
+              style="display:inline" onsubmit="return confirm('Xóa service {{ svc.service }}?')">
           <button type="submit"
-                  style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;
-                         padding:0 0 0 4px;line-height:1" title="Xóa">✕</button>
+                  style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
+                         padding:0;line-height:1" title="Xóa">✕</button>
         </form>
       </div>
       {% endfor %}
@@ -216,12 +223,17 @@
     <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Chưa có service nào.</p>
     {% endif %}
     <form method="post" action="/dashboard/projects/{{ proj.id }}/services/add"
-          style="display:flex;gap:6px">
+          style="display:flex;flex-direction:column;gap:6px">
       <input type="text" name="service" placeholder="payment-gateway" required
-             style="flex:1;padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
+             style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
                     border-radius:5px;color:var(--text);font-size:12px">
-      <button type="submit" class="btn btn-primary" style="font-size:12px;padding:6px 12px">+ Thêm</button>
+      <input type="text" name="description"
+             placeholder="Mô tả ngắn — vd: cổng thanh toán, gọi provider thẻ (giúp agent suy luận)"
+             style="padding:6px 10px;background:var(--surface2);border:1px solid var(--border);
+                    border-radius:5px;color:var(--text);font-size:12px">
+      <button type="submit" class="btn btn-primary" style="font-size:12px;padding:6px 12px;align-self:flex-start">+ Thêm / cập nhật</button>
     </form>
+    <div style="font-size:10px;color:var(--muted);margin-top:6px">Thêm lại service đã có để cập nhật mô tả.</div>
   </div>
 
 </div>
@@ -230,6 +242,18 @@
 <div class="card" style="margin-top:0">
   <h3 style="margin-bottom:14px">Alert Channels</h3>
   {% set ch_icons = {'telegram': '✈', 'teams': '⊞', 'email': '✉', 'slack': '💬'} %}
+  {% set ch_examples = {
+    'telegram': '{"chat_id": "-1001234567890"}',
+    'teams': '{"webhook_url": "https://outlook.office.com/webhook/..."}',
+    'email': '{"to": "ops@example.com", "cc": "lead@example.com"}',
+    'slack': '{"webhook_url": "https://hooks.slack.com/services/T00/B00/xxx"}'
+  } %}
+  {% set ch_hints = {
+    'telegram': 'để trống = dùng TELEGRAM_CHAT_ID env',
+    'teams': 'để trống = dùng TEAMS_WEBHOOK_URL env',
+    'email': 'để trống = dùng SMTP_TO env',
+    'slack': 'để trống = dùng SLACK_WEBHOOK_URL env'
+  } %}
   <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
     {% for ch_name, ch_data in proj.channels.items() %}
     <div style="border:1px solid var(--border);border-radius:6px;padding:14px 16px">
@@ -248,9 +272,15 @@
       <!-- Config textarea -->
       <form method="post" action="/dashboard/projects/{{ proj.id }}/channels/{{ ch_name }}/config">
         <textarea name="config_json" rows="3"
+                  placeholder="{{ ch_examples.get(ch_name, '{}') }}"
                   style="width:100%;padding:6px 8px;background:var(--surface2);border:1px solid var(--border);
                          border-radius:4px;color:var(--text);font-size:11px;font-family:monospace;
-                         resize:vertical;margin-bottom:8px">{{ ch_data.config }}</textarea>
+                         resize:vertical;margin-bottom:4px">{{ ch_data.config }}</textarea>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.4">
+          <span style="opacity:.85">vd:</span>
+          <code style="font-size:10px">{{ ch_examples.get(ch_name, '{}') }}</code>
+          <div style="margin-top:2px">{{ ch_hints.get(ch_name, '') }}</div>
+        </div>
         <div style="display:flex;gap:6px">
           <input type="hidden" name="enabled" value="{{ '1' if ch_data.enabled else '0' }}">
           <button type="submit" class="btn btn-ghost" style="font-size:11px;padding:4px 10px;flex:1">

@@ -4,9 +4,12 @@ Phase 5 Ngày 22: tất cả route đều require_login; admin routes guard thê
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
@@ -571,13 +574,14 @@ async def dashboard_project_detail(
 async def dashboard_project_add_service(
     request: Request, project_id: str,
     service: str = Form(...),
+    description: str = Form(""),
     user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.intake.project_registry import add_project_service
     try:
-        add_project_service(project_id, service.strip())
-    except Exception:
-        pass
+        add_project_service(project_id, service.strip(), description.strip())
+    except Exception as e:
+        logger.warning("add_project_service lỗi: %s", e)
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
 
 

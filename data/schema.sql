@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TABLE IF NOT EXISTS project_services (
     project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     service     TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',      -- mô tả ngắn để agent có ngữ cảnh suy luận
     PRIMARY KEY (project_id, service)
 );
 
@@ -86,12 +87,14 @@ CREATE INDEX IF NOT EXISTS idx_project_services ON project_services (project_id)
 CREATE TABLE IF NOT EXISTS mcp_servers (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT    NOT NULL,                -- tên hiển thị, vd "Prometheus Metrics"
-    url         TEXT    NOT NULL UNIQUE,         -- endpoint MCP, vd "http://host:9000/mcp"
+    url         TEXT    NOT NULL,                -- endpoint MCP, vd "http://host:9000/mcp"
     description TEXT    NOT NULL DEFAULT '',     -- mô tả ngắn gọn
     enabled     INTEGER NOT NULL DEFAULT 1,      -- 0 = tắt, không kết nối
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 );
+-- UNIQUE(url, project_id) tạo qua migrate_phase14 (project_id thêm bởi migrate_projects)
+-- → 1 URL có thể đăng ký cho nhiều project
 
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_enabled ON mcp_servers (enabled);
 

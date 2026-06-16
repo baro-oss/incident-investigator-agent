@@ -836,6 +836,7 @@ class InvestigationEngine:
         warm_start_hint: Optional[str] = None,
         investigation_id: Optional[str] = None,
         service: Optional[str] = None,   # E11: service name cho prior lookup
+        service_descriptions: Optional[Dict[str, str]] = None,  # context mô tả service
     ) -> InvestigationState:
         investigation_id = investigation_id or str(uuid.uuid4())[:12]
         state = InvestigationState(
@@ -847,6 +848,7 @@ class InvestigationEngine:
             step_budget=self.step_budget,
             project_id=project_id,
             available_services=available_services or [],
+            service_descriptions=service_descriptions or {},
             warm_start_hint=warm_start_hint,
             hypothesis_catalog_index=self._catalog_index,  # E6: domain catalog
         )
