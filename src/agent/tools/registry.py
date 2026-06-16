@@ -43,6 +43,10 @@ _WRITE_PARTS = frozenset({
     "create", "update", "delete", "write", "merge", "push", "commit",
     "comment", "approve", "reject", "close", "edit", "patch",
     "post", "put", "add", "remove", "set", "insert", "upsert",
+    # M5: extended defense-in-depth — verbs that modify state on external VCS/infra
+    "fork", "dispatch", "replace", "revert", "rename", "restore",
+    "archive", "lock", "unlock", "enable", "disable", "release",
+    "deploy", "sync",
 })
 
 import re as _re

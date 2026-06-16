@@ -688,6 +688,15 @@ async def _handle_trigger_request(request: Request, project_id: str) -> JSONResp
     raw_body = await request.body()
     source = request.headers.get("x-alert-source")
 
+    # L5: external webhook call (no session) nên luôn có X-Alert-Source + HMAC
+    session_user_id = request.session.get("user_id")
+    if not source and not session_user_id and not _allow_anon_trigger():
+        logger.warning(
+            "L5: external trigger thiếu X-Alert-Source header — "
+            "source xác định qua payload (kém an toàn hơn). "
+            "Cấu hình X-Alert-Source + HMAC-SHA256 để bảo mật đầy đủ."
+        )
+
     # Verify chữ ký nếu source header được cung cấp
     if source:
         headers_lower = {k.lower(): v for k, v in request.headers.items()}

@@ -139,8 +139,11 @@ async def dashboard_diff(
 
 
 @router.get("/stream/{investigation_id}")
-async def dashboard_stream(investigation_id: str):
-    """SSE endpoint — không cần login (JS fetch không dễ kiểm session)."""
+async def dashboard_stream(
+    investigation_id: str,
+    user: dict = Depends(require_login),
+):
+    """SSE endpoint — yêu cầu đăng nhập (M7: auth + chặn cross-project enumeration)."""
     from agent.dashboard.sse import stream as sse_stream
 
     async def event_generator():
@@ -427,7 +430,7 @@ async def dashboard_channels(
 @router.post("/channels/{project_id}/{channel}/toggle", response_class=HTMLResponse)
 async def dashboard_channel_toggle(
     request: Request, project_id: str, channel: str,
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.storage.db import open_db
     conn = open_db()
@@ -568,7 +571,7 @@ async def dashboard_project_detail(
 async def dashboard_project_add_service(
     request: Request, project_id: str,
     service: str = Form(...),
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.intake.project_registry import add_project_service
     try:
@@ -581,7 +584,7 @@ async def dashboard_project_add_service(
 @router.post("/projects/{project_id}/services/{service}/delete", response_class=HTMLResponse)
 async def dashboard_project_del_service(
     request: Request, project_id: str, service: str,
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.intake.project_registry import remove_project_service
     try:
@@ -715,7 +718,7 @@ async def dashboard_project_add_repo(
     provider: str = Form("github"),
     default_branch: str = Form("main"),
     subpath: str = Form(""),
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.intake.project_registry import upsert_service_repo
     try:
@@ -735,7 +738,7 @@ async def dashboard_project_add_repo(
 @router.post("/projects/{project_id}/repos/{service}/delete", response_class=HTMLResponse)
 async def dashboard_project_del_repo(
     request: Request, project_id: str, service: str,
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.intake.project_registry import delete_service_repo
     try:
@@ -782,7 +785,8 @@ async def dashboard_investigation_replay(
         if new_id:
             return RedirectResponse(f"/dashboard/investigations/{new_id}", status_code=303)
     except Exception as e:
-        return HTMLResponse(f"<h3>Replay failed: {e}</h3>", status_code=500)
+        import html as _html
+        return HTMLResponse(f"<h3>Replay failed: {_html.escape(str(e))}</h3>", status_code=500)
 
     return RedirectResponse("/dashboard", status_code=303)
 
@@ -1370,7 +1374,7 @@ async def dashboard_catalog_add(
     rule_out_kws: str = Form(""),
     confirm_conf: str = Form("medium"),
     root_cause_type: str = Form(""),
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     def _split(s: str):
         return [x.strip() for x in s.split(",") if x.strip()]
@@ -1399,7 +1403,7 @@ async def dashboard_catalog_delete(
     request: Request, entry_id: int,
     domain: str = Form("microservice"),
     project_id: str = Form("default"),
-    user: dict = Depends(require_login),
+    user: dict = Depends(require_perm("project.manage")),
 ):
     from agent.engine.hypothesis_catalog import delete_catalog_entry
     delete_catalog_entry(entry_id)
