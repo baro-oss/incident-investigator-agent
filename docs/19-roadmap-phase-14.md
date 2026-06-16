@@ -14,8 +14,8 @@
 | ID | Ngày report | Severity | Mô tả | Nguồn | Trạng thái |
 |----|-------------|----------|-------|-------|------------|
 | BUG-14-01 | 2026-06-16 | HIGH | MCP URL UNIQUE toàn cục → cùng URL không đăng ký được cho nhiều project khác nhau | User (session trước) | ✅ Đã fix (uncommitted) |
-| BUG-14-02 | 2026-06-16 | MEDIUM | Service delete redirect URL double slash: `/services//delete` | User (2026-06-16) | 📋 TODO — Ngày 71 |
-| BUG-14-03 | 2026-06-16 | MEDIUM | API key / secret key inputs không mask — người khác nhìn thấy trên UI | User (2026-06-16) | 📋 TODO — Ngày 71 |
+| BUG-14-02 | 2026-06-16 | MEDIUM | Service delete redirect URL double slash: `/services//delete` | User (2026-06-16) | ✅ Đã fix (Ngày 71) |
+| BUG-14-03 | 2026-06-16 | MEDIUM | API key / secret key inputs không mask — người khác nhìn thấy trên UI | User (2026-06-16) | ✅ Đã fix (Ngày 71) |
 | UX-14-01 | 2026-06-16 | LOW | Service list thiếu description field — agent không có ngữ cảnh mô tả service | User (session trước) | ✅ Đã fix (uncommitted) |
 | UX-14-02 | 2026-06-16 | LOW | Trigger page: `<select>` cứng — không tự nhập service/scenario ngoài danh sách | User (session trước) | ✅ Đã fix (uncommitted) |
 | UX-14-03 | 2026-06-16 | LOW | Channels page: slack thiếu icon; card disabled màu tối đặc không phân biệt rõ | User (session trước) | ✅ Đã fix (uncommitted) |
@@ -129,7 +129,7 @@
 | Ngày | Theme | Nội dung | Trạng thái |
 |------|-------|----------|-----------|
 | 70 | Commit batch (đã làm) | Commit BUG-14-01 + UX-14-01/02/03 + ENG-14-01 + migrate_phase14.py | 📋 Chờ commit |
-| 71 | Fix BUG-14-02 + BUG-14-03 | Service delete URL fix + mask inputs show/hide | 📋 TODO |
+| 71 | Fix BUG-14-02 + BUG-14-03 | Service delete URL fix + mask inputs show/hide | ✅ DONE |
 | 72 | Tests + cổng P14 | Tests cho toàn bộ batch · 4 nguyên tắc · READ-ONLY audit · cổng | 📋 TODO |
 | 73 | Reserve | Dự phòng cho bug phát sinh thêm | — |
 
