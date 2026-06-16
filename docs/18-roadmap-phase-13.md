@@ -1,6 +1,6 @@
 # docs/18 — Roadmap Phase 13 (Ngày 64–69): Hardening & Sharpening
 
-> **Trạng thái:** 📋 ĐÃ LÊN KẾ HOẠCH (duyệt 2026-06-16), CHƯA CODE.
+> **Trạng thái:** ✅ HOÀN TẤT (2026-06-16). 594/594 tests.
 > **Chủ đề:** Vá silent-death + parity rò prod · làm engine bớt dừng sớm & verdict cụ thể hơn · siết authz/READ-ONLY · lấp test reliability. **Không thêm cạnh mới.**
 
 ---

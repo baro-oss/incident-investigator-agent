@@ -4,9 +4,9 @@
 
 ## Trạng thái hiện tại
 
-**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63). **Phase 13 🚧 ĐANG LÀM (Ngày 64–67 ✅, Ngày 68–69 còn lại)** — Hardening & Sharpening.
-**Cổng kiểm gần nhất:** Ngày 67 (Engine quality II) — 556 tests (502 baseline + 54 mới P13) · specificity lọc timestamp · competing gate multi-agent · M8 code-diff fix · M9 deps cap · L4 time_window validation · 4 tools.
-**Kế hoạch kế tiếp:** Ngày 68 (Security/authz: M5 READ-ONLY guard · M6 require_perm · M7 SSE auth · L8 HTML escape · L5 HMAC · logging correlation) → Ngày 69 (Tests reliability + Cổng P13).
+**Giai đoạn:** Phase 12 ✅ HOÀN TẤT (61–63). **Phase 13 ✅ HOÀN TẤT (64–69)** — Hardening & Sharpening. 594 tests.
+**Cổng kiểm gần nhất:** Ngày 69 (Tests reliability + Cổng P13) — 594/594 tests · resilience · loop↔graph parity · push_verdict invariant · queue failed-status · thay test mong manh · READ-ONLY + 4 nguyên tắc audit clean.
+**Kế hoạch kế tiếp:** Phase 14 (chưa lên kế hoạch).
 
 ## Cái lõi (không được vỡ) — tình trạng
 
@@ -165,8 +165,8 @@
 | 65 | Dialect parity prod + cost accuracy | H1 dịch json_extract→jsonb (PG) · M4 pricing đúng provider/model · M11 đóng conn finally | ✅ |
 | 66 | Engine quality I | H3 re-prompt chống dừng sớm (biến cục bộ) · M3 trace-gap trung thực · M1 cache-token graph parity · M10 retry loop path | ✅ |
 | 67 | Engine quality II | Specificity tuning (loại số timestamp) · competing gate multi-agent · M8 code-diff fix call_tool_text · M9 cap deps · L4 validate time_window 4 tools | ✅ |
-| 68 | Security/authz + UX/DX | M5 siết READ-ONLY guard · M6 require_perm scoped (catalog/channel/service/repo) · M7 SSE auth + dọn dead seam · trang lỗi+escape (L8) · L5 HMAC · logging correlation | ☐ |
-| 69 | Tests reliability + Cổng P13 | Test _translate · invariant error→push_verdict · resilience · graph parity · READ-ONLY guard · queue drain+failed · thay test mong manh · audit + đóng pha | ☐ |
+| 68 | Security/authz + UX/DX | M5 siết READ-ONLY guard · M6 require_perm scoped (catalog/channel/service/repo) · M7 SSE auth + dọn dead seam · trang lỗi+escape (L8) · L5 HMAC · logging correlation | ✅ |
+| 69 | Tests reliability + Cổng P13 | Test _translate · invariant error→push_verdict · resilience · graph parity · READ-ONLY guard · queue drain+failed · thay test mong manh · audit + đóng pha | ✅ |
 
 **Xương sống KHÔNG cắt:** H1 · H2 · H3 · M2 · Ngày 69. **Cắt nếu hụt giờ:** UX polish (D68) → specificity 2-lần-fire (D67) → graph parity test mức smoke.
 
@@ -279,8 +279,33 @@
 - `trace_request.py`, `get_error_breakdown.py`, `get_metrics.py`, `get_recent_deploys.py`: L4 validate `time_window` format HH:MM-HH:MM trả error Observation.
 - `tests/test_day67.py`: 19 tests mới. Fix `test_code_layer.py::test_with_mcp_client_distills_raw` → mock `call_tool_text`. **556 tests xanh.**
 
-**Số liệu:** 502 (baseline P12) + 8 (D64) + 17 (D65) + 10 (D66) + 19 (D67) + 1 fixture = **556 tests.**
-**Ràng buộc:** KHÔNG đụng schema/engine state field · 4 nguyên tắc giữ · READ-ONLY · degrade safe.
+**Số liệu Ngày 64–67:** 502 (baseline P12) + 8 (D64) + 17 (D65) + 10 (D66) + 19 (D67) + 1 fixture = **556 tests.**
+
+**Đã làm (Ngày 68 — Security/authz):**
+- `registry.py`: `_WRITE_PARTS` +14 verb (fork/deploy/sync/archive/lock/unlock/enable/disable/release/dispatch/replace/revert/rename/restore) — M5.
+- `router.py`: 7 mutation routes (catalog add/delete, channel toggle, service add/del, repo add/del) → `require_perm("project.manage")` — M6.
+- `router.py`: SSE `/stream/{id}` thêm `require_login` dependency (M7).
+- `router.py`: replay error `html.escape(str(e))` trước khi nhúng HTML — L8.
+- `server.py`: log L5 warning khi external trigger thiếu X-Alert-Source.
+- `tests/test_day68.py`: 14 tests mới. **570 tests xanh.**
+
+**Đã làm (Ngày 69 — Tests reliability + Cổng P13):**
+- `tests/test_day69.py`: 24 tests — `with_retry` (4) · `ConcurrencyLimiter` (3) · `CircuitBreaker` (4) · loop↔graph parity smoke (3) · push_verdict invariant (3) · queue failed-status (3) · emit_trace behavior (2) · queue source struct (2).
+- Thay `test_run_loop_calls_emit_trace_with_project_id` (AST parse) → behavior test (DB write verify).
+- Thay `test_reload_pending_resets_running_status` (source-grep) → struct + behavior test.
+- Audit: READ-ONLY sạch (tool không ghi external) · 4 nguyên tắc giữ · degrade safe.
+- **594/594 tests xanh.**
+
+**Cổng Phase 13 PASS:**
+- D64: H2/L1/M2/M12 ✅
+- D65: H1/M4/M11 ✅
+- D66: H3/M3/M1/M10 ✅
+- D67: specificity/competing-gate/M8/M9/L4 ✅
+- D68: M5/M6/M7/L5/L8 ✅
+- D69: resilience/parity/invariant/queue/test-cleanup/audit ✅
+- 594/594 tests · READ-ONLY + 4 nguyên tắc · degrade safe ✅
+
+**Ràng buộc đã giữ suốt Phase 13:** KHÔNG đụng schema/engine state field (ngoại lệ đã cấp: `'failed'` status queue) · 4 nguyên tắc · READ-ONLY · mock eval (không tốn credit).
 
 ### [Session 64 — 2026-06-15] — Ngày 60: docker-compose.prod + runbook AgentBase + README + audit + Cổng P11
 
