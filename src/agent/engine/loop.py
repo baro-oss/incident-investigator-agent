@@ -391,6 +391,9 @@ def _apply_specificity_gate(
     )
 
 
+_MAX_TEXT_RETRIES = 2  # H3: số lần re-prompt khi LLM trả text không phải tool/verdict
+
+
 async def decide_next_action(
     state: InvestigationState,
     llm: LLMClient,
@@ -402,33 +405,57 @@ async def decide_next_action(
     E9: Structured path trả verdict_obj trực tiếp (bỏ text round-trip).
     Text path (MockLLM / fallback) trả verdict_text, verdict_obj=None.
     Đúng một trong tool_call/verdict_text/verdict_obj sẽ có giá trị.
+    H3: nếu LLM trả text thô (không phải tool_call / verdict), re-prompt tối đa
+        _MAX_TEXT_RETRIES lần trước khi tổng hợp verdict insufficient.
     """
     user_msg = _build_user_message(state, last_obs)
     # E5: thêm submit_verdict vào tool list để LLM có thể kết luận có cấu trúc
     tool_specs = _tools_to_specs(tools) + [_build_verdict_tool_spec()]
-    response = await llm.complete(
-        messages=[Message(role="user", content=user_msg)],
-        tools=tool_specs,
-        system=SYSTEM_PROMPT,
-    )
+    last_response = None
 
-    if response.has_tool_calls:
-        tc = response.tool_calls[0]
-        # E9: LLM gọi submit_verdict → dựng Verdict trực tiếp (không qua text round-trip)
-        if tc.name == VERDICT_TOOL_NAME:
-            logger.info("[%s] Bước %d → submit_verdict (E9 structured direct)",
-                        state.investigation_id, state.steps_taken + 1)
-            return None, None, response, _args_to_verdict(tc.arguments)
-        return tc, None, response, None
+    for attempt in range(_MAX_TEXT_RETRIES + 1):
+        response = await llm.complete(
+            messages=[Message(role="user", content=user_msg)],
+            tools=tool_specs,
+            system=SYSTEM_PROMPT,
+        )
+        last_response = response
 
-    # Text response fallback — kiểm tra có phải verdict không (backward compat MockLLM)
-    text = response.text or ""
-    if "VERDICT" in text.upper():
-        return None, text, response, None
+        if response.has_tool_calls:
+            tc = response.tool_calls[0]
+            # E9: LLM gọi submit_verdict → dựng Verdict trực tiếp (không qua text round-trip)
+            if tc.name == VERDICT_TOOL_NAME:
+                logger.info("[%s] Bước %d → submit_verdict (E9 structured direct)",
+                            state.investigation_id, state.steps_taken + 1)
+                return None, None, response, _args_to_verdict(tc.arguments)
+            return tc, None, response, None
 
-    # LLM trả text nhưng không phải verdict → prompt lại (tránh vòng lặp vô hạn)
-    logger.warning("LLM trả text không phải verdict, không phải tool_call: %s", text[:100])
-    return None, f"VERDICT:\nChưa đủ bằng chứng.\nLLM response: {text}", response, None
+        text = response.text or ""
+        # Text response fallback — kiểm tra có phải verdict không (backward compat MockLLM)
+        if "VERDICT" in text.upper():
+            return None, text, response, None
+
+        # LLM trả text thô — re-prompt nếu còn lượt, tránh vòng lặp vô hạn
+        if attempt < _MAX_TEXT_RETRIES:
+            logger.warning(
+                "[%s] LLM trả text (attempt %d/%d), re-prompt: %s",
+                state.investigation_id, attempt + 1, _MAX_TEXT_RETRIES, text[:80],
+            )
+            user_msg = (
+                user_msg
+                + "\n\n[Hệ thống: Bạn vừa trả lời bằng text thô thay vì gọi tool hoặc "
+                "submit_verdict. Hãy gọi đúng một tool để tiếp tục điều tra, hoặc gọi "
+                "submit_verdict nếu đã có đủ bằng chứng kết luận.]"
+            )
+        else:
+            logger.warning(
+                "LLM trả text không phải verdict sau %d lần thử: %s",
+                _MAX_TEXT_RETRIES + 1, text[:100],
+            )
+            return None, f"VERDICT:\nChưa đủ bằng chứng.\nLLM response: {text}", last_response, None
+
+    # Không thể xảy ra nhưng type-checker cần
+    return None, "VERDICT:\nChưa đủ bằng chứng.", last_response, None
 
 
 async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
@@ -987,9 +1014,10 @@ class InvestigationEngine:
             tracer.start_step(current_step)
 
             try:
+                from agent.engine.resilience import with_retry
                 t_llm = time.monotonic()
-                tool_call, vtext, llm_resp, v_obj = await decide_next_action(
-                    state, self.llm, self.tools, last_obs
+                tool_call, vtext, llm_resp, v_obj = await with_retry(
+                    lambda: decide_next_action(state, self.llm, self.tools, last_obs)
                 )
                 llm_ms = (time.monotonic() - t_llm) * 1000
             except Exception as e:

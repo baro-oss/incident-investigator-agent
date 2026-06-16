@@ -90,6 +90,9 @@ async def decide_node(state: LoopState) -> Dict[str, Any]:
             llm_resp.usage.get("input_tokens", 0)
             + llm_resp.usage.get("output_tokens", 0)
         )
+        # M1: parity với loop path — tích lũy cache stats
+        inv.cache_creation_tokens += llm_resp.usage.get("cache_creation_input_tokens", 0)
+        inv.cache_read_tokens += llm_resp.usage.get("cache_read_input_tokens", 0)
 
     output_desc = (
         f"tool:{tool_call.name}" if tool_call

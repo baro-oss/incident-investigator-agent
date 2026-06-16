@@ -115,22 +115,23 @@ def _run(params: Dict[str, Any]) -> Observation:
 
     services_reached = list(services_seen.keys())
 
-    # Phát hiện trace đứt: nếu một service gọi downstream nhưng trace không có ở đó
-    # Dựa vào catalog dependency: nếu service X có lỗi và phụ thuộc Y, nhưng Y không có trace → đứt
+    # Phát hiện trace đứt
     break_point: Optional[str] = None
-    for svc in services_reached:
-        if has_error_per_service.get(svc):
-            # service này có lỗi — check xem dependency có trace không
-            # (đơn giản: nếu chỉ có 1 service trong trace → trace chưa lan được)
-            pass
 
-    complete = len(services_reached) >= 2  # cơ bản: trace qua được ít nhất 2 service
-
-    # Với scenario1: trace chỉ có ở payment-gateway (các service khác có trace_id khác)
-    # → đây là trace "đứt" — agent phải dựa vào tương quan thời gian
     if len(services_reached) == 1:
+        # Case 1 (đã xử lý trước): chỉ 1 service có trace
         break_point = f"trace chỉ thấy ở {services_reached[0]}, không lan sang service khác"
         complete = False
+    else:
+        # M3: Case 2 — multi-hop nhưng lỗi ở giữa chain → downstream có thể không nhận request
+        for idx, svc in enumerate(services_reached):
+            if has_error_per_service.get(svc) and idx < len(services_reached) - 1:
+                break_point = (
+                    f"lỗi tại {svc} (hop {idx+1}/{len(services_reached)}), "
+                    "trace downstream có thể không đầy đủ"
+                )
+                break
+        complete = break_point is None  # complete chỉ khi không có gap
 
     last_service = services_reached[-1] if services_reached else "unknown"
     error_services = [s for s, has_err in has_error_per_service.items() if has_err]
@@ -142,11 +143,18 @@ def _run(params: Dict[str, Any]) -> Observation:
             f"{' → '.join(services_reached)}. "
             f"Lỗi xuất hiện tại: {', '.join(error_services) if error_services else 'không có'}."
         )
-    else:
+    elif len(services_reached) == 1:
         summary = (
             f"trace_id={trace_id[:12]}... CHỈ THẤY ở {services_reached[0]} — trace đứt. "
             f"Nguyên nhân: service khác không ghi trace_id này vào log (distributed tracing chưa đầy đủ). "
             f"→ Độ tin BỊ HẠ: bắc cầu bằng tương quan thời gian + dependency map thay vì trace trực tiếp."
+        )
+    else:
+        # M3: multi-hop với lỗi ở giữa chain → trace không đầy đủ
+        summary = (
+            f"trace_id={trace_id[:12]}... đi qua {len(services_reached)} service: "
+            f"{' → '.join(services_reached)}, nhưng {break_point}. "
+            f"→ Trace KHÔNG ĐẦY ĐỦ — độ tin BỊ HẠ: dùng tương quan thời gian thay trace trực tiếp."
         )
 
     aggregates: Dict[str, Any] = {
