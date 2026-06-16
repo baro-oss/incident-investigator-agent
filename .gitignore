@@ -32,3 +32,5 @@ build/
 .playwright-mcp/
 
 greennode-agentbase-skills
+
+deployment

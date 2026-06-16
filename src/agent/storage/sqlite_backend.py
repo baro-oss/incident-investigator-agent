@@ -28,7 +28,34 @@ def db_path() -> str:
     return os.environ.get("DB_PATH", "data/investigation.db")
 
 
-def connect(path: Optional[str] = None) -> sqlite3.Connection:
+class _SQLiteConn:
+    """Wrap sqlite3.Connection để __exit__ đóng connection (giống _PGConnection).
+
+    sqlite3 context manager gốc commit/rollback nhưng không close — gây rò
+    connection khi dùng `with open_db() as conn:`. Wrapper này đóng sau khi thoát.
+    """
+
+    __slots__ = ("_conn",)
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def __getattr__(self, name: str):
+        return getattr(self._conn, name)
+
+    def __enter__(self) -> "_SQLiteConn":
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        if exc_type is None:
+            self._conn.commit()
+        else:
+            self._conn.rollback()
+        self._conn.close()
+        return False
+
+
+def connect(path: Optional[str] = None) -> _SQLiteConn:
     """Mở connection SQLite (WAL + foreign_keys + row→dict được).
 
     Giữ nguyên hành vi `open_db()` cũ → 17+ caller không vỡ.
@@ -37,4 +64,4 @@ def connect(path: Optional[str] = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+    return _SQLiteConn(conn)

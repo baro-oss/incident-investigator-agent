@@ -3,7 +3,8 @@ PORT   := 8080
 MCP_PORT := 9000
 
 .PHONY: help install setup db init seed server run server-reload mcp chat eval eval-fintech eval-all \
-        trigger trigger-fintech test ci clean reset
+        trigger trigger-fintech test ci clean reset \
+        ansible-ping ansible-postgres ansible-check
 
 # ── Default ────────────────────────────────────────────────────────────────────
 help:
@@ -108,6 +109,16 @@ test:
 ci: test
 	$(PYTHON) scripts/eval_agent.py --mock --n 3 --scenario all
 	@echo "✅ CI gate PASS"
+
+# ── Ansible / Deploy ───────────────────────────────────────────────────────────
+ansible-ping:
+	cd deployment && ansible all -m ping
+
+ansible-check:
+	cd deployment && ansible-playbook playbooks/deploy_postgres.yml --check
+
+ansible-postgres:
+	cd deployment && ansible-playbook playbooks/deploy_postgres.yml
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 clean:

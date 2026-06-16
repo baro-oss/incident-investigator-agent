@@ -44,7 +44,7 @@
   <div class="login-card">
     <div class="login-logo">
       <h1>Investigation Agent</h1>
-      <p>v0.8 · Phase 5</p>
+      <p>v1.4 · Phase 14</p>
     </div>
 
     {% if error %}
@@ -64,5 +64,11 @@
       <button type="submit" class="login-btn">Đăng nhập</button>
     </form>
   </div>
+  <script>
+    (function(){
+      var t = localStorage.getItem('ia-theme') || 'light';
+      if (t === 'light') document.body.classList.add('theme-light');
+    })();
+  </script>
 </body>
 </html>

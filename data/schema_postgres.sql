@@ -72,7 +72,10 @@ CREATE TABLE IF NOT EXISTS projects (
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
+    updated_at  TEXT NOT NULL,
+    llm_provider TEXT,
+    llm_model    TEXT,
+    llm_config   TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS project_services (
