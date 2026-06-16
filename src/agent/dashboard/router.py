@@ -592,11 +592,29 @@ async def dashboard_project_add_service(
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
 
 
-@router.post("/projects/{project_id}/services/{service}/delete", response_class=HTMLResponse)
+@router.post("/projects/{project_id}/services/delete", response_class=HTMLResponse)
 async def dashboard_project_del_service(
+    request: Request, project_id: str,
+    service: str = Form(...),
+    user: dict = Depends(require_perm("project.manage")),
+):
+    """Xóa service — nhận tên qua form body (tránh URL-encode)."""
+    if not service.strip():
+        return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+    from agent.intake.project_registry import remove_project_service
+    try:
+        remove_project_service(project_id, service)
+    except Exception:
+        pass
+    return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+@router.post("/projects/{project_id}/services/{service}/delete", response_class=HTMLResponse)
+async def dashboard_project_del_service_legacy(
     request: Request, project_id: str, service: str,
     user: dict = Depends(require_perm("project.manage")),
 ):
+    """Legacy URL-path route — giữ backward compat với external calls."""
     if not service.strip():
         return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
     from agent.intake.project_registry import remove_project_service

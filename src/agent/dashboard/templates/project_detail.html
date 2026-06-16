@@ -260,11 +260,12 @@
                       style="background:none;border:none;cursor:pointer;color:var(--muted);
                              font-size:12px;padding:2px 5px;border-radius:3px"
                       title="Sửa mô tả">✏</button>
-              <!-- Nút xóa -->
+              <!-- Nút xóa — service name qua form body, không encode URL -->
               <form method="post"
-                    action="/dashboard/projects/{{ proj.id }}/services/{{ svc_name | urlencode_path }}/delete"
+                    action="/dashboard/projects/{{ proj.id }}/services/delete"
                     style="display:inline"
                     onsubmit="return confirm('Xóa service {{ svc_name | e }}?')">
+                <input type="hidden" name="service" value="{{ svc_name | e }}">
                 <button type="submit"
                         style="background:none;border:none;cursor:pointer;color:var(--muted);
                                font-size:13px;padding:2px 5px;border-radius:3px"
