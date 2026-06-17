@@ -424,8 +424,8 @@ def get_metrics_live(service: Optional[str] = None) -> List[Dict[str, Any]]:
             m.service,
             m.scenario,
             m.metric_name,
-            ROUND(AVG(CASE WHEN m.is_baseline=0 THEN m.value END), 2) AS current_avg,
-            ROUND(AVG(CASE WHEN m.is_baseline=1 THEN m.value END), 2) AS baseline_avg,
+            ROUND(AVG(CASE WHEN m.is_baseline=0 THEN m.value END)::numeric, 2) AS current_avg,
+            ROUND(AVG(CASE WHEN m.is_baseline=1 THEN m.value END)::numeric, 2) AS baseline_avg,
             COUNT(CASE WHEN m.is_baseline=0 THEN 1 END) AS current_samples,
             MAX(CASE WHEN m.is_baseline=0 THEN m.timestamp END) AS last_ts
         FROM metrics m
