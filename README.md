@@ -9,6 +9,8 @@
 
 **Live demo:** https://your-agent.agentbase-runtime.aiplatform.vngcloud.vn *(deploy trên GreenNode AgentBase)*
 
+**Demo video:** [Xem trên SharePoint](https://vngms-my.sharepoint.com/:v:/g/personal/baopx_vng_com_vn/IQBg6w6vtTZJTZwkNDxACXRRAVSK8-1S3ZZgW7EXBfZQduc?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=HDKHAR)
+
 ---
 
 ## Vấn đề
