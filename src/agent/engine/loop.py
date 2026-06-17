@@ -108,7 +108,7 @@ def _tool_sequencing_hint(state: InvestigationState) -> str:
 def _build_user_message(state: InvestigationState, last_obs: Optional[Observation]) -> str:
     parts = [
         f"# Điều tra sự cố: {state.symptom}",
-        f"Cửa sổ thời gian: {state.time_window} | Kịch bản: {state.scenario}",
+        f"Cửa sổ thời gian: {state.time_window} | Ngày: {state.date} | Kịch bản: {state.scenario}",
         f"Bước: {state.steps_taken + 1}/{state.step_budget}",
         "",
         state.summarize_for_llm(),
@@ -458,8 +458,17 @@ async def decide_next_action(
     return None, "VERDICT:\nChưa đủ bằng chứng.", last_response, None
 
 
-async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
-    """Pure: nhận tool_call → chạy tool → trả Observation."""
+async def run_tool(
+    tool_call: ToolCall,
+    tools: List[Tool],
+    scenario: Optional[str] = None,
+    date: Optional[str] = None,
+) -> Observation:
+    """Pure: nhận tool_call → chạy tool → trả Observation.
+
+    Inject scenario/date của investigation khi tool khai báo param đó mà LLM bỏ trống
+    (Nguyên tắc #3: routing synthetic-data deterministic, không phụ thuộc LLM nhớ ngày).
+    """
     # E4: Nudge từ competing gate — không phải tool thật, trả cảnh báo có cấu trúc
     if tool_call.name == _NUDGE_TOOL_NAME:
         competing = tool_call.arguments.get("competing_hypotheses", "")
@@ -500,9 +509,16 @@ async def run_tool(tool_call: ToolCall, tools: List[Tool]) -> Observation:
             metadata={"tool_name": tool_call.name, "error": "not_found"},
         )
 
+    args = dict(tool_call.arguments)
+    props = (tool.input_schema or {}).get("properties", {})
+    if scenario and "scenario" in props and not args.get("scenario"):
+        args["scenario"] = scenario
+    if date and "date" in props and not args.get("date"):
+        args["date"] = date
+
     if inspect.iscoroutinefunction(tool.run):
-        return await tool.run(tool_call.arguments)
-    return await asyncio.get_running_loop().run_in_executor(None, tool.run, tool_call.arguments)
+        return await tool.run(args)
+    return await asyncio.get_running_loop().run_in_executor(None, tool.run, args)
 
 
 def update_state(
@@ -1105,7 +1121,8 @@ class InvestigationEngine:
 
             try:
                 t_tool = time.monotonic()
-                obs = await run_tool(tool_call, self.tools)
+                obs = await run_tool(tool_call, self.tools,
+                                     scenario=state.scenario, date=state.date)
                 tool_ms = (time.monotonic() - t_tool) * 1000
             except Exception as e:
                 logger.error("[%s] Tool error: %s", investigation_id, e)

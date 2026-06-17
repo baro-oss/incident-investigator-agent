@@ -171,14 +171,28 @@ async def run_investigation_background(
                     logger.info("[%s] Dùng Fintech tool registry (%d tools)", key, len(tools))
                 else:
                     tools = await build_tool_registry(mcp_clients if mcp_clients else None)
-                    # F2: thêm get_code_diff khi project có service_repos cấu hình
+                    # F2: thêm get_code_diff khi project có service_repos cấu hình.
+                    # Wire code MCP client (server expose diff candidate) để kích hoạt
+                    # code_distill (Nguyên tắc #1) — không có thì rơi về metadata mode.
                     try:
                         from agent.intake.project_registry import list_service_repos
-                        from agent.tools.get_code_diff import CODE_DIFF_TOOL_NAME, build_code_diff_tool
+                        from agent.tools.get_code_diff import (
+                            CODE_DIFF_TOOL_NAME, _MCP_DIFF_TOOL_CANDIDATES, build_code_diff_tool,
+                        )
                         repos = list_service_repos(project_id)
                         if repos and not any(t.name == CODE_DIFF_TOOL_NAME for t in tools):
-                            tools = list(tools) + [build_code_diff_tool(project_id)]
-                            logger.info("[%s] Thêm %s (%d repo mapping)", project_id, CODE_DIFF_TOOL_NAME, len(repos))
+                            code_client = None
+                            for client in (mcp_clients or []):
+                                try:
+                                    names = {t.name for t in await client.get_tools()}
+                                except Exception:
+                                    continue
+                                if names & set(_MCP_DIFF_TOOL_CANDIDATES):
+                                    code_client = client
+                                    break
+                            tools = list(tools) + [build_code_diff_tool(project_id, code_client)]
+                            logger.info("[%s] Thêm %s (%d repo mapping, code_mcp=%s)",
+                                        project_id, CODE_DIFF_TOOL_NAME, len(repos), bool(code_client))
                     except Exception as e:
                         logger.warning("Không thêm được code_diff tool: %s", e)
 

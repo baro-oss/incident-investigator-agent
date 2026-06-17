@@ -1,0 +1,25 @@
+# MCP GitLab Code server — Custom Agent runtime cho AgentBase (port 8080).
+# Standalone: chỉ FastAPI + uvicorn + dotenv (không phụ thuộc agent.* / DB).
+# Env runtime cần: GITLAB_TOKEN, GITLAB_API_BASE (tùy chọn).
+FROM --platform=linux/amd64 python:3.14-slim
+
+RUN addgroup --system agent && adduser --system --ingroup agent agent
+WORKDIR /app
+
+RUN pip install --no-cache-dir fastapi "uvicorn[standard]" python-dotenv
+
+COPY --chown=agent:agent mcp_server/__init__.py mcp_server/__init__.py
+COPY --chown=agent:agent mcp_server/server_gitlab_code.py mcp_server/server_gitlab_code.py
+COPY --chown=agent:agent scripts/start_gitlab_code_mcp.py scripts/start_gitlab_code_mcp.py
+
+USER agent
+EXPOSE 8080
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PORT=8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" \
+    || exit 1
+
+CMD ["python", "scripts/start_gitlab_code_mcp.py", "--host", "0.0.0.0", "--port", "8080"]

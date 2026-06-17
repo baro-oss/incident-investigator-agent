@@ -1,0 +1,29 @@
+# MCP Telemetry server — Custom Agent runtime cho AgentBase (port 8080).
+# Expose 5 tool nội bộ (logs/metrics/deploys/graph/trace) qua MCP; query Postgres.
+# Env runtime cần: DB_BACKEND=postgres, DATABASE_URL.
+FROM --platform=linux/amd64 python:3.14-slim AS builder
+WORKDIR /build
+COPY pyproject.toml ./
+COPY src/ src/
+RUN pip install --no-cache-dir --prefix=/install -e ".[postgres]"
+
+FROM --platform=linux/amd64 python:3.14-slim
+RUN addgroup --system agent && adduser --system --ingroup agent agent
+WORKDIR /app
+COPY --from=builder /install /usr/local
+COPY --chown=agent:agent src/ src/
+COPY --chown=agent:agent mcp_server/ mcp_server/
+COPY --chown=agent:agent scripts/start_mcp_server.py scripts/start_mcp_server.py
+COPY --chown=agent:agent pyproject.toml ./
+
+USER agent
+EXPOSE 8080
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app/src \
+    PORT=8080
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')" \
+    || exit 1
+
+CMD ["python", "scripts/start_mcp_server.py", "--host", "0.0.0.0", "--port", "8080"]

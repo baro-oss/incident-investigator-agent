@@ -22,21 +22,20 @@
     <!-- Row 1: Name + URL + Project -->
     <div style="display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px;margin-bottom:10px">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.mcp_name">Tên *</label>
-        <input type="text" name="name" placeholder="my-mcp-server" required
-               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.mcp_name">Tên
+          *</label>
+        <input type="text" name="name" placeholder="my-mcp-server" required style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                       border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
       </div>
       <div>
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">URL *</label>
-        <input type="url" name="url" placeholder="http://localhost:9000/mcp" required
-               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+        <input type="url" name="url" placeholder="http://localhost:9000/mcp" required style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                       border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
       </div>
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.project">Dự án</label>
-        <select name="project_id"
-                style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.project">Dự
+          án</label>
+        <select name="project_id" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                        border-radius:5px;color:var(--text);font-size:13px">
           {% for pid in projects %}
           <option value="{{ pid }}">{{ pid }}</option>
@@ -48,9 +47,9 @@
     <!-- Row 2: Auth -->
     <div style="display:grid;grid-template-columns:160px 1fr 1fr auto;gap:10px;align-items:end">
       <div>
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.auth_type">Kiểu xác thực</label>
-        <select name="auth_type" id="auth-type-select" onchange="onAuthTypeChange(this.value)"
-                style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.auth_type">Kiểu
+          xác thực</label>
+        <select name="auth_type" id="auth-type-select" onchange="onAuthTypeChange(this.value)" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                        border-radius:5px;color:var(--text);font-size:13px">
           <option value="none">none</option>
           <option value="bearer">bearer token</option>
@@ -62,31 +61,30 @@
       <div id="auth-bearer" style="display:none">
         <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Token</label>
         <div style="position:relative">
-          <input type="password" id="bearer-token" placeholder="sk-..." autocomplete="off"
-                 style="width:100%;padding:7px 36px 7px 10px;background:var(--surface2);border:1px solid var(--border);
+          <input type="password" id="bearer-token" placeholder="sk-..." autocomplete="off" style="width:100%;padding:7px 36px 7px 10px;background:var(--surface2);border:1px solid var(--border);
                         border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
           <button type="button" onclick="toggleSecret('bearer-token', this)"
-                  style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0;line-height:1"
-                  title="Hiện/Ẩn token">👁</button>
+            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0;line-height:1"
+            title="Hiện/Ẩn token">👁</button>
         </div>
       </div>
 
       <!-- API key: header name + value -->
       <div id="auth-apikey-header" style="display:none">
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.header_name">Tên header</label>
-        <input type="text" id="apikey-header" placeholder="X-API-Key"
-               style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.header_name">Tên
+          header</label>
+        <input type="text" id="apikey-header" placeholder="X-API-Key" style="width:100%;padding:7px 10px;background:var(--surface2);border:1px solid var(--border);
                       border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
       </div>
       <div id="auth-apikey-value" style="display:none">
-        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px" data-i18n="lbl.api_key_value">Giá trị API Key</label>
+        <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px"
+          data-i18n="lbl.api_key_value">Giá trị API Key</label>
         <div style="position:relative">
-          <input type="password" id="apikey-value" placeholder="key-..." autocomplete="off"
-                 style="width:100%;padding:7px 36px 7px 10px;background:var(--surface2);border:1px solid var(--border);
+          <input type="password" id="apikey-value" placeholder="key-..." autocomplete="off" style="width:100%;padding:7px 36px 7px 10px;background:var(--surface2);border:1px solid var(--border);
                         border-radius:5px;color:var(--text);font-size:13px;box-sizing:border-box">
           <button type="button" onclick="toggleSecret('apikey-value', this)"
-                  style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0;line-height:1"
-                  title="Hiện/Ẩn key">👁</button>
+            style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0;line-height:1"
+            title="Hiện/Ẩn key">👁</button>
         </div>
       </div>
 
@@ -102,10 +100,6 @@
         </button>
       </div>
     </div>
-
-    <p style="font-size:11px;color:var(--muted);margin:8px 0 0">
-      ⚠ Credentials lưu dạng plaintext trong SQLite — chỉ dùng cho môi trường local/dev.
-    </p>
   </form>
 </div>
 
@@ -119,54 +113,56 @@
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.name">Tên</th>
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500">URL</th>
         <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.project">Dự án</th>
-        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.auth">Xác thực</th>
-        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.status">Trạng thái</th>
-        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.ping_result">Kết quả Ping</th>
+        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.auth">Xác thực
+        </th>
+        <th style="text-align:center;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.status">Trạng
+          thái</th>
+        <th style="text-align:left;padding:6px 8px;color:var(--muted);font-weight:500" data-i18n="th.ping_result">Kết
+          quả Ping</th>
         <th style="padding:6px 8px"></th>
       </tr>
     </thead>
     <tbody id="mcp-table-body">
-    {% for s in servers %}
-    <tr id="row-{{ s.id }}" style="border-bottom:1px solid var(--border)">
-      <td style="padding:9px 8px;font-weight:500">{{ s.name }}</td>
-      <td style="padding:9px 8px"><code style="font-size:11px">{{ s.url }}</code></td>
-      <td style="padding:9px 8px">
-        <a href="/dashboard/projects/{{ s.project_id }}" style="color:var(--accent);text-decoration:none">
-          {{ s.project_id }}
-        </a>
-      </td>
-      <td style="text-align:center;padding:9px 8px">
-        {% if s.auth_type and s.auth_type != 'none' %}
+      {% for s in servers %}
+      <tr id="row-{{ s.id }}" style="border-bottom:1px solid var(--border)">
+        <td style="padding:9px 8px;font-weight:500">{{ s.name }}</td>
+        <td style="padding:9px 8px"><code style="font-size:11px">{{ s.url }}</code></td>
+        <td style="padding:9px 8px">
+          <a href="/dashboard/projects/{{ s.project_id }}" style="color:var(--accent);text-decoration:none">
+            {{ s.project_id }}
+          </a>
+        </td>
+        <td style="text-align:center;padding:9px 8px">
+          {% if s.auth_type and s.auth_type != 'none' %}
           <span class="badge badge-info" title="{{ s.auth_type }}">🔑 {{ s.auth_type }}</span>
-        {% else %}
+          {% else %}
           <span style="color:var(--muted);font-size:11px">—</span>
-        {% endif %}
-      </td>
-      <td style="text-align:center;padding:9px 8px">
-        {% if s.enabled %}
-        <span class="badge badge-high" data-i18n="status.on">bật</span>
-        {% else %}
-        <span class="badge badge-default" data-i18n="status.off">tắt</span>
-        {% endif %}
-      </td>
-      <td style="padding:9px 8px">
-        <span id="ping-result-{{ s.id }}" style="color:var(--muted);font-size:12px">—</span>
-      </td>
-      <td style="padding:9px 8px;white-space:nowrap;display:flex;gap:6px">
-        <button onclick="pingServer({{ s.id }})"
-                class="btn btn-ghost" style="font-size:11px;padding:4px 10px">
-          ⟳ Ping
-        </button>
-        <form method="post" action="/dashboard/mcp/{{ s.id }}/delete"
-              onsubmit="return confirm('Xóa server {{ s.name }}?')">
-          <button type="submit" class="btn" style="font-size:11px;padding:4px 10px;
-                  background:#2a0a0a;border-color:#5a1a1a;color:#f87171">
-            ✕ Xóa
+          {% endif %}
+        </td>
+        <td style="text-align:center;padding:9px 8px">
+          {% if s.enabled %}
+          <span class="badge badge-high" data-i18n="status.on">bật</span>
+          {% else %}
+          <span class="badge badge-default" data-i18n="status.off">tắt</span>
+          {% endif %}
+        </td>
+        <td style="padding:9px 8px">
+          <span id="ping-result-{{ s.id }}" style="color:var(--muted);font-size:12px">—</span>
+        </td>
+        <td style="padding:9px 8px;white-space:nowrap;display:flex;gap:6px">
+          <button onclick="pingServer({{ s.id }})" class="btn btn-ghost" style="font-size:11px;padding:4px 10px">
+            ⟳ Ping
           </button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
+          <form method="post" action="/dashboard/mcp/{{ s.id }}/delete"
+            onsubmit="return confirm('Xóa server {{ s.name }}?')">
+            <button type="submit" class="btn" style="font-size:11px;padding:4px 10px;
+                  background:#2a0a0a;border-color:#5a1a1a;color:#f87171">
+              ✕ Xóa
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
     </tbody>
   </table>
 </div>
@@ -179,50 +175,50 @@
 {% endif %}
 
 <script>
-function onAuthTypeChange(val) {
-  document.getElementById('auth-bearer').style.display       = val === 'bearer'  ? '' : 'none';
-  document.getElementById('auth-apikey-header').style.display = val === 'api_key' ? '' : 'none';
-  document.getElementById('auth-apikey-value').style.display  = val === 'api_key' ? '' : 'none';
-  document.getElementById('auth-none-placeholder').style.display = val === 'none' ? '' : 'none';
-}
-
-// Build auth_config JSON trước khi submit
-document.getElementById('register-form').addEventListener('submit', function() {
-  const authType = document.getElementById('auth-type-select').value;
-  let cfg = {};
-  if (authType === 'bearer') {
-    cfg = { token: document.getElementById('bearer-token').value };
-  } else if (authType === 'api_key') {
-    cfg = {
-      header: document.getElementById('apikey-header').value || 'X-API-Key',
-      value:  document.getElementById('apikey-value').value,
-    };
+  function onAuthTypeChange(val) {
+    document.getElementById('auth-bearer').style.display = val === 'bearer' ? '' : 'none';
+    document.getElementById('auth-apikey-header').style.display = val === 'api_key' ? '' : 'none';
+    document.getElementById('auth-apikey-value').style.display = val === 'api_key' ? '' : 'none';
+    document.getElementById('auth-none-placeholder').style.display = val === 'none' ? '' : 'none';
   }
-  document.getElementById('auth-config-hidden').value = JSON.stringify(cfg);
-});
 
-async function pingServer(id) {
-  const el = document.getElementById('ping-result-' + id);
-  el.style.color = 'var(--muted)';
-  el.textContent = '⟳ đang ping...';
-  try {
-    const resp = await fetch('/dashboard/mcp/' + id + '/ping', {method: 'POST'});
-    const data = await resp.json();
-    if (data.status === 'ok') {
-      const toolList = (data.tools || []).slice(0, 5).map(t => t.name).join(', ');
-      const more = data.tool_count > 5 ? ` +${data.tool_count - 5}` : '';
-      el.style.color = 'var(--high)';
-      el.innerHTML = `✓ ${data.latency_ms}ms · ${data.tool_count} tools`
-        + (toolList ? `<br><span style="color:var(--muted);font-size:11px">${toolList}${more}</span>` : '');
-    } else {
-      el.style.color = 'var(--low)';
-      el.textContent = '✗ ' + (data.error || 'error') + (data.latency_ms ? ` (${data.latency_ms}ms)` : '');
+  // Build auth_config JSON trước khi submit
+  document.getElementById('register-form').addEventListener('submit', function () {
+    const authType = document.getElementById('auth-type-select').value;
+    let cfg = {};
+    if (authType === 'bearer') {
+      cfg = { token: document.getElementById('bearer-token').value };
+    } else if (authType === 'api_key') {
+      cfg = {
+        header: document.getElementById('apikey-header').value || 'X-API-Key',
+        value: document.getElementById('apikey-value').value,
+      };
     }
-  } catch(e) {
-    el.style.color = 'var(--low)';
-    el.textContent = '✗ network error';
+    document.getElementById('auth-config-hidden').value = JSON.stringify(cfg);
+  });
+
+  async function pingServer(id) {
+    const el = document.getElementById('ping-result-' + id);
+    el.style.color = 'var(--muted)';
+    el.textContent = '⟳ đang ping...';
+    try {
+      const resp = await fetch('/dashboard/mcp/' + id + '/ping', { method: 'POST' });
+      const data = await resp.json();
+      if (data.status === 'ok') {
+        const toolList = (data.tools || []).slice(0, 5).map(t => t.name).join(', ');
+        const more = data.tool_count > 5 ? ` +${data.tool_count - 5}` : '';
+        el.style.color = 'var(--high)';
+        el.innerHTML = `✓ ${data.latency_ms}ms · ${data.tool_count} tools`
+          + (toolList ? `<br><span style="color:var(--muted);font-size:11px">${toolList}${more}</span>` : '');
+      } else {
+        el.style.color = 'var(--low)';
+        el.textContent = '✗ ' + (data.error || 'error') + (data.latency_ms ? ` (${data.latency_ms}ms)` : '');
+      }
+    } catch (e) {
+      el.style.color = 'var(--low)';
+      el.textContent = '✗ network error';
+    }
   }
-}
 </script>
 
 {% endblock %}

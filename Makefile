@@ -1,10 +1,15 @@
 PYTHON := .venv314/bin/python3
 PORT   := 8080
 MCP_PORT := 9000
+GITLAB_MCP_PORT := 9002
+
+# Nạp .env vào recipe (DB_BACKEND, DATABASE_URL, GITLAB_*, DEMO_CHAT_ID...)
+LOADENV := set -a; [ -f .env ] && . ./.env; set +a;
 
 .PHONY: help install setup db init seed server run server-reload mcp chat eval eval-fintech eval-all \
         trigger trigger-fintech test ci clean reset \
-        ansible-ping ansible-postgres ansible-check
+        ansible-ping ansible-postgres ansible-check \
+        demo-prep demo-seed demo-gitlab demo-setup demo-up demo-down demo-webhook
 
 # ── Default ────────────────────────────────────────────────────────────────────
 help:
@@ -32,6 +37,12 @@ help:
 	@echo "  make ci             pytest + eval gate (cổng CI)"
 	@echo ""
 	@echo "  make clean          Xóa __pycache__ và file tạm"
+	@echo ""
+	@echo "  ── DEMO (docs/DEMO.md) ──"
+	@echo "  make demo-prep      Seed demo + push GitLab source + provision project (1 lần)"
+	@echo "  make demo-up        Chạy CÙNG LÚC 3 server: telemetry:$(MCP_PORT) · gitlab-code:$(GITLAB_MCP_PORT) · main:$(PORT)"
+	@echo "  make demo-webhook [src=prometheus|grafana|sentry|opsgenie|simple]  Bắn 1 webhook"
+	@echo "  make demo-down      Dừng cả 3 server demo"
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 install:
@@ -119,6 +130,38 @@ ansible-check:
 
 ansible-postgres:
 	cd deployment && ansible-playbook playbooks/deploy_postgres.yml
+
+# ── Demo (xem docs/DEMO.md) ────────────────────────────────────────────────────
+# Prep 1 lần: seed data + push source GitLab + provision project.
+demo-prep: demo-seed demo-gitlab demo-setup
+	@echo "✅ Demo sẵn sàng — chạy: make demo-up  (rồi: make demo-webhook)"
+
+demo-seed:
+	@$(LOADENV) $(PYTHON) data/seed_demo.py
+
+demo-gitlab:
+	@$(LOADENV) bash demo/setup_gitlab_repos.sh
+
+demo-setup:
+	@$(LOADENV) $(PYTHON) scripts/setup_demo.py
+
+# Chạy cùng lúc 3 server, Ctrl-C dừng tất cả (trap kill toàn process group).
+demo-up:
+	@echo "🚀 telemetry:$(MCP_PORT) · gitlab-code:$(GITLAB_MCP_PORT) · main:$(PORT) — Ctrl-C để dừng tất cả"
+	@$(LOADENV) trap 'kill 0' INT TERM EXIT; \
+	  $(PYTHON) scripts/start_mcp_server.py --port $(MCP_PORT) & \
+	  $(PYTHON) scripts/start_gitlab_code_mcp.py --port $(GITLAB_MCP_PORT) & \
+	  $(PYTHON) scripts/start_server.py --port $(PORT) & \
+	  wait
+
+demo-down:
+	@for p in $(PORT) $(MCP_PORT) $(GITLAB_MCP_PORT); do lsof -ti tcp:$$p | xargs -r kill -9 2>/dev/null || true; done
+	@echo "🛑 Đã dừng 3 server demo"
+
+# make demo-webhook            → prometheus
+# make demo-webhook src=sentry → sentry
+demo-webhook:
+	@$(LOADENV) bash demo/webhooks/$(or $(src),prometheus).sh
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 clean:

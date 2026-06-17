@@ -42,4 +42,5 @@ deployment
 htmlcov/
 .agentbase/
 
-.claude
+.claude.greennode.json
+.greennode.json

@@ -176,7 +176,7 @@ async def run_tool_node(state: LoopState) -> Dict[str, Any]:
 
     t_tool = time.monotonic()
     try:
-        obs = await run_tool_fn(tool_call, tools)
+        obs = await run_tool_fn(tool_call, tools, scenario=inv.scenario, date=inv.date)
     except Exception as e:
         from agent.tools.contracts import Observation as Obs
         obs = Obs(

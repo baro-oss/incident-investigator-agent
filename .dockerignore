@@ -33,3 +33,4 @@ greennode-agentbase-skills/
 *.tmp
 *.log
 .agentbase/
+.greennode.json

@@ -60,9 +60,9 @@ def _run(params: Dict[str, Any]) -> Observation:
         """
         SELECT
             COUNT(*) as data_points,
-            ROUND(AVG(value), 2) as avg_val,
-            ROUND(MIN(value), 2) as min_val,
-            ROUND(MAX(value), 2) as max_val
+            AVG(value) as avg_val,
+            MIN(value) as min_val,
+            MAX(value) as max_val
         FROM metrics
         WHERE scenario=? AND service=? AND metric_name=?
           AND timestamp>=? AND timestamp<?
@@ -111,15 +111,17 @@ def _run(params: Dict[str, Any]) -> Observation:
         )
 
     label = _METRIC_LABELS.get(metric_name, metric_name)
-    avg_val = stats["avg_val"]
-    max_val = stats["max_val"]
+    # Round ở Python (portable SQLite↔Postgres; PG không có round(double, int)).
+    avg_val = round(stats["avg_val"], 2) if stats["avg_val"] is not None else 0.0
+    max_val = round(stats["max_val"], 2) if stats["max_val"] is not None else 0.0
+    min_val = round(stats["min_val"], 2) if stats["min_val"] is not None else 0.0
     peak_time = peak_row["timestamp"][11:16] if peak_row else "?"
 
     # So baseline và xây summary
     aggregates: Dict[str, Any] = {
         "avg": f"{avg_val} {label.split('(')[-1].strip(')')}",
         "max": f"{max_val} @ {peak_time}",
-        "min": str(stats["min_val"]),
+        "min": str(min_val),
         "data_points": total_points,
     }
 
