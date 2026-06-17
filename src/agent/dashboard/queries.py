@@ -182,6 +182,15 @@ def set_investigation_feedback(investigation_id: str, score: int) -> None:
         pass
 
 
+def delete_investigation(investigation_id: str) -> None:
+    """Xóa toàn bộ trace_events + feedback của một investigation."""
+    conn = open_db()
+    conn.execute("DELETE FROM trace_events WHERE investigation_id = ?", (investigation_id,))
+    conn.execute("DELETE FROM investigation_feedback WHERE investigation_id = ?", (investigation_id,))
+    conn.commit()
+    conn.close()
+
+
 def list_investigations(
     project_id: Optional[str] = None,
     confidence: Optional[str] = None,

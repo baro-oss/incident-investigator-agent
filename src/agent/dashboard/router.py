@@ -27,6 +27,7 @@ from agent.dashboard.queries import (
     set_investigation_feedback,
     get_projects_overview,
     list_investigations,
+    delete_investigation,
     get_metrics_live,
     get_channel_config,
     get_mcp_servers_for_dashboard,
@@ -81,12 +82,14 @@ async def dashboard_home(
     search: Optional[str] = None,
     user: dict = Depends(require_login),
 ):
+    from agent.intake.runner import get_active_investigation_ids
     invs = list_investigations(
         project_id=project_id or None,
         confidence=confidence or None,
         search=search or None,
         limit=100,
     )
+    active_ids = get_active_investigation_ids()
     return templates.TemplateResponse(request, "index.html", _ctx(request, user,
         active="home",
         investigations=invs,
@@ -95,6 +98,7 @@ async def dashboard_home(
         filter_project=project_id or "",
         filter_confidence=confidence or "",
         filter_search=search or "",
+        active_ids=active_ids,
     ))
 
 
@@ -103,21 +107,33 @@ async def dashboard_detail(
     request: Request, investigation_id: str,
     user: dict = Depends(require_login),
 ):
+    from agent.intake.runner import get_active_investigation_ids
     inv = get_investigation_detail(investigation_id)
     if not inv:
-        return HTMLResponse("<h3>Investigation not found</h3>", status_code=404)
+        # Investigation chưa có trace_events (mới fire, chưa emit start) — tạo placeholder
+        if investigation_id in get_active_investigation_ids():
+            inv = {
+                "investigation_id": investigation_id,
+                "symptom": "Đang khởi động...",
+                "steps": [],
+                "raw_events": [],
+            }
+        else:
+            return HTMLResponse("<h3>Investigation not found</h3>", status_code=404)
 
     langfuse_url = None
     if os.getenv("LANGFUSE_PUBLIC_KEY"):
         host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
         langfuse_url = f"{host}/traces"
 
+    is_live = investigation_id in get_active_investigation_ids()
     feedback = get_investigation_feedback(investigation_id)
     return templates.TemplateResponse(request, "detail.html", _ctx(request, user,
         active="home",
         inv=inv,
         langfuse_url=langfuse_url,
         feedback=feedback,
+        is_live=is_live,
     ))
 
 
@@ -270,6 +286,12 @@ async def dashboard_trigger_post(
                 result = await resp.json()
     except Exception as e:
         result = {"status": "error", "error": str(e)}
+
+    # Redirect ngay tới live view khi trigger thành công
+    if result and result.get("status") in ("accepted", "duplicate"):
+        inv_id = result.get("investigation_id", "")
+        if inv_id:
+            return RedirectResponse(f"/dashboard/investigations/{inv_id}", status_code=303)
 
     projects = get_projects_overview()
     svc_map = _get_project_services_map()
@@ -777,6 +799,18 @@ async def dashboard_project_del_repo(
     except Exception:
         pass
     return RedirectResponse(f"/dashboard/projects/{project_id}", status_code=303)
+
+
+@router.post("/investigations/{investigation_id}/delete")
+async def dashboard_delete_investigation(
+    request: Request, investigation_id: str,
+    user: dict = Depends(require_login),
+):
+    from agent.intake.runner import get_active_investigation_ids
+    if investigation_id in get_active_investigation_ids():
+        return HTMLResponse("<h3>Không thể xóa investigation đang chạy.</h3>", status_code=409)
+    delete_investigation(investigation_id)
+    return RedirectResponse("/dashboard", status_code=303)
 
 
 @router.post("/investigations/{investigation_id}/replay")

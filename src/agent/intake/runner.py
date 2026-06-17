@@ -75,6 +75,11 @@ def _get_service_descriptions(project_id: str) -> dict:
 _active_investigations: Set[str] = set()
 
 
+def get_active_investigation_ids() -> frozenset:
+    """Snapshot bất biến của các investigation đang chạy."""
+    return frozenset(_active_investigations)
+
+
 async def _connect_mcp_clients(servers: List[Dict[str, str]]) -> List[MCPClient]:
     """Connect đến tất cả MCP server với auth. Bỏ qua server không phản hồi (log warning)."""
     import json as _json

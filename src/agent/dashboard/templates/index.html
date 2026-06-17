@@ -1,6 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Investigations — Agent Dashboard{% endblock %}
 {% block content %}
+<style>
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+.live-dot {
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  background:#0c8; animation:pulse-dot 1.2s infinite;
+  margin-right:5px; vertical-align:middle;
+}
+.badge-live {
+  display:inline-flex; align-items:center; font-size:11px;
+  background:rgba(0,200,136,.12); color:#0c8;
+  border:1px solid rgba(0,200,136,.3); border-radius:4px;
+  padding:2px 8px; font-weight:500;
+}
+.btn-delete {
+  background:none; border:1px solid transparent; border-radius:4px;
+  color:var(--muted); cursor:pointer; padding:2px 7px; font-size:13px;
+  transition:color .15s,border-color .15s; line-height:1;
+}
+.btn-delete:hover { color:#f66; border-color:rgba(255,80,80,.4); }
+#refresh-bar {
+  font-size:12px; color:#0c8; padding:7px 16px;
+  background:rgba(0,200,136,.06); border-bottom:1px solid rgba(0,200,136,.15);
+  display:flex; align-items:center; gap:8px;
+}
+</style>
+
 <div class="page-header">
   <h1 data-i18n="page.investigations">Cuộc điều tra</h1>
   <div class="meta">Lịch sử điều tra — {{ total }} bản ghi</div>
@@ -32,7 +58,14 @@
 </div>
 
 {% if investigations %}
-<div class="card" style="padding:0">
+<div class="card" style="padding:0;overflow:hidden">
+  {% if active_ids %}
+  <div id="refresh-bar">
+    <span class="live-dot"></span>
+    <span>{{ active_ids | length }} investigation đang chạy</span>
+    <span id="refresh-countdown" style="margin-left:auto;color:var(--muted)"></span>
+  </div>
+  {% endif %}
   <div class="table-wrap">
     <table>
       <thead>
@@ -41,24 +74,35 @@
           <th>Project</th>
           <th>Service</th>
           <th>Scenario</th>
-          <th>Confidence</th>
+          <th>Trạng thái</th>
           <th>Steps</th>
           <th>Stop</th>
           <th>Thời gian</th>
           <th data-i18n="th.root_cause">Nguyên nhân gốc</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
         {% for inv in investigations %}
-        <tr>
-          <td><a href="/dashboard/investigations/{{ inv.investigation_id }}">{{ inv.investigation_id }}</a></td>
+        {% set is_live = inv.investigation_id in active_ids %}
+        <tr {% if is_live %}style="background:rgba(0,200,136,.04)"{% endif %}>
+          <td style="white-space:nowrap">
+            <a href="/dashboard/investigations/{{ inv.investigation_id }}"
+               style="{% if is_live %}color:#0c8{% endif %}">
+              {{ inv.investigation_id[:42] }}{% if inv.investigation_id|length > 42 %}…{% endif %}
+            </a>
+          </td>
           <td><span class="tag">{{ inv.project_id }}</span></td>
           <td><code style="font-size:11px;color:#a5b4fc">{{ inv.service or '—' }}</code></td>
           <td><span class="tag">{{ inv.scenario }}</span></td>
           <td>
-            {% if inv.confidence %}
+            {% if is_live %}
+            <span class="badge-live"><span class="live-dot"></span>Live</span>
+            {% elif inv.confidence %}
             <span class="badge badge-{{ inv.confidence }}">{{ inv.confidence }}</span>
-            {% else %}<span style="color:var(--muted)">—</span>{% endif %}
+            {% else %}
+            <span style="color:var(--muted)">—</span>
+            {% endif %}
           </td>
           <td style="text-align:center">{{ inv.steps }}</td>
           <td>
@@ -68,13 +112,26 @@
             <span class="badge badge-budget">budget</span>
             {% elif inv.stop_reason %}
             <span class="badge badge-error">{{ inv.stop_reason }}</span>
+            {% elif is_live %}
+            <span style="color:#0c8;font-size:11px">chạy…</span>
             {% endif %}
           </td>
           <td style="color:var(--muted);font-size:12px;white-space:nowrap">
             {{ inv.started_at }}<br>
             {% if inv.elapsed_s %}<span>{{ inv.elapsed_s }}s</span>{% endif %}
           </td>
-          <td style="font-size:12px;max-width:280px">{{ (inv.root_cause or '')[:90] }}{% if inv.root_cause|length > 90 %}…{% endif %}</td>
+          <td style="font-size:12px;max-width:280px">
+            {{ (inv.root_cause or '')[:90] }}{% if inv.root_cause|length > 90 %}…{% endif %}
+          </td>
+          <td>
+            {% if not is_live %}
+            <form method="post"
+                  action="/dashboard/investigations/{{ inv.investigation_id }}/delete"
+                  onsubmit="return confirm('Xóa investigation này?\nKhông thể khôi phục.')">
+              <button type="submit" class="btn-delete" title="Xóa">🗑</button>
+            </form>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -88,5 +145,21 @@
     <a href="/dashboard/trigger" style="color:var(--accent)">Trigger điều tra đầu tiên →</a>
   </div>
 </div>
+{% endif %}
+
+{% if active_ids %}
+<script>
+(function() {
+  let secs = 5;
+  const el = document.getElementById('refresh-countdown');
+  function tick() {
+    secs--;
+    if (el) el.textContent = 'Tự làm mới sau ' + secs + 's';
+    if (secs <= 0) { location.reload(); return; }
+    setTimeout(tick, 1000);
+  }
+  setTimeout(tick, 1000);
+})();
+</script>
 {% endif %}
 {% endblock %}

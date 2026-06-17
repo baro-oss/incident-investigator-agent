@@ -1,6 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ inv.investigation_id }} — Trace Viewer{% endblock %}
 {% block content %}
+<style>
+@keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.3} }
+.live-dot {
+  display:inline-block; width:8px; height:8px; border-radius:50%;
+  background:#0c8; animation:pulse-dot 1.2s infinite; vertical-align:middle;
+}
+#live-banner {
+  display:flex; align-items:center; gap:10px;
+  background:rgba(0,200,136,.07); border:1px solid rgba(0,200,136,.2);
+  border-radius:6px; padding:8px 14px; margin-bottom:16px; font-size:13px;
+}
+#live-step { color:#0c8; font-weight:500; }
+@keyframes slide-in { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+.tl-item-live { animation:slide-in .25s ease; }
+</style>
 
 <div class="page-header">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
@@ -11,8 +26,14 @@
       {% if inv.get('project_id') %}
       <span class="tag">{{ inv.project_id }}</span>
       {% endif %}
+      {% if is_live %}
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#0c8">
+        <span class="live-dot"></span> Đang chạy
+      </span>
+      {% endif %}
     </div>
     <div style="display:flex;gap:8px">
+      {% if not is_live %}
       <a href="/dashboard/investigations/{{ inv.investigation_id }}/diff"
          class="btn btn-ghost" style="font-size:12px;text-decoration:none">⇄ Diff</a>
       <a href="/dashboard/investigations/{{ inv.investigation_id }}/export?format=json"
@@ -23,6 +44,7 @@
             onsubmit="return confirm('Chạy lại investigation này?')">
         <button type="submit" class="btn btn-ghost" style="font-size:12px">⟳ Replay</button>
       </form>
+      {% endif %}
     </div>
   </div>
   <h1 style="font-size:15px;font-weight:400;color:var(--muted)">{{ inv.get('symptom','') }}</h1>
@@ -32,6 +54,15 @@
     {% if inv.get('finished_at') %} → {{ inv.get('finished_at','') }}{% endif %}
   </div>
 </div>
+
+{% if is_live %}
+<div id="live-banner">
+  <span class="live-dot"></span>
+  <span>Agent đang điều tra</span>
+  <span id="live-step" style="color:#0c8"></span>
+  <span id="live-step-count" style="margin-left:auto;color:var(--muted);font-size:12px"></span>
+</div>
+{% endif %}
 
 {% set conf = inv.get('confidence','') %}
 {% if inv.get('root_cause') %}
@@ -226,53 +257,102 @@
 
     <div class="card" style="margin-top:0">
       <h3 style="margin-bottom:10px" data-i18n="lbl.actions">Hành động</h3>
+      {% if not is_live %}
       <a href="/dashboard/trigger?scenario={{ inv.get('scenario','') }}"
          class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px">
         ▶ Trigger lại
       </a>
-      <a href="/dashboard" class="btn btn-ghost" style="width:100%;justify-content:center">
+      {% endif %}
+      <a href="/dashboard" class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:8px">
         ← Danh sách
       </a>
+      {% if not is_live %}
+      <form method="post"
+            action="/dashboard/investigations/{{ inv.investigation_id }}/delete"
+            onsubmit="return confirm('Xóa investigation này?\nHành động không thể khôi phục.')">
+        <button type="submit"
+                class="btn btn-ghost"
+                style="width:100%;justify-content:center;color:#f66;border-color:rgba(255,80,80,.3)">
+          🗑 Xóa lịch sử
+        </button>
+      </form>
+      {% endif %}
     </div>
   </div>
 
 </div>
 
-{% if not inv.get('stop_reason') %}
+{% if is_live %}
 <script>
 (function() {
   const invId = '{{ inv.investigation_id }}';
   const timeline = document.querySelector('.timeline');
-  const statusEl = document.createElement('div');
-  statusEl.innerHTML = '<div style="color:var(--accent);font-size:12px;margin-bottom:12px">⏳ Đang điều tra — kết quả xuất hiện real-time...</div>';
-  timeline.prepend(statusEl);
+  const banner   = document.getElementById('live-banner');
+  const liveStep = document.getElementById('live-step');
+  const stepCount = document.getElementById('live-step-count');
+  let step = 0;
+
   const es = new EventSource(`/dashboard/stream/${invId}`);
+
   es.onmessage = (e) => {
     try {
       const msg = JSON.parse(e.data);
+
       if (msg.type === 'tool_call') {
-        const div = document.createElement('div');
-        div.className = 'tl-item';
+        step++;
+        const tool = msg.payload.tool || '';
         const args = msg.payload.args || {};
-        const argsStr = Object.entries(args).map(([k,v])=>`${k}=${v}`).join(', ');
-        div.innerHTML = `<div class="tl-dot tool"></div>
-          <div class="tl-content">
-            <div class="tl-tool">⚙ ${msg.payload.tool||''}<span style="color:var(--muted);font-size:10px;margin-left:6px">(${argsStr})</span></div>
-            <div class="tl-summary"></div>
-          </div>`;
+        const argsStr = Object.entries(args).map(([k,v]) => `${k}=${v}`).join(', ');
+
+        // Cập nhật banner
+        if (liveStep) liveStep.textContent = '→ ' + tool;
+        if (stepCount) stepCount.textContent = 'Bước ' + step;
+
+        // Thêm dòng vào timeline
+        const div = document.createElement('div');
+        div.className = 'tl-item tl-item-live';
+        div.innerHTML =
+          `<div class="tl-dot tool"></div>` +
+          `<div class="tl-label">Bước ${step}</div>` +
+          `<div class="tl-content">` +
+            `<div class="tl-tool">⚙ ${tool}` +
+              (argsStr ? `<span style="color:var(--muted);font-size:10px;margin-left:6px">(${argsStr})</span>` : '') +
+            `</div>` +
+            `<div class="tl-summary tl-pending" style="color:var(--muted);font-size:11px">đang chạy…</div>` +
+          `</div>`;
         timeline.appendChild(div);
+        div.scrollIntoView({behavior:'smooth', block:'nearest'});
       }
+
       if (msg.type === 'tool_result') {
-        const sums = timeline.querySelectorAll('.tl-summary');
-        if (sums.length) sums[sums.length-1].textContent = msg.payload.summary || '';
+        // Điền kết quả vào dòng cuối
+        const pending = timeline.querySelectorAll('.tl-pending');
+        if (pending.length) {
+          const el = pending[pending.length - 1];
+          el.textContent = msg.payload.summary || '';
+          el.classList.remove('tl-pending');
+          el.style.color = '';
+          el.style.fontSize = '';
+        }
       }
+
       if (msg.type === 'verdict' || msg.type === 'done') {
-        statusEl.innerHTML = '<div style="color:var(--high);font-size:12px;margin-bottom:12px">✓ Hoàn thành · <a href="" style="color:var(--accent)" onclick="location.reload()">Reload để xem verdict →</a></div>';
         es.close();
+        if (banner) {
+          banner.style.background = 'rgba(0,200,136,.12)';
+          banner.innerHTML =
+            '<span style="color:#0c8;font-size:15px">✓</span>' +
+            '<span style="color:#0c8;font-weight:500">Hoàn thành — đang tải kết quả...</span>';
+        }
+        setTimeout(() => location.reload(), 1000);
       }
     } catch(_) {}
   };
-  es.onerror = () => { statusEl.innerHTML = ''; es.close(); };
+
+  es.onerror = () => {
+    es.close();
+    if (banner) banner.style.display = 'none';
+  };
 })();
 </script>
 {% endif %}
