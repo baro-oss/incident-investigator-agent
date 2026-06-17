@@ -30,9 +30,9 @@ def _run(params: Dict[str, Any]) -> Observation:
         """
         SELECT
             channel,
-            ROUND(SUM(revenue), 2)          AS total_revenue,
+            ROUND(SUM(revenue)::numeric, 2)          AS total_revenue,
             SUM(transaction_count)          AS total_tx,
-            ROUND(SUM(refund_amount), 2)    AS total_refund
+            ROUND(SUM(refund_amount)::numeric, 2)    AS total_refund
         FROM ft_revenue
         WHERE scenario=? AND is_baseline=0
           AND timestamp>=? AND timestamp<?
@@ -47,7 +47,7 @@ def _run(params: Dict[str, Any]) -> Observation:
         """
         SELECT
             channel,
-            ROUND(AVG(revenue), 4)  AS avg_revenue_per_row,
+            ROUND(AVG(revenue)::numeric, 4)  AS avg_revenue_per_row,
             COUNT(*)                AS row_count
         FROM ft_revenue
         WHERE scenario=? AND is_baseline=1
@@ -63,7 +63,7 @@ def _run(params: Dict[str, Any]) -> Observation:
             """
             SELECT
                 channel,
-                ROUND(AVG(revenue), 4)  AS avg_revenue_per_row,
+                ROUND(AVG(revenue)::numeric, 4)  AS avg_revenue_per_row,
                 COUNT(*)                AS row_count
             FROM ft_revenue
             WHERE scenario=? AND is_baseline=1

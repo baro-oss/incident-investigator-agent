@@ -32,8 +32,8 @@ def _run(params: Dict[str, Any]) -> Observation:
     baseline_stats = conn.execute(
         """
         SELECT
-            ROUND(100.0 * SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END) / COUNT(*), 2) AS fail_rate,
-            ROUND(100.0 * SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END) / COUNT(*), 2) AS refund_rate
+            ROUND((100.0 * SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END) / COUNT(*))::numeric, 2) AS fail_rate,
+            ROUND((100.0 * SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END) / COUNT(*))::numeric, 2) AS refund_rate
         FROM ft_transactions
         WHERE scenario=? AND is_baseline=1
         """,
@@ -58,8 +58,8 @@ def _run(params: Dict[str, Any]) -> Observation:
             COUNT(*)                                                          AS total,
             SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END)              AS failed,
             SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END)              AS refunded,
-            ROUND(100.0 * SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END) / COUNT(*), 2) AS fail_rate,
-            ROUND(100.0 * SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END) / COUNT(*), 2) AS refund_rate
+            ROUND((100.0 * SUM(CASE WHEN status='failed'   THEN 1 ELSE 0 END) / COUNT(*))::numeric, 2) AS fail_rate,
+            ROUND((100.0 * SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END) / COUNT(*))::numeric, 2) AS refund_rate
         FROM ft_transactions
         WHERE scenario=? AND is_baseline=0
           AND timestamp>=? AND timestamp<?

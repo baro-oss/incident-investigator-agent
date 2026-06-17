@@ -34,7 +34,7 @@ def _run(params: Dict[str, Any]) -> Observation:
     baseline_row = conn.execute(
         f"""
         SELECT
-            ROUND(AVG(processing_time_s), 2)  AS avg_s,
+            ROUND(AVG(processing_time_s)::numeric, 2)  AS avg_s,
             COUNT(*)                           AS row_count
         FROM ft_settlements
         WHERE scenario=? AND is_baseline=1
@@ -53,9 +53,9 @@ def _run(params: Dict[str, Any]) -> Observation:
         f"""
         SELECT
             merchant_id,
-            ROUND(AVG(processing_time_s), 2)  AS avg_s,
-            ROUND(MAX(processing_time_s), 2)  AS max_s,
-            ROUND(MIN(processing_time_s), 2)  AS min_s,
+            ROUND(AVG(processing_time_s)::numeric, 2)  AS avg_s,
+            ROUND(MAX(processing_time_s)::numeric, 2)  AS max_s,
+            ROUND(MIN(processing_time_s)::numeric, 2)  AS min_s,
             COUNT(*)                           AS cnt
         FROM ft_settlements
         WHERE scenario=? AND is_baseline=0
@@ -71,8 +71,8 @@ def _run(params: Dict[str, Any]) -> Observation:
     overall_row = conn.execute(
         f"""
         SELECT
-            ROUND(AVG(processing_time_s), 2) AS avg_s,
-            ROUND(MAX(processing_time_s), 2) AS max_s,
+            ROUND(AVG(processing_time_s)::numeric, 2) AS avg_s,
+            ROUND(MAX(processing_time_s)::numeric, 2) AS max_s,
             COUNT(*)                          AS cnt
         FROM ft_settlements
         WHERE scenario=? AND is_baseline=0
