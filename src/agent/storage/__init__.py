@@ -1,9 +1,9 @@
-"""Storage seam — điểm vào duy nhất cho mọi truy cập DB.
+"""Storage seam — điểm vào duy nhất cho mọi truy cập DB (Postgres).
 
-- `open_db()` / `get_db_path()`: API cũ (connection-returning), giữ nguyên.
-- `IntegrityError`: bắt lỗi ràng buộc trung lập (không phụ thuộc driver).
-- `get_database()`: facade `Database` cho code mới (query/query_one/execute/now).
-- `BACKEND_NAME`: backend đang chọn (sqlite | postgres-stub).
+- `open_db()` / `get_db_path()`: API connection, giữ nguyên.
+- `IntegrityError`: bắt lỗi ràng buộc trung lập.
+- `get_database()`: facade `Database` cho code mới.
+- `BACKEND_NAME`: luôn là "postgres".
 """
 from .base import Database, StorageBackend
 from .db import BACKEND_NAME, IntegrityError, get_db_path, open_db

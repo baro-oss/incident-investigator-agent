@@ -1,12 +1,13 @@
 # Agent điều tra nguyên nhân sự cố
 
+![thumbnail](thumbnail.jpeg)
+
 > Đưa vào một sự cố (log error hoặc alert) → agent tự truy nguồn từ **deploy history,
 > logs, metrics và source code** → suy luận qua từng bước adaptive để khoanh vùng
 > nguyên nhân → trả về verdict dựa trên bằng chứng (evidence-grounded), kèm chuỗi bằng
 > chứng truy ngược được.
 
 **Live demo:** https://endpoint-7183060e-00a5-49f0-8e5e-93859d95ffcd.agentbase-runtime.aiplatform.vngcloud.vn
-· Dashboard: `<link>/dashboard`
 
 ---
 

@@ -4,47 +4,9 @@ Tests Day 54: P2 (distill external MCP text) + OPS1 (hypothesis_catalog DB CRUD 
 from __future__ import annotations
 
 import json
-import sqlite3
-import tempfile
-import os
-from typing import List
 from unittest.mock import patch
 
 import pytest
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _open_sqlite(path: str):
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def _make_catalog_db() -> str:
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE hypothesis_catalog (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            domain TEXT NOT NULL DEFAULT 'microservice',
-            project_id TEXT NOT NULL DEFAULT 'default',
-            tag TEXT NOT NULL,
-            content TEXT NOT NULL DEFAULT '',
-            keywords TEXT NOT NULL DEFAULT '[]',
-            relevant_tools TEXT NOT NULL DEFAULT '[]',
-            confirm_kws TEXT NOT NULL DEFAULT '[]',
-            rule_out_kws TEXT NOT NULL DEFAULT '[]',
-            confirm_conf TEXT NOT NULL DEFAULT 'medium',
-            root_cause_type TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(domain, project_id, tag)
-        )
-    """)
-    conn.commit()
-    conn.close()
-    return path
 
 
 # ── P2: _distill_external_text ─────────────────────────────────────────────────
@@ -141,109 +103,92 @@ class TestParseObservationDistills:
 
 class TestLoadDbCatalogEntries:
 
-    def test_empty_db_returns_empty_list(self):
-        path = _make_catalog_db()
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import load_db_catalog_entries
-            entries = load_db_catalog_entries("microservice", "default")
+    def test_empty_db_returns_empty_list(self, pg_db):
+        from agent.engine.hypothesis_catalog import load_db_catalog_entries
+        entries = load_db_catalog_entries("microservice", "test-project-load-empty")
         assert entries == []
-        os.unlink(path)
 
-    def test_returns_entries_from_db(self):
-        path = _make_catalog_db()
-        conn = sqlite3.connect(path)
+    def test_returns_entries_from_db(self, pg_db):
+        from agent.storage.db import open_db
+        conn = open_db()
         conn.execute(
-            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
             ("microservice", "default", "cache_miss", "Cache miss", '["cache"]', '["get_metrics"]', '["cache"]', '[]', "medium", "cache_miss"),
         )
         conn.commit()
         conn.close()
 
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import load_db_catalog_entries
-            entries = load_db_catalog_entries("microservice", "default")
-        assert len(entries) == 1
-        assert entries[0].tag == "cache_miss"
-        assert "cache" in entries[0].keywords
-        assert "get_metrics" in entries[0].relevant_tools
-        os.unlink(path)
+        from agent.engine.hypothesis_catalog import load_db_catalog_entries
+        entries = load_db_catalog_entries("microservice", "default")
+        assert any(e.tag == "cache_miss" for e in entries)
+        entry = next(e for e in entries if e.tag == "cache_miss")
+        assert "cache" in entry.keywords
+        assert "get_metrics" in entry.relevant_tools
 
-    def test_filters_by_domain(self):
-        path = _make_catalog_db()
-        conn = sqlite3.connect(path)
+    def test_filters_by_domain(self, pg_db):
+        from agent.storage.db import open_db
+        conn = open_db()
         conn.execute(
-            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            ("fintech", "default", "fraud", "Fraud detection", '[]', '[]', '[]', '[]', "high", "fraud"),
+            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            ("fintech", "proj-filter-test", "fraud", "Fraud detection", '[]', '[]', '[]', '[]', "high", "fraud"),
         )
         conn.commit()
         conn.close()
 
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import load_db_catalog_entries
-            ms_entries = load_db_catalog_entries("microservice", "default")
-            ft_entries = load_db_catalog_entries("fintech", "default")
+        from agent.engine.hypothesis_catalog import load_db_catalog_entries
+        ms_entries = load_db_catalog_entries("microservice", "proj-filter-test")
+        ft_entries = load_db_catalog_entries("fintech", "proj-filter-test")
         assert ms_entries == []
         assert len(ft_entries) == 1
-        os.unlink(path)
 
 
 # ── OPS1: merge_catalog_with_db ────────────────────────────────────────────────
 
 class TestMergeCatalogWithDb:
 
-    def test_empty_db_returns_base_unchanged(self):
-        path = _make_catalog_db()
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
-            result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "default")
+    def test_empty_db_returns_base_unchanged(self, pg_db):
+        from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
+        result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "proj-merge-empty")
         assert len(result) == len(MICROSERVICE_CATALOG)
-        os.unlink(path)
 
-    def test_db_entry_overrides_same_tag(self):
-        path = _make_catalog_db()
-        conn = sqlite3.connect(path)
+    def test_db_entry_overrides_same_tag(self, pg_db):
+        from agent.storage.db import open_db
+        conn = open_db()
         conn.execute(
-            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (domain, project_id, tag) DO UPDATE SET content=EXCLUDED.content, confirm_conf=EXCLUDED.confirm_conf",
             ("microservice", "default", "deploy", "Overridden deploy content", '["deploy"]', '[]', '[]', '[]', "high", "deploy_bug"),
         )
         conn.commit()
         conn.close()
 
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
-            result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "default")
+        from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
+        result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "default")
 
         deploy_entry = next(e for e in result if e.tag == "deploy")
         assert deploy_entry.content == "Overridden deploy content"
         assert deploy_entry.confirm_conf == "high"
-        os.unlink(path)
 
-    def test_new_db_tag_appended(self):
-        path = _make_catalog_db()
-        conn = sqlite3.connect(path)
+    def test_new_db_tag_appended(self, pg_db):
+        from agent.storage.db import open_db
+        conn = open_db()
         conn.execute(
-            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            ("microservice", "default", "cache_miss", "Cache miss hypothesis", '["cache"]', '["get_metrics"]', '["cache"]', '[]', "medium", "cache_miss"),
+            "INSERT INTO hypothesis_catalog (domain, project_id, tag, content, keywords, relevant_tools, confirm_kws, rule_out_kws, confirm_conf, root_cause_type) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            ("microservice", "default", "cache_miss_new", "Cache miss hypothesis", '["cache"]', '["get_metrics"]', '["cache"]', '[]', "medium", "cache_miss"),
         )
         conn.commit()
         conn.close()
 
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
-            result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "default")
+        from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
+        result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "default")
 
         tags = [e.tag for e in result]
-        assert "cache_miss" in tags
+        assert "cache_miss_new" in tags
         assert len(result) == len(MICROSERVICE_CATALOG) + 1
-        os.unlink(path)
 
-    def test_base_order_preserved(self):
-        path = _make_catalog_db()
-        with patch("agent.storage.db.open_db", side_effect=lambda: _open_sqlite(path)):
-            from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
-            result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "default")
+    def test_base_order_preserved(self, pg_db):
+        from agent.engine.hypothesis_catalog import merge_catalog_with_db, MICROSERVICE_CATALOG
+        result = merge_catalog_with_db(MICROSERVICE_CATALOG, "microservice", "proj-order-test")
         # First N tags should match base order
         base_tags = [e.tag for e in MICROSERVICE_CATALOG]
         result_tags = [e.tag for e in result]
         assert result_tags[:len(base_tags)] == base_tags
-        os.unlink(path)

@@ -1,104 +1,17 @@
 """
 Auth + RBAC unit tests (Ngày 33).
 
-Dùng temp SQLite DB riêng — không ảnh hưởng DB thật.
-Mỗi test function nhận `auth_db` fixture: DB Path được set vào DB_PATH env,
-schema auth đã init, teardown tự xóa.
+Dùng pg_db fixture (schema-per-test Postgres isolation).
 """
 from __future__ import annotations
-
-import os
-import sqlite3
-import tempfile
-from pathlib import Path
 
 import pytest
 
 
-# ---------------------------------------------------------------------------
-# Fixture: isolated SQLite DB cho auth tests
-# ---------------------------------------------------------------------------
-
-AUTH_SCHEMA = """
-PRAGMA journal_mode=WAL;
-
-CREATE TABLE IF NOT EXISTS users (
-    id            TEXT    PRIMARY KEY,
-    username      TEXT    NOT NULL UNIQUE,
-    password_hash TEXT    NOT NULL,
-    is_root       INTEGER NOT NULL DEFAULT 0,
-    is_active     INTEGER NOT NULL DEFAULT 1,
-    created_at    TEXT    NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS roles (
-    id          TEXT    PRIMARY KEY,
-    name        TEXT    NOT NULL UNIQUE,
-    description TEXT    NOT NULL DEFAULT '',
-    is_system   INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS permissions (
-    key         TEXT    PRIMARY KEY,
-    description TEXT    NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS role_permissions (
-    role_id        TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    permission_key TEXT NOT NULL REFERENCES permissions(key) ON DELETE CASCADE,
-    PRIMARY KEY (role_id, permission_key)
-);
-
-CREATE TABLE IF NOT EXISTS projects (
-    id   TEXT PRIMARY KEY,
-    name TEXT NOT NULL DEFAULT ''
-);
-
-CREATE TABLE IF NOT EXISTS project_groups (
-    id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL UNIQUE,
-    description TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS project_group_members (
-    group_id   TEXT NOT NULL REFERENCES project_groups(id) ON DELETE CASCADE,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    PRIMARY KEY (group_id, project_id)
-);
-
-CREATE TABLE IF NOT EXISTS role_assignments (
-    id               TEXT PRIMARY KEY,
-    user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role_id          TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
-    scope_type       TEXT NOT NULL DEFAULT 'global',
-    scope_group_id   TEXT,
-    scope_project_id TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_role_assignments_user ON role_assignments (user_id);
-
-CREATE TABLE IF NOT EXISTS api_tokens (
-    id          TEXT PRIMARY KEY,
-    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    token_hash  TEXT NOT NULL UNIQUE,
-    name        TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL,
-    last_used   TEXT
-);
-"""
-
-
 @pytest.fixture
-def auth_db(tmp_path, monkeypatch):
-    """Temp DB với schema auth đầy đủ; DB_PATH trỏ vào đây trong suốt test."""
-    db_file = tmp_path / "test_auth.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.executescript(AUTH_SCHEMA)
-    conn.close()
-
-    monkeypatch.setenv("DB_PATH", str(db_file))
-    yield str(db_file)
+def auth_db(pg_db):
+    """pg_db đã tạo schema + tables + patched env."""
+    return pg_db
 
 
 # ---------------------------------------------------------------------------
@@ -232,10 +145,11 @@ class TestAPIToken:
 # ---------------------------------------------------------------------------
 
 class TestRoleAndPermission:
-    def _seed_perm(self, key: str, auth_db: str) -> None:
-        conn = sqlite3.connect(auth_db)
+    def _seed_perm(self, key: str) -> None:
+        from agent.storage.db import open_db
+        conn = open_db()
         conn.execute(
-            "INSERT OR IGNORE INTO permissions (key, description) VALUES (?, ?)",
+            "INSERT INTO permissions (key, description) VALUES (%s, %s) ON CONFLICT DO NOTHING",
             (key, ""),
         )
         conn.commit()
@@ -244,8 +158,8 @@ class TestRoleAndPermission:
     def test_create_role_with_permissions(self, auth_db):
         from agent.auth.rbac import create_role, get_role_permissions
 
-        self._seed_perm("investigation.view", auth_db)
-        self._seed_perm("investigation.trigger", auth_db)
+        self._seed_perm("investigation.view")
+        self._seed_perm("investigation.trigger")
 
         create_role("operator", "Operator", permissions=["investigation.view", "investigation.trigger"])
         perms = get_role_permissions("operator")
@@ -261,10 +175,12 @@ class TestRoleAndPermission:
 
     def test_delete_system_role_raises(self, auth_db):
         from agent.auth.rbac import delete_role
+        from agent.storage.db import open_db
 
-        conn = sqlite3.connect(auth_db)
+        conn = open_db()
         conn.execute(
-            "INSERT INTO roles (id, name, is_system) VALUES ('admin', 'Admin', 1)"
+            "INSERT INTO roles (id, name, is_system) VALUES (%s, %s, %s)",
+            ("admin", "Admin", 1),
         )
         conn.commit()
         conn.close()
@@ -278,19 +194,20 @@ class TestRoleAndPermission:
 # ---------------------------------------------------------------------------
 
 class TestUserCan:
-    def _seed(self, auth_db: str):
+    def _seed(self):
         """Helper: tạo user, role, permission và gán global."""
-        from agent.auth.rbac import assign_role, create_api_token, create_role, create_user
+        from agent.auth.rbac import assign_role, create_role, create_user
+        from agent.storage.db import open_db
 
-        conn = sqlite3.connect(auth_db)
+        conn = open_db()
         conn.execute(
-            "INSERT OR IGNORE INTO permissions (key) VALUES ('investigation.view')"
+            "INSERT INTO permissions (key) VALUES ('investigation.view') ON CONFLICT DO NOTHING"
         )
         conn.execute(
-            "INSERT OR IGNORE INTO permissions (key) VALUES ('investigation.trigger')"
+            "INSERT INTO permissions (key) VALUES ('investigation.trigger') ON CONFLICT DO NOTHING"
         )
         conn.execute(
-            "INSERT OR IGNORE INTO projects (id, name) VALUES ('proj_a', 'Project A')"
+            "INSERT INTO projects (id, name) VALUES ('proj_a', 'Project A') ON CONFLICT DO NOTHING"
         )
         conn.commit()
         conn.close()
@@ -303,13 +220,13 @@ class TestUserCan:
     def test_global_permission_allowed(self, auth_db):
         from agent.auth.rbac import user_can
 
-        user = self._seed(auth_db)
+        user = self._seed()
         assert user_can(user["id"], "investigation.view")
 
     def test_unassigned_permission_denied(self, auth_db):
         from agent.auth.rbac import user_can
 
-        user = self._seed(auth_db)
+        user = self._seed()
         assert not user_can(user["id"], "investigation.trigger")
 
     def test_root_user_bypasses_all_checks(self, auth_db):
@@ -321,22 +238,23 @@ class TestUserCan:
     def test_inactive_user_denied(self, auth_db):
         from agent.auth.rbac import update_user, user_can
 
-        user = self._seed(auth_db)
+        user = self._seed()
         update_user(user["id"], is_active=False)
         assert not user_can(user["id"], "investigation.view")
 
     def test_project_scoped_permission(self, auth_db):
         from agent.auth.rbac import assign_role, create_role, create_user, user_can
+        from agent.storage.db import open_db
 
-        conn = sqlite3.connect(auth_db)
+        conn = open_db()
         conn.execute(
-            "INSERT OR IGNORE INTO permissions (key) VALUES ('investigation.view')"
+            "INSERT INTO permissions (key) VALUES ('investigation.view') ON CONFLICT DO NOTHING"
         )
         conn.execute(
-            "INSERT OR IGNORE INTO projects (id, name) VALUES ('proj_x', 'ProjX')"
+            "INSERT INTO projects (id, name) VALUES ('proj_x', 'ProjX') ON CONFLICT DO NOTHING"
         )
         conn.execute(
-            "INSERT OR IGNORE INTO projects (id, name) VALUES ('proj_y', 'ProjY')"
+            "INSERT INTO projects (id, name) VALUES ('proj_y', 'ProjY') ON CONFLICT DO NOTHING"
         )
         conn.commit()
         conn.close()

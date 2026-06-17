@@ -11,8 +11,6 @@ Kiểm:
 """
 from __future__ import annotations
 
-import sqlite3
-import tempfile
 from unittest.mock import patch
 
 import pytest
@@ -101,29 +99,19 @@ class TestClassifyRootCause:
 
 # ── get_service_priors ────────────────────────────────────────────────────────
 
-def _make_temp_db_with_patterns(rows: list) -> sqlite3.Connection:
-    """Tạo in-memory SQLite với bảng investigation_patterns chứa rows."""
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("""
-        CREATE TABLE investigation_patterns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id TEXT NOT NULL,
-            service TEXT NOT NULL,
-            error_pattern TEXT NOT NULL,
-            tool_sequence TEXT,
-            root_cause_type TEXT DEFAULT 'unknown',
-            avg_steps REAL DEFAULT 0,
-            count INTEGER DEFAULT 1,
-            updated_at TEXT,
-            UNIQUE(project_id, service, error_pattern)
-        )
-    """)
+def _make_temp_db_with_patterns(rows: list):
+    """Tạo DB connection (Postgres) với investigation_patterns đã seed rows.
+    Dùng open_db() — pg_db fixture phải được active trước.
+    """
+    from agent.storage.db import open_db
+    conn = open_db()
+    # Xóa dữ liệu cũ để đảm bảo isolation
+    conn.execute("DELETE FROM investigation_patterns")
     for r in rows:
         conn.execute(
             "INSERT INTO investigation_patterns "
             "(project_id, service, error_pattern, root_cause_type, avg_steps, count) "
-            "VALUES (?,?,?,?,?,?)",
+            "VALUES (%s, %s, %s, %s, %s, %s)",
             (r["project_id"], r["service"], r["error_pattern"],
              r["root_cause_type"], r["avg_steps"], r["count"]),
         )
@@ -132,14 +120,14 @@ def _make_temp_db_with_patterns(rows: list) -> sqlite3.Connection:
 
 
 class TestGetServicePriors:
-    def test_returns_empty_when_no_data(self):
+    def test_returns_empty_when_no_data(self, pg_db):
         conn = _make_temp_db_with_patterns([])
         with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("default", "payment-gateway")
         assert result == []
 
-    def test_returns_sorted_by_count_desc(self):
+    def test_returns_sorted_by_count_desc(self, pg_db):
         rows = [
             {"project_id": "p1", "service": "svc", "error_pattern": "err1",
              "root_cause_type": "deploy_bug", "avg_steps": 5.0, "count": 3},
@@ -155,7 +143,7 @@ class TestGetServicePriors:
         assert result[0]["count"] == 10
         assert result[1]["root_cause_type"] == "deploy_bug"
 
-    def test_ignores_unknown_type(self):
+    def test_ignores_unknown_type(self, pg_db):
         rows = [
             {"project_id": "p1", "service": "svc", "error_pattern": "err1",
              "root_cause_type": "unknown", "avg_steps": 3.0, "count": 5},
@@ -169,7 +157,7 @@ class TestGetServicePriors:
         assert len(result) == 1
         assert result[0]["root_cause_type"] == "deploy_bug"
 
-    def test_respects_limit(self):
+    def test_respects_limit(self, pg_db):
         rows = [
             {"project_id": "p", "service": "s", "error_pattern": f"e{i}",
              "root_cause_type": f"type_{i}", "avg_steps": 5.0, "count": i}
@@ -194,20 +182,20 @@ class TestPreseedHypotheses:
     def _rct_index(self):
         return build_rct_index(MICROSERVICE_CATALOG)
 
-    def test_returns_empty_when_service_empty(self):
+    def test_returns_empty_when_service_empty(self, pg_db):
         rct_idx = self._rct_index()
         with patch("agent.memory.patterns.open_db", return_value=_make_temp_db_with_patterns([])):
             result = _preseed_hypotheses("p", "", rct_idx)
         assert result == []
 
-    def test_returns_empty_when_no_priors(self):
+    def test_returns_empty_when_no_priors(self, pg_db):
         rct_idx = self._rct_index()
         conn = _make_temp_db_with_patterns([])
         with patch("agent.memory.patterns.open_db", return_value=conn):
             result = _preseed_hypotheses("p", "svc", rct_idx)
         assert result == []
 
-    def test_creates_hypothesis_with_prior_seen_count(self):
+    def test_creates_hypothesis_with_prior_seen_count(self, pg_db):
         rows = [{"project_id": "p", "service": "svc", "error_pattern": "err",
                  "root_cause_type": "deploy_bug", "avg_steps": 5.0, "count": 7}]
         conn = _make_temp_db_with_patterns(rows)
@@ -222,7 +210,7 @@ class TestPreseedHypotheses:
         assert h.prior_seen_count == 7
         assert "deploy" in h.keywords or "deployment" in h.keywords
 
-    def test_skips_unknown_rct(self):
+    def test_skips_unknown_rct(self, pg_db):
         rows = [{"project_id": "p", "service": "svc", "error_pattern": "err",
                  "root_cause_type": "some_unknown_type", "avg_steps": 3.0, "count": 2}]
         conn = _make_temp_db_with_patterns(rows)
@@ -231,7 +219,7 @@ class TestPreseedHypotheses:
             result = _preseed_hypotheses("p", "svc", rct_idx)
         assert result == []
 
-    def test_multiple_priors_order_preserved(self):
+    def test_multiple_priors_order_preserved(self, pg_db):
         rows = [
             {"project_id": "p", "service": "s", "error_pattern": "e1",
              "root_cause_type": "pool_exhaustion", "avg_steps": 7.0, "count": 10},
@@ -252,7 +240,7 @@ class TestPreseedHypotheses:
 class TestEnginePreseedIntegration:
     """Kiểm engine pre-seed hypothesis vào state khi có prior."""
 
-    async def test_preseed_appears_in_state(self):
+    async def test_preseed_appears_in_state(self, pg_db):
         """Engine.run() với service có prior → state bắt đầu với hypothesis đã có."""
         from unittest.mock import AsyncMock, MagicMock
 
@@ -312,7 +300,7 @@ class TestEnginePreseedIntegration:
         assert prior_hyp is not None, "Hypothesis 'deploy' không được pre-seed"
         assert prior_hyp.prior_seen_count == 3
 
-    async def test_no_preseed_without_priors(self):
+    async def test_no_preseed_without_priors(self, pg_db):
         """Engine.run() khi DB trống → state không có hypothesis pre-seed."""
         from unittest.mock import AsyncMock, MagicMock
 

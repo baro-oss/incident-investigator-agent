@@ -23,7 +23,6 @@ from __future__ import annotations
 import json
 import os
 import random
-import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -33,15 +32,10 @@ ROOT = Path(__file__).parent.parent
 
 
 def _open_conn():
-    """Mở connection theo DB_BACKEND (sqlite / postgres)."""
-    if os.environ.get("DB_BACKEND", "sqlite").lower() == "postgres":
-        sys.path.insert(0, str(ROOT / "src"))
-        from agent.storage.db import open_db  # type: ignore
-        return open_db()
-    path = sys.argv[1] if len(sys.argv) > 1 else str(ROOT / "data" / "investigation.db")
-    conn = sqlite3.connect(path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    """Mở connection Postgres qua storage seam."""
+    sys.path.insert(0, str(ROOT / "src"))
+    from agent.storage.db import open_db  # type: ignore
+    return open_db()
 
 
 # ── Cấu hình tham số hóa ─────────────────────────────────────────────────────
@@ -270,8 +264,7 @@ def seed(db_path: str, catalog_path: str) -> None:
 
     conn.commit()
     conn.close()
-    backend = os.environ.get("DB_BACKEND", "sqlite").lower()
-    target = os.environ.get("DATABASE_URL", db_path) if backend == "postgres" else db_path
+    target = os.environ.get("DATABASE_URL", "postgres")
     print(f"\nScenario DEMO seeded → {target}")
     print(f"  Date:   {DATE} | window khuyến nghị: 09:00-10:00")
     print(f"  Deploy: {TARGET_SERVICE} {VERSION_FAULTY} at {DEPLOY_TIME}")

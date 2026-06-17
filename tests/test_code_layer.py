@@ -7,9 +7,6 @@ Tests Day 51 — F1: Code seam over MCP.
 """
 from __future__ import annotations
 
-import os
-import sqlite3
-import tempfile
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -322,127 +319,80 @@ class TestReadOnlyGuard:
 # ═════════════════════════════════════════════════════════════════════════════
 
 class TestServiceReposCRUD:
-    """CRUD round-trip với temp DB — không đụng DB production."""
+    """CRUD round-trip với pg_db — schema-per-test isolation."""
 
-    def _make_temp_db(self) -> str:
-        fd, path = tempfile.mkstemp(suffix=".db")
-        os.close(fd)
-        conn = sqlite3.connect(path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("""
-            CREATE TABLE service_repos (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                project_id     TEXT    NOT NULL DEFAULT 'default',
-                service        TEXT    NOT NULL,
-                provider       TEXT    NOT NULL DEFAULT 'github',
-                repo_url       TEXT    NOT NULL,
-                default_branch TEXT    NOT NULL DEFAULT 'main',
-                subpath        TEXT    NOT NULL DEFAULT '',
-                created_at     TEXT    NOT NULL,
-                updated_at     TEXT    NOT NULL,
-                UNIQUE(project_id, service)
-            )
-        """)
-        conn.commit()
-        conn.close()
-        return path
-
-    def test_upsert_and_get(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo, get_service_repo
-            upsert_service_repo("default", "payment-gateway",
-                                "https://github.com/org/payment",
-                                provider="github", default_branch="main")
-            repo = get_service_repo("default", "payment-gateway")
+    def test_upsert_and_get(self, pg_db):
+        from agent.intake.project_registry import upsert_service_repo, get_service_repo
+        upsert_service_repo("default", "payment-gateway",
+                            "https://github.com/org/payment",
+                            provider="github", default_branch="main")
+        repo = get_service_repo("default", "payment-gateway")
         assert repo is not None
         assert repo["repo_url"] == "https://github.com/org/payment"
         assert repo["provider"] == "github"
         assert repo["default_branch"] == "main"
-        os.unlink(db_path)
 
-    def test_upsert_update_existing(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo, get_service_repo
-            upsert_service_repo("default", "checkout", "https://github.com/org/checkout")
-            upsert_service_repo("default", "checkout", "https://github.com/org/checkout-v2",
-                                default_branch="develop")
-            repo = get_service_repo("default", "checkout")
+    def test_upsert_update_existing(self, pg_db):
+        from agent.intake.project_registry import upsert_service_repo, get_service_repo
+        upsert_service_repo("default", "checkout", "https://github.com/org/checkout")
+        upsert_service_repo("default", "checkout", "https://github.com/org/checkout-v2",
+                            default_branch="develop")
+        repo = get_service_repo("default", "checkout")
         assert repo["repo_url"] == "https://github.com/org/checkout-v2"
         assert repo["default_branch"] == "develop"
-        os.unlink(db_path)
 
-    def test_list_service_repos(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo, list_service_repos
-            upsert_service_repo("proj1", "svc-a", "https://github.com/org/svc-a")
-            upsert_service_repo("proj1", "svc-b", "https://github.com/org/svc-b",
-                                provider="gitlab")
-            repos = list_service_repos("proj1")
+    def test_list_service_repos(self, pg_db):
+        from agent.intake.project_registry import upsert_service_repo, list_service_repos
+        upsert_service_repo("proj1", "svc-a", "https://github.com/org/svc-a")
+        upsert_service_repo("proj1", "svc-b", "https://github.com/org/svc-b",
+                            provider="gitlab")
+        repos = list_service_repos("proj1")
         assert len(repos) == 2
         names = [r["service"] for r in repos]
         assert "svc-a" in names
         assert "svc-b" in names
-        os.unlink(db_path)
 
-    def test_delete_service_repo(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import (
-                upsert_service_repo, delete_service_repo, get_service_repo
-            )
-            upsert_service_repo("default", "to-delete", "https://github.com/org/repo")
-            deleted = delete_service_repo("default", "to-delete")
-            repo = get_service_repo("default", "to-delete")
+    def test_delete_service_repo(self, pg_db):
+        from agent.intake.project_registry import (
+            upsert_service_repo, delete_service_repo, get_service_repo
+        )
+        upsert_service_repo("default", "to-delete", "https://github.com/org/repo")
+        deleted = delete_service_repo("default", "to-delete")
+        repo = get_service_repo("default", "to-delete")
         assert deleted is True
         assert repo is None
-        os.unlink(db_path)
 
-    def test_delete_nonexistent_returns_false(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import delete_service_repo
-            result = delete_service_repo("default", "nonexistent-svc")
+    def test_delete_nonexistent_returns_false(self, pg_db):
+        from agent.intake.project_registry import delete_service_repo
+        result = delete_service_repo("default", "nonexistent-svc")
         assert result is False
-        os.unlink(db_path)
 
-    def test_invalid_provider_raises(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo
-            with pytest.raises(ValueError, match="Provider"):
-                upsert_service_repo("default", "svc", "https://example.com",
-                                    provider="badprovider")
-        os.unlink(db_path)
+    def test_invalid_provider_raises(self, pg_db):
+        from agent.intake.project_registry import upsert_service_repo
+        with pytest.raises(ValueError, match="Provider"):
+            upsert_service_repo("default", "svc", "https://example.com",
+                                provider="badprovider")
 
-    def test_subpath_stored_correctly(self):
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo, get_service_repo
-            upsert_service_repo("default", "mono-svc", "https://github.com/org/mono",
-                                subpath="services/payment")
-            repo = get_service_repo("default", "mono-svc")
+    def test_subpath_stored_correctly(self, pg_db):
+        from agent.intake.project_registry import upsert_service_repo, get_service_repo
+        upsert_service_repo("default", "mono-svc", "https://github.com/org/mono",
+                            subpath="services/payment")
+        repo = get_service_repo("default", "mono-svc")
         assert repo["subpath"] == "services/payment"
-        os.unlink(db_path)
 
-    def test_project_isolation(self):
+    def test_project_isolation(self, pg_db):
         """Service mapping phải scope theo project_id."""
-        db_path = self._make_temp_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import (
-                upsert_service_repo, list_service_repos
-            )
-            upsert_service_repo("proj-a", "shared-svc", "https://github.com/org/repo-a")
-            upsert_service_repo("proj-b", "shared-svc", "https://github.com/org/repo-b")
-            repos_a = list_service_repos("proj-a")
-            repos_b = list_service_repos("proj-b")
+        from agent.intake.project_registry import (
+            upsert_service_repo, list_service_repos
+        )
+        upsert_service_repo("proj-a", "shared-svc", "https://github.com/org/repo-a")
+        upsert_service_repo("proj-b", "shared-svc", "https://github.com/org/repo-b")
+        repos_a = list_service_repos("proj-a")
+        repos_b = list_service_repos("proj-b")
         assert len(repos_a) == 1
         assert repos_a[0]["repo_url"] == "https://github.com/org/repo-a"
         assert len(repos_b) == 1
         assert repos_b[0]["repo_url"] == "https://github.com/org/repo-b"
-        os.unlink(db_path)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -467,47 +417,37 @@ class TestGetCodeDiffTool:
         assert is_read_only_tool("get_code_diff") is True
 
     @pytest.mark.asyncio
-    async def test_no_repo_mapping_degrade_safe(self):
+    async def test_no_repo_mapping_degrade_safe(self, pg_db):
         """Khi chưa cấu hình repo → Observation hợp lệ, status=no_repo_mapping."""
-        db_path = _make_temp_repos_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            tool = build_code_diff_tool("proj-no-repo")
-            obs = await tool.run({"service": "unknown-svc", "version": "v1.0"})
+        tool = build_code_diff_tool("proj-no-repo")
+        obs = await tool.run({"service": "unknown-svc", "version": "v1.0"})
         assert obs.summary.strip()
         assert obs.metadata.get("status") == "no_repo_mapping"
         assert obs.metadata.get("source") == "code_mcp"
         assert _validate(obs) == []
-        os.unlink(db_path)
 
     @pytest.mark.asyncio
-    async def test_no_repo_mapping_summary_helpful(self):
-        db_path = _make_temp_repos_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            tool = build_code_diff_tool("proj-no-repo")
-            obs = await tool.run({"service": "svc", "version": "v2"})
+    async def test_no_repo_mapping_summary_helpful(self, pg_db):
+        tool = build_code_diff_tool("proj-no-repo")
+        obs = await tool.run({"service": "svc", "version": "v2"})
         assert "chưa cấu hình" in obs.summary or "repo" in obs.summary.lower()
-        os.unlink(db_path)
 
     @pytest.mark.asyncio
-    async def test_repo_mapping_no_mcp_client(self):
+    async def test_repo_mapping_no_mcp_client(self, pg_db):
         """Repo đã cấu hình, chưa có MCP → metadata về repo_url, configured=True."""
-        db_path = _make_temp_repos_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo
-            upsert_service_repo("proj1", "payment-gw", "https://github.com/org/pay")
-            tool = build_code_diff_tool("proj1", code_mcp_client=None)
-            obs = await tool.run({"service": "payment-gw", "version": "v1.5.0"})
+        from agent.intake.project_registry import upsert_service_repo
+        upsert_service_repo("proj1", "payment-gw", "https://github.com/org/pay")
+        tool = build_code_diff_tool("proj1", code_mcp_client=None)
+        obs = await tool.run({"service": "payment-gw", "version": "v1.5.0"})
         assert obs.metadata.get("status") == "no_mcp_client"
         assert obs.metadata.get("source") == "code_mcp"
         assert obs.aggregates.get("configured") is True
         assert "https://github.com/org/pay" in (obs.aggregates.get("repo_url", "") or obs.summary)
         assert _validate(obs) == []
-        os.unlink(db_path)
 
     @pytest.mark.asyncio
-    async def test_with_mcp_client_distills_raw(self):
+    async def test_with_mcp_client_distills_raw(self, pg_db):
         """Có MCP client → gọi call_tool_text, distill output, trả Observation chưng cất."""
-        db_path = _make_temp_repos_db()
         raw_diff = (
             "diff --git a/config.yaml b/config.yaml\n"
             "@@ -1,3 +1,3 @@\n"
@@ -527,49 +467,40 @@ class TestGetCodeDiffTool:
         # M8: code_diff dùng call_tool_text thay vì diff_tool.run()
         mock_client.call_tool_text = AsyncMock(return_value=raw_diff)
 
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo
-            upsert_service_repo("proj1", "api-svc", "https://github.com/org/api")
-            tool = build_code_diff_tool("proj1", code_mcp_client=mock_client)
-            obs = await tool.run({"service": "api-svc", "version": "v2.1"})
+        from agent.intake.project_registry import upsert_service_repo
+        upsert_service_repo("proj1", "api-svc", "https://github.com/org/api")
+        tool = build_code_diff_tool("proj1", code_mcp_client=mock_client)
+        obs = await tool.run({"service": "api-svc", "version": "v2.1"})
 
         assert obs.metadata.get("source") == "code_mcp"
         risk = obs.aggregates.get("risk_signals", [])
         assert any("config-knob" in s for s in risk), f"Expected config-knob in {risk}"
         assert _validate(obs) == []
-        os.unlink(db_path)
 
     @pytest.mark.asyncio
-    async def test_mcp_error_degrade_safe(self):
+    async def test_mcp_error_degrade_safe(self, pg_db):
         """MCP raises → Observation status=mcp_error, không crash."""
-        db_path = _make_temp_repos_db()
-
         async def _mock_get_tools():
             raise ConnectionError("MCP server down")
 
         mock_client = MagicMock()
         mock_client.get_tools = _mock_get_tools
 
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.intake.project_registry import upsert_service_repo
-            upsert_service_repo("proj1", "svc", "https://github.com/org/svc")
-            tool = build_code_diff_tool("proj1", code_mcp_client=mock_client)
-            obs = await tool.run({"service": "svc", "version": "v1"})
+        from agent.intake.project_registry import upsert_service_repo
+        upsert_service_repo("proj1", "svc", "https://github.com/org/svc")
+        tool = build_code_diff_tool("proj1", code_mcp_client=mock_client)
+        obs = await tool.run({"service": "svc", "version": "v1"})
 
         assert obs.metadata.get("status") == "mcp_error"
         assert obs.metadata.get("source") == "code_mcp"
         assert _validate(obs) == []
-        os.unlink(db_path)
 
     @pytest.mark.asyncio
-    async def test_all_cases_have_code_mcp_source(self):
+    async def test_all_cases_have_code_mcp_source(self, pg_db):
         """Mọi nhánh trả về metadata source=code_mcp."""
-        db_path = _make_temp_repos_db()
-        with patch("agent.intake.project_registry.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            tool = build_code_diff_tool("proj-x")
-            obs = await tool.run({"service": "missing", "version": "v0"})
+        tool = build_code_diff_tool("proj-x")
+        obs = await tool.run({"service": "missing", "version": "v0"})
         assert obs.metadata.get("source") == "code_mcp"
-        os.unlink(db_path)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -827,37 +758,3 @@ class TestPrincipleGuard:
         assert "get_code_diff" not in loop_code, (
             "loop.py không được hardcode tên tool 'get_code_diff' — dùng catalog thay thế"
         )
-
-
-# ── DB helpers ────────────────────────────────────────────────────────────────
-
-def _make_temp_repos_db() -> str:
-    """Tạo temp DB với bảng service_repos cho TestGetCodeDiffTool."""
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE service_repos (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id     TEXT    NOT NULL DEFAULT 'default',
-            service        TEXT    NOT NULL,
-            provider       TEXT    NOT NULL DEFAULT 'github',
-            repo_url       TEXT    NOT NULL,
-            default_branch TEXT    NOT NULL DEFAULT 'main',
-            subpath        TEXT    NOT NULL DEFAULT '',
-            created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-            updated_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(project_id, service)
-        )
-    """)
-    conn.commit()
-    conn.close()
-    return path
-
-
-# ── DB helper (không dùng agent.storage.db để tránh side-effect) ─────────────
-
-def _open_sqlite(path: str):
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn

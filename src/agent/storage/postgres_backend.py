@@ -1,6 +1,6 @@
-"""Postgres backend — Tier-2 (Phase 11, Ngày 56).
+"""Postgres backend — backend duy nhất của hệ thống (Phase 11+).
 
-Surface giống sqlite_backend để mọi caller không đổi gì:
+Surface:
     name, IntegrityError, db_path(), connect()
 
 Shim đảm bảo:
@@ -23,7 +23,7 @@ import psycopg
 import psycopg_pool
 from psycopg.rows import dict_row
 
-# ── Surface (phải khớp sqlite_backend) ───────────────────────────────────────
+# ── Public surface ───────────────────────────────────────────────────────────
 
 name = "postgres"
 IntegrityError = psycopg.errors.IntegrityError

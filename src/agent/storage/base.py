@@ -1,8 +1,7 @@
 """Storage seam — hợp đồng backend + facade `Database`.
 
-Tier-1 (file này + sqlite_backend + db dispatcher): trừu tượng hóa backend để
-đổi DB rẻ về sau — runtime VẪN SQLite. Tier-2 (port query phân tích + backend
-Postgres chạy thật) là việc Future. Xem `docs/11-roadmap-phase-5.md` (Ngày 21).
+Backend duy nhất: Postgres (postgres_backend.py).
+db.py là dispatcher → open_db() trả PGConnection từ pool.
 
 Quy ước dùng:
 - Code CŨ: `open_db()` (db.py) → connection; dùng `conn.execute(...).fetchall()`.

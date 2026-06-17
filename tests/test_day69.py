@@ -11,9 +11,6 @@ Cổng kiểm:
 from __future__ import annotations
 
 import asyncio
-import sqlite3
-import tempfile
-import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -262,42 +259,28 @@ class TestQueueStatusFailed:
         # Status phải được set sau try block (trong finally), không phải cố định
         assert 'status = "done"' in src or "status='done'" in src
 
-    def test_reload_pending_handles_running_status(self):
+    def test_reload_pending_handles_running_status(self, pg_db):
         """_reload_pending phải xử lý trường hợp rows có status='running' (behavior test)."""
         from agent.intake import investigation_queue as iq
+        from agent.storage.db import open_db
 
-        db_path = None
+        conn = open_db()
         try:
-            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-                db_path = f.name
-
-            conn = sqlite3.connect(db_path)
             conn.execute(
-                "CREATE TABLE investigation_queue "
-                "(dedup_key TEXT PRIMARY KEY, payload TEXT, status TEXT, "
-                "step_budget INTEGER, created_at TEXT, updated_at TEXT)"
-            )
-            conn.execute(
-                "INSERT INTO investigation_queue VALUES (?,?,?,?,?,?)",
-                ("key1", '{"service":"svc"}', "running", 10, "2024-01-01", "2024-01-01"),
+                "INSERT INTO investigation_queue (id, project_id, payload, status, enqueued_at) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                ("key1-reload-run", "default", '{"service":"svc"}', "running",
+                 "2024-01-01T00:00:00+00:00"),
             )
             conn.commit()
+        finally:
             conn.close()
 
-            # _reload_pending phải không crash — kể cả khi DB có 'running' rows
-            import sqlite3 as _sq3
-            with patch("agent.storage.db.open_db",
-                       side_effect=lambda: _sq3.connect(db_path)):
-                try:
-                    iq._reload_pending()
-                except Exception:
-                    pass  # Có thể raise vì queue chưa init — behavior là không crash hard
-        finally:
-            if db_path:
-                try:
-                    os.unlink(db_path)
-                except Exception:
-                    pass
+        # _reload_pending phải không crash — kể cả khi DB có 'running' rows
+        try:
+            iq._reload_pending()
+        except Exception:
+            pass  # Có thể raise vì queue chưa init — behavior là không crash hard
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -307,47 +290,26 @@ class TestQueueStatusFailed:
 class TestEmitTraceProjectIdBehavior:
     """Thay test_run_loop_calls_emit_trace_with_project_id (AST) bằng behavior test."""
 
-    def test_emit_trace_writes_project_id(self):
+    def test_emit_trace_writes_project_id(self, pg_db):
         """_emit_trace ghi project_id đúng vào DB (behavior, không AST)."""
         from agent.engine.loop import _emit_trace
-        import sqlite3
+        from agent.storage.db import open_db
 
-        db_path = None
-        try:
-            with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-                db_path = f.name
+        _emit_trace("inv-123-pg", 1, "tool_call", {"tool": "test"}, project_id="proj-abc")
+        _emit_trace("inv-123-pg", 2, "tool_result", {"tool": "test"}, project_id="proj-abc")
 
-            setup = sqlite3.connect(db_path)
-            setup.execute(
-                "CREATE TABLE trace_events "
-                "(investigation_id TEXT, step INTEGER, timestamp TEXT, "
-                "event_type TEXT, payload TEXT, project_id TEXT)"
-            )
-            setup.commit()
-            setup.close()
+        conn = open_db()
+        rows = conn.execute(
+            "SELECT event_type, project_id FROM trace_events WHERE investigation_id=%s",
+            ("inv-123-pg",)
+        ).fetchall()
+        conn.close()
 
-            with patch("agent.engine.loop.open_db",
-                       side_effect=lambda: sqlite3.connect(db_path)):
-                _emit_trace("inv-123", 1, "tool_call", {"tool": "test"}, project_id="proj-abc")
-                _emit_trace("inv-123", 2, "tool_result", {"tool": "test"}, project_id="proj-abc")
-
-            verify = sqlite3.connect(db_path)
-            rows = verify.execute(
-                "SELECT event_type, project_id FROM trace_events WHERE investigation_id='inv-123'"
-            ).fetchall()
-            verify.close()
-
-            event_types = {r[0] for r in rows}
-            assert "tool_call" in event_types
-            assert "tool_result" in event_types
-            for _, pid in rows:
-                assert pid == "proj-abc", f"project_id phải là proj-abc (got {pid})"
-        finally:
-            if db_path:
-                try:
-                    os.unlink(db_path)
-                except Exception:
-                    pass
+        event_types = {r["event_type"] for r in rows}
+        assert "tool_call" in event_types
+        assert "tool_result" in event_types
+        for r in rows:
+            assert r["project_id"] == "proj-abc", f"project_id phải là proj-abc (got {r['project_id']})"
 
     def test_loop_source_has_project_id_in_emit_calls(self):
         """loop.py phải truyền project_id=state.project_id vào _emit_trace (source check nhẹ)."""

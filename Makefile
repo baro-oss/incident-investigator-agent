@@ -60,8 +60,6 @@ init: db
 
 db:
 	$(PYTHON) data/init_db.py
-	$(PYTHON) data/migrate_projects.py
-	$(PYTHON) data/migrate_fintech.py
 
 seed:
 	$(PYTHON) data/seed_scenario1.py

@@ -10,8 +10,7 @@ services:
     environment:
       PORT: "8080"
     volumes:
-      # Persist SQLite DB khi dev (PG prod không cần volume này)
-      - ./data:/app/data
+      - ./data:/app/data  # catalog + seed scripts (không phải DB)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
@@ -33,9 +32,9 @@ services:
     profiles:
       - mcp  # chỉ bật khi: docker compose --profile mcp up
 
-  # Postgres local dev (Phase 11 Tier-2)
+  # Postgres local dev
   # Bật: docker compose --profile postgres up -d postgres
-  # Sau đó: DB_BACKEND=postgres DATABASE_URL=postgresql://agent:agent@localhost/investigation python data/init_db.py
+  # Sau đó: DATABASE_URL=postgresql://agent:agent@localhost/investigation python data/init_db.py
   postgres:
     image: postgres:16-alpine
     environment:

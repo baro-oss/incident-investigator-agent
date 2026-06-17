@@ -10,8 +10,6 @@ Tests for T1: Infra + contract guard (Ngày 40).
 from __future__ import annotations
 
 import os
-import sqlite3
-import tempfile
 import uuid
 from unittest.mock import patch
 
@@ -24,13 +22,6 @@ import pytest
 
 def _unique_id() -> str:
     return str(uuid.uuid4())[:8]
-
-
-def _open_temp_db(path: str):
-    """Mở temp DB với row_factory và schema tối thiểu."""
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -174,9 +165,8 @@ class TestSchedulerCRUD:
         finally:
             self._cleanup(trigger_id)
 
-    def test_fire_due_trigger_enqueues(self, tmp_path):
+    def test_fire_due_trigger_enqueues(self):
         """_fire_due_triggers fires past-due triggers without crashing."""
-        from agent.intake.investigation_queue import _persist_one
         import json
 
         # Inject a past-due trigger into the DB

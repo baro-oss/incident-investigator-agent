@@ -7,11 +7,8 @@ import asyncio
 import json
 import logging
 import os
-import sqlite3
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -57,59 +54,37 @@ class TestB2EmitTraceProjectId:
         assert tool_call_with_project_id, "tool_call emit_trace thiếu project_id= kwarg"
         assert tool_result_with_project_id, "tool_result emit_trace thiếu project_id= kwarg"
 
-    def test_emit_trace_writes_project_id_to_db(self):
+    def test_emit_trace_writes_project_id_to_db(self, pg_db):
         """_emit_trace phải ghi project_id đúng vào DB."""
         from agent.engine.loop import _emit_trace
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-        try:
-            # Setup schema
-            setup = sqlite3.connect(db_path)
-            setup.execute(
-                "CREATE TABLE trace_events "
-                "(investigation_id TEXT, step INTEGER, timestamp TEXT, "
-                "event_type TEXT, payload TEXT, project_id TEXT)"
-            )
-            setup.commit()
-            setup.close()
-            # _emit_trace mở và đóng conn tự (open_db → close); dùng factory để trả fresh conn mỗi lần
-            with patch("agent.engine.loop.open_db", side_effect=lambda: sqlite3.connect(db_path)):
-                _emit_trace("inv-123", 1, "tool_call", {"tool": "test"}, project_id="proj-abc")
-            verify = sqlite3.connect(db_path)
-            row = verify.execute(
-                "SELECT project_id FROM trace_events WHERE investigation_id='inv-123'"
-            ).fetchone()
-            verify.close()
-            assert row is not None
-            assert row[0] == "proj-abc"
-        finally:
-            os.unlink(db_path)
+        from agent.storage.db import open_db
 
-    def test_emit_trace_default_project_id(self):
+        _emit_trace("inv-123-day59", 1, "tool_call", {"tool": "test"}, project_id="proj-abc")
+
+        conn = open_db()
+        row = conn.execute(
+            "SELECT project_id FROM trace_events WHERE investigation_id=%s",
+            ("inv-123-day59",)
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row["project_id"] == "proj-abc"
+
+    def test_emit_trace_default_project_id(self, pg_db):
         """Khi không truyền project_id → ghi 'default'."""
         from agent.engine.loop import _emit_trace
-        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
-            db_path = f.name
-        try:
-            setup = sqlite3.connect(db_path)
-            setup.execute(
-                "CREATE TABLE trace_events "
-                "(investigation_id TEXT, step INTEGER, timestamp TEXT, "
-                "event_type TEXT, payload TEXT, project_id TEXT)"
-            )
-            setup.commit()
-            setup.close()
-            with patch("agent.engine.loop.open_db", side_effect=lambda: sqlite3.connect(db_path)):
-                _emit_trace("inv-default", 0, "investigation_start", {})
-            verify = sqlite3.connect(db_path)
-            row = verify.execute(
-                "SELECT project_id FROM trace_events WHERE investigation_id='inv-default'"
-            ).fetchone()
-            verify.close()
-            assert row is not None
-            assert row[0] == "default"
-        finally:
-            os.unlink(db_path)
+        from agent.storage.db import open_db
+
+        _emit_trace("inv-default-day59", 0, "investigation_start", {})
+
+        conn = open_db()
+        row = conn.execute(
+            "SELECT project_id FROM trace_events WHERE investigation_id=%s",
+            ("inv-default-day59",)
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row["project_id"] == "default"
 
 
 # ── JSON log formatting ───────────────────────────────────────────────────────
@@ -251,65 +226,54 @@ class TestHealthDeepEndpoint:
 class TestTraceRetention:
     """Kiểm tra _purge_old_traces xóa đúng hàng cũ."""
 
-    def _make_db(self) -> tuple:
-        """Tạo DB SQLite tạm với trace_events."""
-        f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-        db_path = f.name
-        f.close()
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            "CREATE TABLE trace_events "
-            "(id INTEGER PRIMARY KEY, investigation_id TEXT, "
-            "step INTEGER, timestamp TEXT, event_type TEXT, payload TEXT, project_id TEXT)"
-        )
-        conn.commit()
-        return conn, db_path
-
-    def _insert_event(self, conn: sqlite3.Connection, ts: str, inv_id: str = "inv-1") -> None:
+    def _insert_event(self, ts: str, inv_id: str = "inv-1") -> None:
+        from agent.storage.db import open_db
+        conn = open_db()
         conn.execute(
             "INSERT INTO trace_events (investigation_id, step, timestamp, event_type, payload, project_id) "
-            "VALUES (?,?,?,?,?,?)",
+            "VALUES (%s, %s, %s, %s, %s, %s)",
             (inv_id, 0, ts, "test", "{}", "default"),
         )
         conn.commit()
+        conn.close()
 
-    def test_purge_removes_old_events(self):
+    def test_purge_removes_old_events(self, pg_db):
         from agent.intake.server import _purge_old_traces
-        conn, db_path = self._make_db()
+        from agent.storage.db import open_db
         # Cũ: 40 ngày trước
         old_ts = "2020-01-01T00:00:00+00:00"
-        self._insert_event(conn, old_ts, "old")
+        self._insert_event(old_ts, "old-purge-test")
         # Mới: hôm nay
         new_ts = datetime.now(timezone.utc).isoformat()
-        self._insert_event(conn, new_ts, "new")
+        self._insert_event(new_ts, "new-purge-test")
+
+        deleted = _purge_old_traces(retention_days=30)
+
+        conn = open_db()
+        remaining = conn.execute(
+            "SELECT investigation_id FROM trace_events WHERE investigation_id IN (%s, %s)",
+            ("old-purge-test", "new-purge-test")
+        ).fetchall()
         conn.close()
-
-        with patch("agent.storage.db.open_db", side_effect=lambda: sqlite3.connect(db_path)):
-            deleted = _purge_old_traces(retention_days=30)
-
-        conn2 = sqlite3.connect(db_path)
-        remaining = conn2.execute("SELECT investigation_id FROM trace_events").fetchall()
-        conn2.close()
-        os.unlink(db_path)
         assert deleted >= 1
-        ids = [r[0] for r in remaining]
-        assert "old" not in ids
-        assert "new" in ids
+        ids = [r["investigation_id"] for r in remaining]
+        assert "old-purge-test" not in ids
+        assert "new-purge-test" in ids
 
-    def test_purge_returns_zero_when_nothing_old(self):
+    def test_purge_returns_zero_when_nothing_old(self, pg_db):
         from agent.intake.server import _purge_old_traces
-        conn, db_path = self._make_db()
+        from agent.storage.db import open_db
         new_ts = datetime.now(timezone.utc).isoformat()
-        self._insert_event(conn, new_ts, "fresh")
+        self._insert_event(new_ts, "fresh-purge-test")
+
+        deleted = _purge_old_traces(retention_days=30)
+
+        conn = open_db()
+        count = conn.execute(
+            "SELECT COUNT(*) as cnt FROM trace_events WHERE investigation_id=%s",
+            ("fresh-purge-test",)
+        ).fetchone()["cnt"]
         conn.close()
-
-        with patch("agent.storage.db.open_db", side_effect=lambda: sqlite3.connect(db_path)):
-            deleted = _purge_old_traces(retention_days=30)
-
-        conn2 = sqlite3.connect(db_path)
-        count = conn2.execute("SELECT COUNT(*) FROM trace_events").fetchone()[0]
-        conn2.close()
-        os.unlink(db_path)
         assert deleted == 0
         assert count == 1
 
@@ -319,19 +283,15 @@ class TestTraceRetention:
             result = _purge_old_traces(retention_days=30)
         assert result == 0  # không crash, trả 0
 
-    def test_env_retention_days_honored(self):
+    def test_env_retention_days_honored(self, pg_db):
         """TRACE_RETENTION_DAYS env được đọc đúng."""
         from agent.intake.server import _purge_old_traces
-        conn, db_path = self._make_db()
         from datetime import timedelta
         ts_3d = (datetime.now(timezone.utc) - timedelta(days=3)).isoformat()
-        self._insert_event(conn, ts_3d, "3dold")
-        conn.close()
+        self._insert_event(ts_3d, "3dold-purge-test")
 
-        with patch("agent.storage.db.open_db", side_effect=lambda: sqlite3.connect(db_path)):
-            deleted = _purge_old_traces(retention_days=2)
+        deleted = _purge_old_traces(retention_days=2)
 
-        os.unlink(db_path)
         assert deleted >= 1
 
 

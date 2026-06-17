@@ -4,9 +4,6 @@ Tests for E8: Engine calibration (calibration.py).
 Unit tests — không cần API key, không cần real LLM.
 Test downgrade logic với dữ liệu được seeded.
 """
-import sqlite3
-import tempfile
-import os
 import pytest
 
 from agent.engine.state import Verdict
@@ -25,24 +22,15 @@ def _make_verdict(confidence: str) -> Verdict:
     )
 
 
-def _seed_db(path: str, rows: list) -> None:
-    """Seed eval_results rows: [(scenario, correct, confidence), ...]"""
-    conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS eval_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id TEXT, scenario TEXT, run_number INTEGER,
-            correct INTEGER, confidence TEXT,
-            recall_at_1 INTEGER, steps_taken INTEGER,
-            hallucination INTEGER, token_total INTEGER, elapsed_s REAL,
-            created_at TEXT, provider TEXT, model TEXT
-        )
-    """)
+def _seed_db_pg(rows: list) -> None:
+    """Seed eval_results rows into pg_db: [(scenario, correct, confidence), ...]"""
+    from agent.storage.db import open_db
+    conn = open_db()
     for scenario, correct, confidence in rows:
         conn.execute(
             "INSERT INTO eval_results (run_id, scenario, run_number, correct, confidence, "
             "recall_at_1, steps_taken, hallucination, token_total, elapsed_s, created_at) "
-            "VALUES (?, ?, ?, ?, ?, 0, 5, 0, 1000, 1.0, datetime('now'))",
+            "VALUES (%s, %s, %s, %s, %s, 0, 5, 0, 1000, 1.0, NOW())",
             ("run1", scenario, 1, int(correct), confidence),
         )
     conn.commit()
@@ -148,21 +136,20 @@ class TestApplyCalibration:
         assert result.confidence == "insufficient"
 
 
-# ── Integration: load_calibration_stats from temp DB ─────────────────────────
+# ── Integration: load_calibration_stats from pg_db ─────────────────────────
 
 class TestLoadCalibrationStats:
-    """Test loading calibration stats from a real SQLite DB."""
+    """Test loading calibration stats from a real Postgres DB."""
 
-    def test_loads_high_accuracy(self, tmp_path):
+    def test_loads_high_accuracy(self, pg_db):
         from agent.engine.calibration import load_calibration_stats, invalidate_cache
+        from agent.storage.db import open_db
         invalidate_cache()
-        db_path = str(tmp_path / "test.db")
-        _seed_db(db_path, [
+        _seed_db_pg([
             ("s1", True, "high"), ("s1", True, "high"), ("s1", True, "high"),
             ("s1", True, "high"), ("s1", True, "high"),  # 5 high-accuracy runs
         ])
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        conn = open_db()
         stats = load_calibration_stats(db=conn)
         conn.close()
         invalidate_cache()
@@ -170,29 +157,26 @@ class TestLoadCalibrationStats:
         assert stats["high"]["count"] == 5
         assert stats["high"]["accuracy"] == 1.0
 
-    def test_loads_low_accuracy(self, tmp_path):
+    def test_loads_low_accuracy(self, pg_db):
         from agent.engine.calibration import load_calibration_stats, invalidate_cache
+        from agent.storage.db import open_db
         invalidate_cache()
-        db_path = str(tmp_path / "test.db")
-        _seed_db(db_path, [
+        _seed_db_pg([
             ("s1", False, "high"), ("s1", False, "high"), ("s1", False, "high"),
             ("s1", False, "high"), ("s1", False, "high"), ("s1", False, "high"),
         ])
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        conn = open_db()
         stats = load_calibration_stats(db=conn)
         conn.close()
         invalidate_cache()
         assert stats["high"]["accuracy"] == 0.0
 
-    def test_empty_db_returns_empty_dict(self, tmp_path):
+    def test_empty_db_returns_empty_dict(self, pg_db):
         from agent.engine.calibration import load_calibration_stats, invalidate_cache
+        from agent.storage.db import open_db
         invalidate_cache()
-        db_path = str(tmp_path / "test.db")
-        conn = sqlite3.connect(db_path)
-        conn.execute("CREATE TABLE eval_results (confidence TEXT, correct INTEGER)")
-        conn.commit()
-        conn.row_factory = sqlite3.Row
+        # No rows seeded — pg_db schema has eval_results table but it's empty
+        conn = open_db()
         stats = load_calibration_stats(db=conn)
         conn.close()
         invalidate_cache()
@@ -204,16 +188,15 @@ class TestLoadCalibrationStats:
 class TestCalibrationPipeline:
     """End-to-end: bad historical accuracy → verdict gets downgraded."""
 
-    def test_bad_history_downgrades_verdict(self, tmp_path):
+    def test_bad_history_downgrades_verdict(self, pg_db):
         from agent.engine.calibration import (
             load_calibration_stats, apply_calibration, invalidate_cache,
         )
+        from agent.storage.db import open_db
         invalidate_cache()
-        db_path = str(tmp_path / "test.db")
         # Seed: 10 high-confidence runs, only 4 correct (40% < 80% threshold)
-        _seed_db(db_path, [("s1", i < 4, "high") for i in range(10)])
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        _seed_db_pg([("s1", i < 4, "high") for i in range(10)])
+        conn = open_db()
         stats = load_calibration_stats(db=conn)
         conn.close()
         invalidate_cache()
@@ -223,16 +206,15 @@ class TestCalibrationPipeline:
         assert result.confidence == "medium"
         assert result.calibrated_confidence == "medium"
 
-    def test_good_history_keeps_verdict(self, tmp_path):
+    def test_good_history_keeps_verdict(self, pg_db):
         from agent.engine.calibration import (
             load_calibration_stats, apply_calibration, invalidate_cache,
         )
+        from agent.storage.db import open_db
         invalidate_cache()
-        db_path = str(tmp_path / "test.db")
         # Seed: 10 high-confidence runs, 9 correct (90% >= 80% threshold)
-        _seed_db(db_path, [("s1", i < 9, "high") for i in range(10)])
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        _seed_db_pg([("s1", i < 9, "high") for i in range(10)])
+        conn = open_db()
         stats = load_calibration_stats(db=conn)
         conn.close()
         invalidate_cache()

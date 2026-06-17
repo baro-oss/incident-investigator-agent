@@ -1,48 +1,11 @@
 """
 Tool unit tests (Ngày 34): get_metrics, get_error_breakdown.
 
-Dùng temp SQLite DB với dữ liệu seed nhỏ — không phụ thuộc DB thật.
+Dùng pg_db fixture (schema-per-test Postgres isolation).
 """
 from __future__ import annotations
 
-import sqlite3
-
 import pytest
-
-# ---------------------------------------------------------------------------
-# Fixture: temp DB với schema metrics/logs/service_catalog
-# ---------------------------------------------------------------------------
-
-TOOLS_SCHEMA = """
-PRAGMA journal_mode=WAL;
-
-CREATE TABLE IF NOT EXISTS service_catalog (
-    service               TEXT PRIMARY KEY,
-    baseline_latency_p99  REAL NOT NULL DEFAULT 100.0,
-    baseline_error_rate   REAL NOT NULL DEFAULT 0.5
-);
-
-CREATE TABLE IF NOT EXISTS metrics (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp    TEXT NOT NULL,
-    scenario     TEXT NOT NULL,
-    service      TEXT NOT NULL,
-    metric_name  TEXT NOT NULL,
-    value        REAL NOT NULL,
-    is_baseline  INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS logs (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp  TEXT NOT NULL,
-    scenario   TEXT NOT NULL,
-    service    TEXT NOT NULL,
-    level      TEXT NOT NULL,
-    message    TEXT NOT NULL,
-    error_type TEXT,
-    trace_id   TEXT
-);
-"""
 
 # Seed: service 'payment-gateway', scenario1, 14:00-15:00
 _METRIC_ROWS = [
@@ -67,14 +30,14 @@ _LOG_ROWS = [
 
 
 @pytest.fixture
-def tools_db(tmp_path, monkeypatch):
-    db_file = tmp_path / "test_tools.db"
-    conn = sqlite3.connect(str(db_file))
-    conn.executescript(TOOLS_SCHEMA)
+def tools_db(pg_db):
+    # pg_db already created schema + tables + patched env
+    from agent.storage.db import open_db
+    conn = open_db()
 
     # Seed service_catalog
     conn.execute(
-        "INSERT INTO service_catalog VALUES (?, ?, ?)",
+        "INSERT INTO service_catalog VALUES (%s, %s, %s)",
         ("payment-gateway", 100.0, 0.5),
     )
 
@@ -82,7 +45,7 @@ def tools_db(tmp_path, monkeypatch):
     for row in _METRIC_ROWS:
         conn.execute(
             "INSERT INTO metrics (timestamp, scenario, service, metric_name, value, is_baseline)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            " VALUES (%s, %s, %s, %s, %s, %s)",
             row,
         )
 
@@ -90,15 +53,13 @@ def tools_db(tmp_path, monkeypatch):
     for row in _LOG_ROWS:
         conn.execute(
             "INSERT INTO logs (timestamp, scenario, service, level, message, error_type)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
+            " VALUES (%s, %s, %s, %s, %s, %s)",
             row,
         )
 
     conn.commit()
     conn.close()
-
-    monkeypatch.setenv("DB_PATH", str(db_file))
-    yield str(db_file)
+    return pg_db
 
 
 # ---------------------------------------------------------------------------

@@ -3,18 +3,9 @@ Coverage tests cho dashboard/queries.py — các hàm query DB.
 """
 from __future__ import annotations
 
-import sqlite3
-import tempfile
-import os
 from unittest.mock import patch
 
 import pytest
-
-
-def _open_sqlite(path: str):
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 # ── get_cost_data ─────────────────────────────────────────────────────────────

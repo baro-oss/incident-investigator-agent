@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import math
 import os
-import sqlite3
-import tempfile
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -73,99 +71,80 @@ class TestDecayWeight:
 # B. get_service_priors — sort theo weighted_count
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _make_patterns_db(rows: list) -> str:
+def _make_patterns_db(rows: list):
     """
     rows: list of (root_cause_type, count, avg_steps, updated_at_days_ago)
-    Trả path của temp DB.
+    Seeds investigation_patterns in pg_db and returns an open connection.
+    pg_db fixture must be active.
     """
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE investigation_patterns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id TEXT NOT NULL,
-            service TEXT NOT NULL,
-            error_pattern TEXT NOT NULL,
-            tool_sequence TEXT NOT NULL DEFAULT '[]',
-            root_cause_type TEXT NOT NULL DEFAULT 'unknown',
-            avg_steps REAL NOT NULL DEFAULT 3.0,
-            count INTEGER NOT NULL DEFAULT 1,
-            updated_at TEXT NOT NULL
-        )
-    """)
+    from agent.storage.db import open_db
+    conn = open_db()
+    conn.execute("DELETE FROM investigation_patterns")
     for rct, count, avg_steps, days_ago in rows:
         conn.execute(
             "INSERT INTO investigation_patterns "
             "(project_id, service, error_pattern, root_cause_type, avg_steps, count, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
             ("proj", "svc", f"pattern-{rct}", rct, avg_steps, count, _iso(days_ago))
         )
     conn.commit()
-    conn.close()
-    return path
+    return conn
 
 
 class TestGetServicePriorsDecay:
 
-    def test_newer_pattern_ranked_higher_same_count(self):
+    def test_newer_pattern_ranked_higher_same_count(self, pg_db):
         """Cùng count=5 nhưng pattern A mới hơn B → A đứng trước."""
-        db_path = _make_patterns_db([
-            ("deploy_bug", 5, 3.0, 60),   # B: cũ 60 ngày
+        conn = _make_patterns_db([
+            ("deploy_bug", 5, 3.0, 60),    # B: cũ 60 ngày
             ("pool_exhaustion", 5, 3.0, 1), # A: mới 1 ngày
         ])
-        with patch("agent.memory.patterns.open_db", side_effect=lambda: _open_sqlite(db_path)):
+        with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("proj", "svc")
         assert result[0]["root_cause_type"] == "pool_exhaustion", \
             f"Pattern mới phải đứng trước, got {result[0]['root_cause_type']}"
-        os.unlink(db_path)
 
-    def test_weighted_count_present_in_result(self):
-        db_path = _make_patterns_db([("deploy_bug", 3, 3.0, 0)])
-        with patch("agent.memory.patterns.open_db", side_effect=lambda: _open_sqlite(db_path)):
+    def test_weighted_count_present_in_result(self, pg_db):
+        conn = _make_patterns_db([("deploy_bug", 3, 3.0, 0)])
+        with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("proj", "svc")
         assert "weighted_count" in result[0]
-        os.unlink(db_path)
 
-    def test_today_weighted_count_equals_count(self):
+    def test_today_weighted_count_equals_count(self, pg_db):
         """Pattern updated hôm nay → weighted_count ≈ count (decay ≈ 1.0)."""
-        db_path = _make_patterns_db([("deploy_bug", 4, 3.0, 0)])
-        with patch("agent.memory.patterns.open_db", side_effect=lambda: _open_sqlite(db_path)):
+        conn = _make_patterns_db([("deploy_bug", 4, 3.0, 0)])
+        with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("proj", "svc")
         wc = result[0]["weighted_count"]
         assert abs(wc - 4.0) < 0.1, f"weighted_count phải ≈ count=4, got {wc}"
-        os.unlink(db_path)
 
-    def test_old_pattern_lower_weighted_count(self):
+    def test_old_pattern_lower_weighted_count(self, pg_db):
         """Pattern 60 ngày tuổi (2× half-life) → weighted_count ≈ count × 0.25."""
-        db_path = _make_patterns_db([("deploy_bug", 8, 3.0, _HALF_LIFE_DAYS * 2)])
-        with patch("agent.memory.patterns.open_db", side_effect=lambda: _open_sqlite(db_path)):
+        conn = _make_patterns_db([("deploy_bug", 8, 3.0, _HALF_LIFE_DAYS * 2)])
+        with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("proj", "svc")
         wc = result[0]["weighted_count"]
         assert wc < 8.0 * 0.4, f"weighted_count của pattern cũ phải < 40% count, got {wc}"
-        os.unlink(db_path)
 
-    def test_empty_returns_empty(self):
-        db_path = _make_patterns_db([])
-        with patch("agent.memory.patterns.open_db", side_effect=lambda: _open_sqlite(db_path)):
+    def test_empty_returns_empty(self, pg_db):
+        conn = _make_patterns_db([])
+        with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("proj", "svc")
         assert result == []
-        os.unlink(db_path)
 
-    def test_limit_respected(self):
-        db_path = _make_patterns_db([
+    def test_limit_respected(self, pg_db):
+        conn = _make_patterns_db([
             (f"type_{i}", 1, 3.0, i) for i in range(10)
         ])
-        with patch("agent.memory.patterns.open_db", side_effect=lambda: _open_sqlite(db_path)):
+        with patch("agent.memory.patterns.open_db", return_value=conn):
             from agent.memory.patterns import get_service_priors
             result = get_service_priors("proj", "svc", limit=3)
         assert len(result) <= 3
-        os.unlink(db_path)
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -309,108 +288,53 @@ class TestEvalHarness:
 # E. get_eval_comparison_data — group by prior_flag
 # ═════════════════════════════════════════════════════════════════════════════
 
-def _make_eval_db(rows: list) -> str:
-    """
-    rows: list of (prior_flag, steps_taken, specificity_score, correct)
-    """
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    conn = sqlite3.connect(path)
-    conn.execute("""
-        CREATE TABLE eval_results (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            run_id TEXT NOT NULL DEFAULT 'r1',
-            scenario TEXT NOT NULL DEFAULT 's1',
-            run_number INTEGER NOT NULL DEFAULT 1,
-            correct INTEGER NOT NULL DEFAULT 1,
-            confidence TEXT DEFAULT 'high',
-            recall_at_1 INTEGER DEFAULT 1,
-            steps_taken INTEGER NOT NULL DEFAULT 3,
-            hallucination INTEGER NOT NULL DEFAULT 0,
-            token_total INTEGER NOT NULL DEFAULT 0,
-            elapsed_s REAL DEFAULT 0.1,
-            provider TEXT DEFAULT 'mock',
-            model TEXT DEFAULT 'mock',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            specificity_score REAL,
-            prior_flag INTEGER NOT NULL DEFAULT 0
-        )
-    """)
+def _seed_eval_rows(rows: list) -> None:
+    """Insert eval_results rows vào Postgres test schema hiện tại."""
+    from agent.storage.db import open_db
+    conn = open_db()
     for prior_flag, steps, spec, correct in rows:
         conn.execute(
             "INSERT INTO eval_results (prior_flag, steps_taken, specificity_score, correct) "
             "VALUES (?, ?, ?, ?)",
-            (prior_flag, steps, spec, correct)
+            (prior_flag, steps, spec, correct),
         )
     conn.commit()
     conn.close()
-    return path
 
 
 class TestEvalComparisonData:
 
-    def test_empty_db_returns_none_for_both(self):
-        db_path = _make_eval_db([])
-        with patch("agent.dashboard.queries.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.dashboard.queries import get_eval_comparison_data
-            result = get_eval_comparison_data()
+    def test_empty_db_returns_none_for_both(self, pg_db):
+        from agent.dashboard.queries import get_eval_comparison_data
+        result = get_eval_comparison_data()
         assert result["with_prior"] is None
         assert result["no_prior"] is None
-        os.unlink(db_path)
 
-    def test_with_prior_grouped_correctly(self):
-        db_path = _make_eval_db([
-            (0, 3, 0.75, 1),   # with_prior
-            (0, 5, 0.50, 1),   # with_prior
-        ])
-        with patch("agent.dashboard.queries.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.dashboard.queries import get_eval_comparison_data
-            result = get_eval_comparison_data()
+    def test_with_prior_grouped_correctly(self, pg_db):
+        _seed_eval_rows([(0, 3, 0.75, 1), (0, 5, 0.50, 1)])
+        from agent.dashboard.queries import get_eval_comparison_data
+        result = get_eval_comparison_data()
         assert result["with_prior"] is not None
         assert result["with_prior"]["n"] == 2
         assert result["no_prior"] is None
-        os.unlink(db_path)
 
-    def test_no_prior_grouped_correctly(self):
-        db_path = _make_eval_db([
-            (1, 4, 0.25, 1),   # no_prior
-            (1, 6, 0.00, 0),   # no_prior
-        ])
-        with patch("agent.dashboard.queries.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.dashboard.queries import get_eval_comparison_data
-            result = get_eval_comparison_data()
+    def test_no_prior_grouped_correctly(self, pg_db):
+        _seed_eval_rows([(1, 4, 0.25, 1), (1, 6, 0.00, 0)])
+        from agent.dashboard.queries import get_eval_comparison_data
+        result = get_eval_comparison_data()
         assert result["no_prior"] is not None
         assert result["no_prior"]["n"] == 2
         assert result["with_prior"] is None
-        os.unlink(db_path)
 
-    def test_both_groups_present(self):
-        db_path = _make_eval_db([
-            (0, 3, 0.75, 1),
-            (1, 5, 0.25, 1),
-        ])
-        with patch("agent.dashboard.queries.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.dashboard.queries import get_eval_comparison_data
-            result = get_eval_comparison_data()
+    def test_both_groups_present(self, pg_db):
+        _seed_eval_rows([(0, 3, 0.75, 1), (1, 5, 0.25, 1)])
+        from agent.dashboard.queries import get_eval_comparison_data
+        result = get_eval_comparison_data()
         assert result["with_prior"] is not None
         assert result["no_prior"] is not None
-        os.unlink(db_path)
 
-    def test_avg_steps_computed(self):
-        db_path = _make_eval_db([
-            (0, 3, 0.5, 1),
-            (0, 5, 0.5, 1),
-        ])
-        with patch("agent.dashboard.queries.open_db", side_effect=lambda: _open_sqlite(db_path)):
-            from agent.dashboard.queries import get_eval_comparison_data
-            result = get_eval_comparison_data()
+    def test_avg_steps_computed(self, pg_db):
+        _seed_eval_rows([(0, 3, 0.5, 1), (0, 5, 0.5, 1)])
+        from agent.dashboard.queries import get_eval_comparison_data
+        result = get_eval_comparison_data()
         assert result["with_prior"]["avg_steps"] == pytest.approx(4.0)
-        os.unlink(db_path)
-
-
-# ── DB helpers ────────────────────────────────────────────────────────────────
-
-def _open_sqlite(path: str):
-    conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    return conn
