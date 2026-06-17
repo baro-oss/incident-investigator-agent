@@ -36,8 +36,8 @@ curl -s localhost:8080/health | jq '{status, db_backend, llm_provider}'
 ```
 
 > **MCP telemetry** và **GitLab code MCP** đã chạy thường trực trên **AgentBase** (không cần local):
-> - Telemetry: `https://endpoint-296f387c-…vngcloud.vn/mcp`
-> - GitLab Code: `https://endpoint-a956ca82-…vngcloud.vn/mcp`
+> - Telemetry: `https://<your-mcp-telemetry-endpoint>.agentbase-runtime.aiplatform.vngcloud.vn/mcp`
+> - GitLab Code: `https://<your-mcp-gitlab-endpoint>.agentbase-runtime.aiplatform.vngcloud.vn/mcp`
 
 ---
 
@@ -271,7 +271,7 @@ removed-error-handling (leeway + try/except bị xoá) → **Verdict HIGH**.
 |---|---|
 | Main app | `http://localhost:8080` |
 | Dashboard | `http://localhost:8080/dashboard/` |
-| MCP telemetry (AgentBase) | `https://endpoint-296f387c-aded-44c6-8419-7531d07d1920.agentbase-runtime.aiplatform.vngcloud.vn` |
-| MCP GitLab code (AgentBase) | `https://endpoint-a956ca82-af29-4d52-a0b2-fbec5d95068b.agentbase-runtime.aiplatform.vngcloud.vn` |
+| MCP telemetry (AgentBase) | `https://<your-mcp-telemetry-endpoint>.agentbase-runtime.aiplatform.vngcloud.vn` |
+| MCP GitLab code (AgentBase) | `https://<your-mcp-gitlab-endpoint>.agentbase-runtime.aiplatform.vngcloud.vn` |
 | AgentBase console | `https://aiplatform.console.vngcloud.vn/agent-runtime?tab=runtime` |
 | Runbook kỹ thuật đầy đủ | [`docs/DEMO.md`](docs/DEMO.md) |

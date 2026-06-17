@@ -23,7 +23,7 @@
 | UX-14-03 | 2026-06-16 | LOW | Channels page: slack thiếu icon; card disabled màu tối đặc không phân biệt rõ | User (session trước) | ✅ Đã fix |
 | UX-14-04 | 2026-06-16 | LOW | Login page default dark mode — nên là light mode để nhất quán với phần còn lại | User (2026-06-16) | ✅ Đã fix |
 | ENG-14-01 | 2026-06-16 | LOW | Engine LLM context: `available_services` chỉ liệt kê tên, không có mô tả → LLM không biết service làm gì | Phát hiện khi fix UX-14-01 | ✅ Đã fix |
-| OPS-14-01 | 2026-06-16 | — | Ansible setup `deployment/` — deploy PostgreSQL 16 lên server 49.213.71.54:234, port 5432 public, DB+user clawathon | Session song song | ✅ Đã setup |
+| OPS-14-01 | 2026-06-16 | — | Ansible setup `deployment/` — deploy PostgreSQL 16 lên server VPS (xem `.env`), port 5432 public, DB+user clawathon | Session song song | ✅ Đã setup |
 
 ---
 
@@ -112,7 +112,7 @@
 
 ### OPS-14-01 — Ansible PostgreSQL deployment setup ✅
 
-**Mô tả:** Setup tự động hoá deploy PostgreSQL 16 lên server 49.213.71.54:234 qua Ansible.
+**Mô tả:** Setup tự động hoá deploy PostgreSQL 16 lên server VPS qua Ansible.
 
 **Kết quả:** PG16 chạy trên server, port 5432 mở public, DB `clawathon` + user `clawathon` đã tạo. Tuning cho 1CPU/2GB RAM.
 

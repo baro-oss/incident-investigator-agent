@@ -7,7 +7,7 @@
 > nguyên nhân → trả về verdict dựa trên bằng chứng (evidence-grounded), kèm chuỗi bằng
 > chứng truy ngược được.
 
-**Live demo:** https://endpoint-7183060e-00a5-49f0-8e5e-93859d95ffcd.agentbase-runtime.aiplatform.vngcloud.vn
+**Live demo:** https://your-agent.agentbase-runtime.aiplatform.vngcloud.vn *(deploy trên GreenNode AgentBase)*
 
 ---
 
