@@ -24,10 +24,8 @@ COPY --from=builder /install /usr/local
 # Copy app source (không cần dev files)
 COPY --chown=agent:agent src/ src/
 COPY --chown=agent:agent scripts/ scripts/
-COPY --chown=agent:agent data/schema.sql data/schema.sql
 COPY --chown=agent:agent data/schema_postgres.sql data/schema_postgres.sql
 COPY --chown=agent:agent data/init_db.py data/init_db.py
-COPY --chown=agent:agent data/migrate_fintech.py data/migrate_fintech.py
 COPY --chown=agent:agent mcp_server/ mcp_server/
 COPY --chown=agent:agent pyproject.toml ./
 
