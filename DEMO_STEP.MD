@@ -226,6 +226,26 @@ Mở [`/dashboard/`](http://localhost:8080/dashboard/):
 
 ---
 
+## Kịch bản 2 — auth-service / JWT leeway (scenario `demo2`)
+
+> Culprit khác hẳn: **auth-service** deploy `v1.2.0` @ 14:05 ngày 2026-06-17 bỏ
+> `leeway=30` trong `jwt.decode` + xoá try/except → token hợp lệ bị reject khi đồng
+> hồ lệch → **HTTP_401 ~78%** từ 14:08, lan ngược lên payment-gateway → api-gateway / order-service.
+
+```bash
+make demo2-prep          # seed scenario demo2 + push auth-service v1.1.0/v1.2.0 lên GitLab
+make server              # (nếu chưa chạy) cổng 8080
+make demo2-webhook       # bắn Prometheus alert (auth-service, demo2, 14:00-15:00)
+# hoặc: make demo2-webhook src=demo2-simple   (trigger thủ công, mọi tham số tường minh)
+```
+
+Đường điều tra: `get_error_breakdown` (78% HTTP_401) → `get_metrics` (error_rate vọt) →
+`get_recent_deploys` (auth-service v1.2.0 @ 14:05) → `get_dependencies` (được gọi bởi
+payment-gateway → blast radius) → `get_code_diff(auth-service, v1.2.0)` → RISK:
+removed-error-handling (leeway + try/except bị xoá) → **Verdict HIGH**.
+
+---
+
 ## Tổng kết tính năng được phủ
 
 | Tính năng | Chứng minh tại |

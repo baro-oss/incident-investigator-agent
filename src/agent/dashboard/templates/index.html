@@ -74,6 +74,7 @@
           <th>Project</th>
           <th>Service</th>
           <th>Scenario</th>
+          <th>Khung giờ</th>
           <th>Trạng thái</th>
           <th>Steps</th>
           <th>Stop</th>
@@ -88,13 +89,15 @@
         <tr {% if is_live %}style="background:rgba(0,200,136,.04)"{% endif %}>
           <td style="white-space:nowrap">
             <a href="/dashboard/investigations/{{ inv.investigation_id }}"
-               style="{% if is_live %}color:#0c8{% endif %}">
-              {{ inv.investigation_id[:42] }}{% if inv.investigation_id|length > 42 %}…{% endif %}
+               title="{{ inv.investigation_id }}"
+               style="font-family:var(--mono,monospace);font-size:12px;{% if is_live %}color:#0c8{% endif %}">
+              #{{ inv.short_id }}
             </a>
           </td>
           <td><span class="tag">{{ inv.project_id }}</span></td>
           <td><code style="font-size:11px;color:#a5b4fc">{{ inv.service or '—' }}</code></td>
           <td><span class="tag">{{ inv.scenario }}</span></td>
+          <td style="white-space:nowrap;font-size:12px;color:var(--muted)">{{ inv.time_window or '—' }}</td>
           <td>
             {% if is_live %}
             <span class="badge-live"><span class="live-dot"></span>Live</span>

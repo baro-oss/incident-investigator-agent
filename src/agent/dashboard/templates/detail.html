@@ -22,9 +22,15 @@
     <div style="display:flex;align-items:center;gap:12px">
       <a href="/dashboard" style="color:var(--muted);text-decoration:none;font-size:13px" data-i18n="lbl.back_inv">← Điều tra</a>
       <span style="color:var(--border)">·</span>
-      <code style="font-size:13px;color:var(--accent)">{{ inv.investigation_id }}</code>
+      <code style="font-size:13px;color:var(--accent)" title="{{ inv.investigation_id }}">#{{ inv.get('short_id') or inv.investigation_id }}</code>
       {% if inv.get('project_id') %}
       <span class="tag">{{ inv.project_id }}</span>
+      {% endif %}
+      {% if inv.get('service') %}
+      <code style="font-size:11px;color:#a5b4fc">{{ inv.service }}</code>
+      {% endif %}
+      {% if inv.get('time_window') %}
+      <span style="font-size:12px;color:var(--muted)">{{ inv.time_window }}</span>
       {% endif %}
       {% if is_live %}
       <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#0c8">

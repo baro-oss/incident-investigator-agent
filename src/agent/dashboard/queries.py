@@ -1,11 +1,33 @@
 """Query layer cho Dashboard — đọc trace_events, eval_results, projects."""
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from agent.storage.db import open_db
+
+
+def parse_investigation_id(inv_id: str) -> Dict[str, str]:
+    """dedup_key = '{project}|{service}|{scenario}|{time_window}' → các phần (best-effort).
+
+    Trả {} nếu không đúng 4 phần (id lạ / format cũ) để caller fallback an toàn.
+    """
+    parts = (inv_id or "").split("|")
+    if len(parts) == 4:
+        return {
+            "project": parts[0],
+            "service": parts[1],
+            "scenario": parts[2],
+            "time_window": parts[3],
+        }
+    return {}
+
+
+def short_investigation_code(inv_id: str) -> str:
+    """Mã ngắn ổn định cho hiển thị (hash 6 hex của dedup_key đầy đủ)."""
+    return hashlib.sha1((inv_id or "").encode()).hexdigest()[:6]
 
 # ── Cost estimation ───────────────────────────────────────────────────────────
 
@@ -261,14 +283,24 @@ def list_investigations(
             except Exception:
                 pass
 
+        # Ưu tiên parse từ investigation_id (đáng tin) → fallback symptom/start payload.
+        parsed = parse_investigation_id(r["investigation_id"])
+        symptom = start.get("symptom", "")
+        service = parsed.get("service") or (
+            symptom.split(":")[0].strip() if ":" in symptom else ""
+        )
+        scenario = parsed.get("scenario") or start.get("scenario", "")
+
         result.append({
             "investigation_id": r["investigation_id"],
+            "short_id": short_investigation_code(r["investigation_id"]),
             "project_id": r["project_id"],
             "started_at": (r["started_at"] or "")[:19].replace("T", " "),
             "elapsed_s": elapsed,
-            "symptom": start.get("symptom", ""),
-            "service": start.get("symptom", "").split(":")[0].strip() if ":" in start.get("symptom","") else "",
-            "scenario": start.get("scenario", ""),
+            "symptom": symptom,
+            "service": service,
+            "scenario": scenario,
+            "time_window": parsed.get("time_window", ""),
             "steps": r["max_step"] or 0,
             "root_cause": verdict.get("root_cause", ""),
             "confidence": conf,
@@ -293,7 +325,13 @@ def get_investigation_detail(investigation_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     events = []
-    summary: Dict[str, Any] = {"investigation_id": investigation_id}
+    _parsed = parse_investigation_id(investigation_id)
+    summary: Dict[str, Any] = {
+        "investigation_id": investigation_id,
+        "short_id": short_investigation_code(investigation_id),
+        "service": _parsed.get("service", ""),
+        "time_window": _parsed.get("time_window", ""),
+    }
 
     for r in rows:
         payload = json.loads(r["payload"] or "{}")

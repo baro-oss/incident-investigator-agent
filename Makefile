@@ -9,7 +9,8 @@ LOADENV := set -a; [ -f .env ] && . ./.env; set +a;
 .PHONY: help install setup db init seed server run server-reload mcp chat eval eval-fintech eval-all \
         trigger trigger-fintech test ci clean reset \
         ansible-ping ansible-postgres ansible-check \
-        demo-prep demo-seed demo-gitlab demo-setup demo-up demo-down demo-webhook
+        demo-prep demo-seed demo-gitlab demo-setup demo-up demo-down demo-webhook \
+        demo2-prep demo2-seed demo2-gitlab demo2-webhook
 
 # ── Default ────────────────────────────────────────────────────────────────────
 help:
@@ -43,6 +44,8 @@ help:
 	@echo "  make demo-up        Chạy CÙNG LÚC 3 server: telemetry:$(MCP_PORT) · gitlab-code:$(GITLAB_MCP_PORT) · main:$(PORT)"
 	@echo "  make demo-webhook [src=prometheus|grafana|sentry|opsgenie|simple]  Bắn 1 webhook"
 	@echo "  make demo-down      Dừng cả 3 server demo"
+	@echo "  make demo2-prep     Seed demo2 (auth-service/JWT) + push auth-service 2 tag"
+	@echo "  make demo2-webhook [src=demo2-simple]  Bắn webhook kịch bản demo2"
 
 # ── Setup ──────────────────────────────────────────────────────────────────────
 install:
@@ -162,6 +165,24 @@ demo-down:
 # make demo-webhook src=sentry → sentry
 demo-webhook:
 	@$(LOADENV) bash demo/webhooks/$(or $(src),prometheus).sh
+
+# ── Demo2 (kịch bản auth-service / JWT leeway) ─────────────────────────────────
+# Prep: seed scenario demo2 + push auth-service v1.1.0/v1.2.0 lên GitLab.
+# (project/MCP/repo map dùng chung demo-setup — auth-service đã được map sẵn.)
+demo2-prep: demo2-seed demo2-gitlab
+	@echo "✅ Demo2 sẵn sàng — chạy: make demo-up  (rồi: make demo2-webhook)"
+
+demo2-seed:
+	@$(LOADENV) $(PYTHON) data/seed_demo2.py
+
+# Chỉ push auth-service (2 tag). Các repo khác đã push ở demo-gitlab.
+demo2-gitlab:
+	@$(LOADENV) ENTRIES="auth-service:auth-service:1" bash demo/setup_gitlab_repos.sh
+
+# make demo2-webhook              → demo2-prometheus
+# make demo2-webhook src=demo2-simple
+demo2-webhook:
+	@$(LOADENV) bash demo/webhooks/$(or $(src),demo2-prometheus).sh
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 clean:
