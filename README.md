@@ -7,9 +7,34 @@
 > nguyên nhân → trả về verdict dựa trên bằng chứng (evidence-grounded), kèm chuỗi bằng
 > chứng truy ngược được.
 
-**Live demo:** https://your-agent.agentbase-runtime.aiplatform.vngcloud.vn *(deploy trên GreenNode AgentBase)*
+**Live demo:** https://endpoint-7183060e-00a5-49f0-8e5e-93859d95ffcd.agentbase-runtime.aiplatform.vngcloud.vn *(deploy trên GreenNode AgentBase)*
 
 **Demo video:** [Xem trên SharePoint](https://vngms-my.sharepoint.com/:v:/g/personal/baopx_vng_com_vn/IQBg6w6vtTZJTZwkNDxACXRRAVSK8-1S3ZZgW7EXBfZQduc?nav=eyJyZWZlcnJhbEluZm8iOnsicmVmZXJyYWxBcHAiOiJPbmVEcml2ZUZvckJ1c2luZXNzIiwicmVmZXJyYWxBcHBQbGF0Zm9ybSI6IldlYiIsInJlZmVycmFsTW9kZSI6InZpZXciLCJyZWZlcnJhbFZpZXciOiJNeUZpbGVzTGlua0NvcHkifX0&e=HDKHAR)
+
+**Trigger demo qua webhook** (`X-API-Token` — tạo ở trong Agent Dashboard API Key):
+
+```bash
+# Kịch bản 2 — auth-service JWT leeway bug (manual trigger)
+curl -X POST \
+  'https://endpoint-7183060e-00a5-49f0-8e5e-93859d95ffcd.agentbase-runtime.aiplatform.vngcloud.vn/projects/demo-day/trigger' \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Token: <YOUR_API_TOKEN>' \
+  -d '{
+    "service": "auth-service",
+    "scenario": "demo2",
+    "time_window": "14:00-15:00",
+    "date": "2026-06-17",
+    "symptom": "auth-service: HTTP_401 / AuthenticationError tăng đột biến sau deploy v1.2.0"
+  }'
+
+# Kịch bản 1 — payment-gateway error spike (Prometheus webhook)
+curl -X POST \
+  'https://endpoint-7183060e-00a5-49f0-8e5e-93859d95ffcd.agentbase-runtime.aiplatform.vngcloud.vn/projects/demo-day/trigger' \
+  -H 'Content-Type: application/json' \
+  -H 'X-Alert-Source: prometheus' \
+  -H 'X-API-Token: <YOUR_API_TOKEN>' \
+  -d '{"status":"firing","alerts":[{"labels":{"service":"payment-gateway","scenario":"demo","severity":"critical"},"annotations":{"summary":"payment-gateway: error rate spiked, p99 ~9x baseline"},"startsAt":"2026-06-16T09:10:00Z"}]}'
+```
 
 ---
 
